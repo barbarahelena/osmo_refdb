@@ -1,0 +1,23 @@
+name: osmo_refdb
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - python=3.11
+  - mafft>=7.5
+  - trimal>=1.4
+  - hmmer>=3.3
+  - orfm>=0.7
+  - wgsim
+  - diamond>=2.1
+  - cd-hit>=4.8
+  - pip
+  - pip:
+      - requests
+      - pyyaml
+      - numpy
+      - pandas
+      - scikit-learn
+      - matplotlib
+      - biopython
+      - insilicoseq

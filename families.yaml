@@ -1,0 +1,63 @@
+# families.yaml — single source of truth for osmo_refdb gene families.
+#
+# To add a new gene family, add one entry here and rerun:
+#   bash run_pipeline.sh build
+# No other files need to change.
+#
+# Fields:
+#   name              short family/gene code, used as the tag in FASTA headers
+#                     and as the HMM model name (must be unique)
+#   description       free text, used in manifests/reports
+#   positive_query     UniProt REST query for the true positive set
+#                     (see https://rest.uniprot.org/uniprotkb/search)
+#   negative_query    UniProt REST query for a "hard negative" set: a
+#                     related-but-distinct protein family that a
+#                     poorly-calibrated HMM/DIAMOND search might confuse
+#                     with the true positives. Prefer xref:pfam-PFxxxxx
+#                     queries (verified via https://www.ebi.ac.uk/interpro/api/entry/pfam/PFxxxxx)
+#                     over free-text "family:" queries, which UniProt's API
+#                     silently returns zero hits for.
+#   negative_pfam     Pfam accession used in negative_query, for documentation
+
+families:
+  - name: ectA
+    description: >
+      L-2,4-diaminobutyric acid acetyltransferase (ectoine synthesis step 1)
+    positive_query: "gene:ectA AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF00583 NOT gene:ectA AND taxonomy_id:2"
+    negative_pfam: PF00583   # GNAT acetyltransferase family
+
+  - name: ectB
+    description: >
+      Diaminobutyric acid aminotransferase (ectoine synthesis step 2)
+    positive_query: "gene:ectB AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF00202 NOT gene:ectB AND taxonomy_id:2"
+    negative_pfam: PF00202   # Aminotransferase class-III
+
+  - name: ectC
+    description: >
+      Ectoine synthase (ectoine synthesis step 3)
+    positive_query: "gene:ectC AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF07883 NOT gene:ectC AND taxonomy_id:2"
+    negative_pfam: PF07883   # Cupin_2 domain
+
+  - name: betL
+    description: >
+      Glycine betaine transporter (BCCT family; compatible solute import)
+    positive_query: "gene:betL AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF02028 NOT gene:betL AND taxonomy_id:2"
+    negative_pfam: PF02028   # BCCT transporter family
+
+  - name: kdpA
+    description: >
+      K+-translocating ATPase subunit A (high-affinity K+ uptake)
+    positive_query: "gene:kdpA AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF02705 NOT gene:kdpA AND taxonomy_id:2"
+    negative_pfam: PF02705   # KUP/HAK/KT K+ transporter domain
+
+  - name: nhaA
+    description: >
+      Na+/H+ antiporter A (Na+ extrusion under osmotic stress)
+    positive_query: "gene:nhaA AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF06450 NOT gene:nhaA AND taxonomy_id:2"
+    negative_pfam: PF06450   # NhaB, a distinct bacterial Na+/H+ antiporter family
