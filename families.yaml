@@ -18,6 +18,28 @@
 #                     over free-text "family:" queries, which UniProt's API
 #                     silently returns zero hits for.
 #   negative_pfam     Pfam accession used in negative_query, for documentation
+#   scope             optional; "annotate_only" excludes a family from
+#                     `osmotool profile`'s reported output while still
+#                     building/searching it (e.g. murB, a housekeeping gene
+#                     with no read-level osmoadaptation signal). Omit for a
+#                     normal family available in both modes.
+#   decoy_from_negatives  optional bool; when true, that family's own
+#                     (QC'd) negative set is added to the DIAMOND reference
+#                     db under a "<family>_decoy" label, excluded from
+#                     reported output in both modes, purely so
+#                     select_best_hits' existing best-alignment contest can
+#                     win a read/protein away from the real family when it
+#                     actually belongs to a known confusable paralog (e.g.
+#                     betL vs betT/caiT) -- see 08a_build_decoy_refs.py.
+#                     Only meaningful for a family whose negative_query
+#                     targets specific named paralogs, not a broad Pfam
+#                     pool (a broad pool makes a weak, noisy decoy).
+#   trim_gt           optional float, default 0.8; per-family override for
+#                     trimAl's -gt (gap threshold) in 04_align_trim.sh.
+#                     Lower values keep more variable/flanking alignment
+#                     columns -- useful to test for families whose true
+#                     discriminating signal might sit outside the most
+#                     conserved core (see ectA/ectB below).
 
 families:
   - name: ectA
@@ -26,6 +48,14 @@ families:
     positive_query: "gene:ectA AND taxonomy_id:2"
     negative_query: "xref:pfam-PF00583 NOT gene:ectA AND taxonomy_id:2"
     negative_pfam: PF00583   # GNAT acetyltransferase family
+    # Flanking-signal experiment, validated via a benchmarked subset test
+    # (v5-trimgt-test): PF00583 is an extremely broad, promiscuous fold
+    # shared by thousands of unrelated GNAT-family acetyltransferases, so
+    # ectA's true discriminating signal was hypothesized to sit in flanking
+    # alignment columns the default trimAl -gt 0.8 trims away. Confirmed:
+    # trim_gt 0.8->0.6 raised recall on both methods at unchanged precision
+    # (diamond F1 0.773->0.825, hmm F1 0.708->0.734).
+    trim_gt: 0.6
 
   - name: ectB
     description: >
@@ -33,6 +63,12 @@ families:
     positive_query: "gene:ectB AND taxonomy_id:2"
     negative_query: "xref:pfam-PF00202 NOT gene:ectB AND taxonomy_id:2"
     negative_pfam: PF00202   # Aminotransferase class-III
+    # Same flanking-signal hypothesis as ectA was tested here too (v5-trimgt-test,
+    # trim_gt: 0.6) but DIDN'T hold: DIAMOND got meaningfully worse (F1
+    # 0.799->0.757, precision 0.711->0.637) while HMM was ~unchanged. Kept
+    # at the 0.8 default (omitted here) -- ectB's promiscuous-domain
+    # problem needs a different fix; EC-number-verified positive curation
+    # is the next thing to try, not attempted yet.
 
   - name: ectC
     description: >
@@ -43,10 +79,32 @@ families:
 
   - name: betL
     description: >
-      Glycine betaine transporter (BCCT family; compatible solute import)
-    positive_query: "gene:betL AND taxonomy_id:2"
-    negative_query: "xref:pfam-PF02028 NOT gene:betL AND taxonomy_id:2"
+      Glycine betaine transporter (BCCT family; compatible solute import).
+      betL/betP/opuD/betS are independently-named orthologs discovered in
+      different organisms (Listeria/Corynebacterium/Bacillus/Sinorhizobium)
+      that all specifically import glycine betaine -- treated as one
+      positive class here rather than by literal gene symbol, since
+      "NOT gene:betL" alone leaves the other three symbols' worth of true
+      orthologs sitting in the "negative" set (see cutoff_manifest.tsv:
+      betL was the only family whose calibration negatives outscored its
+      own positives, and both DIAMOND and HMM collapsed to ~3% precision
+      on it in the v1 benchmark). betT/caiT are genuine hard negatives:
+      same Pfam fold, but choline- and carnitine-specific respectively, not
+      glycine betaine. ectP/lcoP are deliberately excluded from both sets:
+      they're broad-specificity BCCT transporters that also carry some
+      glycine betaine, so labeling them as clean negatives would repeat
+      the same mistake.
+    positive_query: "(gene:betL OR gene:betP OR gene:opuD OR gene:betS) AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF02028 AND (gene:betT OR gene:caiT) NOT (gene:betL OR gene:betP OR gene:opuD OR gene:betS OR gene:ectP OR gene:lcoP) AND taxonomy_id:2"
     negative_pfam: PF02028   # BCCT transporter family
+    # v4 calibration proved a single score threshold cannot separate betL
+    # from betT/caiT (min_positive_score=87.2 vs max_negative_score=642.1 --
+    # near-total overlap). Since negative_query above already targets those
+    # two specific named paralogs (not a broad Pfam pool), the QC'd negative
+    # set is a ready-made decoy: add it to the DIAMOND db so real betT/caiT
+    # hits can win the existing best-alignment contest away from betL,
+    # instead of relying on an absolute cutoff the data shows can't work.
+    decoy_from_negatives: true
 
   - name: kdpA
     description: >
@@ -61,3 +119,160 @@ families:
     positive_query: "gene:nhaA AND taxonomy_id:2"
     negative_query: "xref:pfam-PF06450 NOT gene:nhaA AND taxonomy_id:2"
     negative_pfam: PF06450   # NhaB, a distinct bacterial Na+/H+ antiporter family
+
+  - name: proX
+    description: >
+      Glycine betaine/proline betaine ABC transporter substrate-binding
+      protein (proU system uptake). Species-specific synonyms exist here
+      too (e.g. B. subtilis opuAC/opuBC/opuCC bind related solutes) — not
+      pre-expanded the way betL was, since we don't have a short verified
+      synonym list for this one yet. Rely on the negative-purity QC step
+      to flag it if PF04069 negatives turn out to include mislabeled
+      orthologs the way betL's did.
+    positive_query: "gene:proX AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF04069 NOT gene:proX AND taxonomy_id:2"
+    negative_pfam: PF04069   # OpuAC-like ABC transporter substrate-binding domain
+
+  - name: proP
+    description: >
+      Proline/glycine betaine MFS transporter (proU system alternative
+      uptake route to proVWX/BCCT). Positive set is gene-symbol based
+      ("gene:proP"), unaffected by the domain choice below.
+
+      Negative set originally anchored on PF08946 (ProP's own cytoplasmic
+      osmosensor domain) specifically to avoid the generic MFS_1/Sugar_tr
+      fold's promiscuity (thousands of unrelated transporters -- the same
+      problem that sank proV/proW, see bottom of this file). That was the
+      right call for avoiding a *modeling* problem (HMM/DIAMOND unable to
+      discriminate a shared fold), but PF08946 turned out to only have
+      246 UniProt members total -- already exhausted, not a fetch-limit
+      issue -- and after negative-purity QC (01b) removed orthologs under
+      other symbols, only 10 negatives survived: too few for reliable
+      cutoff calibration (see 06_calibrate_cutoffs.py's
+      MIN_NEG_FOR_RELIABLE_F1 guard, added after this exact family
+      produced a degenerate calibration in production).
+
+      Switched to PF00083 (generic MFS_1/Sugar_tr) for volume instead.
+      This reintroduces some promiscuity risk in principle, but for a
+      *negative* set specifically (as opposed to the modeling risk that
+      ruled it out for proV/proW) that's an acceptable trade: 01b/01c's
+      automated purity and length QC already exist precisely to catch and
+      strip out anything that turns out to be a hidden proP ortholog or
+      fusion protein, so a broader, less "hard" raw pull is fine as long
+      as enough survives QC to clear the 30-negative reliability floor.
+    positive_query: "gene:proP AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF00083 NOT gene:proP AND taxonomy_id:2"
+    negative_pfam: PF00083   # Sugar_tr, generic MFS transporter domain
+
+  - name: otsA
+    description: >
+      Trehalose-6-phosphate synthase (trehalose synthesis step 1;
+      compatible solute pathway parallel to ectoine synthesis)
+    positive_query: "gene:otsA AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF00982 NOT gene:otsA AND taxonomy_id:2"
+    negative_pfam: PF00982   # Glyco_transf_20, GT20/trehalose synthase family
+
+  - name: otsB
+    description: >
+      Trehalose-6-phosphate phosphatase (trehalose synthesis step 2)
+    positive_query: "gene:otsB AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF02358 NOT gene:otsB AND taxonomy_id:2"
+    negative_pfam: PF02358   # Trehalose_PPase
+
+  - name: mscL
+    description: >
+      Large-conductance mechanosensitive channel (emergency osmolyte
+      release valve during hypoosmotic downshock)
+    positive_query: "gene:mscL AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF01741 NOT gene:mscL AND taxonomy_id:2"
+    negative_pfam: PF01741
+
+  - name: mscS
+    description: >
+      Small-conductance mechanosensitive channel (hypoosmotic downshock
+      protection). PF00924 is broader than PF01741/mscL: many bacteria
+      carry several divergent MscS-like paralogs (kefA, mscK, ynaI, ...)
+      that aren't necessarily functionally interchangeable with mscS
+      itself, so treat this one with the same caution as ectB — check
+      the benchmark and cutoff_manifest.tsv status before trusting it.
+    positive_query: "gene:mscS AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF00924 NOT gene:mscS AND taxonomy_id:2"
+    negative_pfam: PF00924   # MS_channel, broad MscS-like channel family
+
+  - name: galE
+    description: >
+      UDP-glucose 4-epimerase. Not a classical osmotic-stress-response
+      gene on its own, but UDP-glucose (which galE interconverts with
+      UDP-galactose) is the shared precursor for both trehalose synthesis
+      (otsA, already in this database) and osmoregulated periplasmic
+      glucans, both of which are modulated by osmotic flux. Also one of
+      three genes (with mazG and murB) that Culligan et al. 2012 (ISME J
+      6:1916-1925) traced a functionally-demonstrated salt-tolerance
+      phenotype to, via transposon mutagenesis of a salt-tolerant gut
+      metagenomic clone.
+
+      PF01370 (NAD_epimerase/dehydratase) is broad -- it covers many
+      different NDP-sugar epimerases/dehydratases across LPS, capsule,
+      and exopolysaccharide pathways (e.g. rhamnose biosynthesis's RmlB),
+      not just galE. Same shape of risk as ectA/ectB's promiscuous-domain
+      problem: check cutoff_manifest.tsv/qc_scorecard.tsv status before
+      trusting it, don't assume it behaves like a narrow-domain family.
+    positive_query: "gene:galE AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF01370 NOT gene:galE AND taxonomy_id:2"
+    negative_pfam: PF01370   # NAD_epimerase/dehydratase, broad NDP-sugar enzyme family
+
+  - name: mazG
+    description: >
+      Nucleoside triphosphate pyrophosphohydrolase ("house-cleaning"
+      enzyme, sanitizes non-canonical NTPs before they're incorporated
+      into DNA/RNA). Established literature ties mazG specifically to
+      oxidative stress response (e.g. mycobacterial dormancy/antibiotic
+      tolerance) more than osmotic stress -- included here on the basis
+      of Culligan et al. 2012 (ISME J 6:1916-1925), which functionally
+      demonstrated (transposon mutagenesis of a salt-tolerant gut
+      metagenomic clone) that mazG is one of three genes (with galE and
+      murB) required for that clone's salt tolerance phenotype. Treat any
+      mazG signal as suggestive of a general stress-response contribution
+      rather than confirmed osmotic-stress-specific function.
+    positive_query: "gene:mazG AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF03819 NOT gene:mazG AND taxonomy_id:2"
+    negative_pfam: PF03819   # MazG family (Pfam name is gene-specific, likely narrower than galE's)
+
+  - name: murB
+    description: >
+      UDP-N-acetylenolpyruvoylglucosamine reductase (peptidoglycan
+      biosynthesis). The third gene, with galE and mazG, from the
+      functionally-demonstrated salt-tolerance locus in Culligan et al.
+      2012 (ISME J 6:1916-1925). murB itself is a near-universal
+      housekeeping gene present in essentially all bacteria regardless of
+      osmotic status, so its abundance carries no osmoadaptation-specific
+      signal in short-read community profiling -- included specifically
+      to let `osmotool annotate` check whether all three Culligan loci
+      genes co-occur in a given genome, not for `osmotool profile`.
+      scope: annotate_only below is what encodes that distinction; see
+      08c_write_scope_manifest.py.
+    positive_query: "gene:murB AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF02873 NOT gene:murB AND taxonomy_id:2"
+    negative_pfam: PF02873   # MurB C-terminal domain (murB-specific; skips the broader shared PF01565 FAD-binding domain)
+    scope: annotate_only
+
+# Considered and deferred (2026-07-16): proV, proW, gbsA, gbsB
+#
+# Requested alongside proX/proP/gbsAB, but skipped for now because their
+# Pfam domains are shared by huge numbers of functionally unrelated
+# bacterial proteins, which would make both HMM and DIAMOND detection
+# unreliable at the single-domain level (worse than the ectB case):
+#   proV  PF00005 (ABC_tran)   — generic ATP-binding domain, used by
+#                                 essentially every bacterial ABC transporter
+#   proW  PF00528 (BPD_transp_1) — generic ABC transporter permease domain
+#   gbsA  PF00171 (Aldedh)     — generic aldehyde dehydrogenase superfamily
+#   gbsB  PF00465 (Fe-ADH)     — generic iron-containing alcohol
+#                                 dehydrogenase superfamily
+# (all four accessions verified via live UniProt entries: P14175/P14176/
+# P71016/P71017)
+#
+# If these are revisited, don't use xref:pfam-PFxxxxx for the negative
+# set as-is (it'll return a huge, mostly uninformative pool) — either
+# hand-pick a small set of functionally-distinct negatives, or accept
+# that proV/proW/gbsA/gbsB can only be called at low confidence and scope
+# the tool's output accordingly.

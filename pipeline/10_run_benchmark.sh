@@ -24,12 +24,19 @@ THREADS="${THREADS:-4}"
 # defaults for benchmarking; override via env vars if needed.
 DIAMOND_MIN_IDENTITY="${DIAMOND_MIN_IDENTITY:-0.40}"
 DIAMOND_MIN_QUERY_COVER="${DIAMOND_MIN_QUERY_COVER:-0.50}"
+# Off by default (0.0), same as osmotool's own default -- set this to test
+# whether filtering on subject/target coverage reduces the multi-domain
+# fusion-protein false positives found while benchmarking proX (see
+# --min_subject_cover's help text in osmotool for why this isn't on by
+# default: a short read is always much shorter than most full-length
+# reference proteins, so a strict threshold here also costs real recall).
+DIAMOND_MIN_SUBJECT_COVER="${DIAMOND_MIN_SUBJECT_COVER:-0.0}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 mkdir -p "${OUT_DIR}/diamond" "${OUT_DIR}/hmm"
 
-echo "=== DIAMOND (osmotool profile, --min_identity ${DIAMOND_MIN_IDENTITY} --min_query_cover ${DIAMOND_MIN_QUERY_COVER}) ==="
+echo "=== DIAMOND (osmotool profile, --min_identity ${DIAMOND_MIN_IDENTITY} --min_query_cover ${DIAMOND_MIN_QUERY_COVER} --min_subject_cover ${DIAMOND_MIN_SUBJECT_COVER}) ==="
 for R1 in "${READS_DIR}"/*_R1.fastq*; do
     [ -e "${R1}" ] || continue
     SAMPLE=$(basename "${R1}" | sed -E 's/_R1\.fastq(\.gz)?$//')
@@ -45,6 +52,7 @@ for R1 in "${READS_DIR}"/*_R1.fastq*; do
         --threads "${THREADS}" \
         --min_identity "${DIAMOND_MIN_IDENTITY}" \
         --min_query_cover "${DIAMOND_MIN_QUERY_COVER}" \
+        --min_subject_cover "${DIAMOND_MIN_SUBJECT_COVER}" \
         --keep_aln
 done
 

@@ -11,6 +11,11 @@ dependencies:
   - wgsim
   - diamond>=2.1
   - cd-hit>=4.8
+  - prodigal>=2.6
+  # not exercised by osmo_refdb's own build/benchmark pipeline (that only
+  # ever runs `osmotool profile` on reads), but needed to actually run
+  # `osmotool annotate` -- e.g. to sanity-check reference-database
+  # specificity against known, complete genomes (see the E. coli K-12 test).
   - pip
   - pip:
       - requests

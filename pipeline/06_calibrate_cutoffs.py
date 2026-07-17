@@ -13,11 +13,26 @@ Strategy (mirrors how Pfam sets GA cutoffs):
   * highest negative bit-score = highest score a hard negative scored
   * if negatives score below the lowest positive: cutoff = midpoint of the
     gap (safe separation).
-  * if there IS overlap: cutoff = a percentile of the negative distribution
-    (default: 99th percentile) to bound false-positive rate, and this family
-    is flagged in the manifest as "overlapping" for manual review — the
-    benchmark (ROC/PR) is the final word on whether the family is usable
-    with an HMM.
+  * if there IS overlap: sweep every candidate threshold across the
+    combined positive+negative score population and pick the one that
+    maximizes F1 (same technique 11_compute_metrics.py's
+    summarize_best_threshold() already uses for post-hoc benchmark
+    analysis, applied here at calibration time instead).
+
+    This replaces an earlier flat "99th percentile of negatives" rule,
+    which ignored the positive distribution entirely: for a family whose
+    surviving hard negatives remain close to true positives even after
+    01b/01c's purity+length QC (e.g. mscL, where 72% of raw negatives
+    were flagged as contaminated and what survived was still close
+    enough to true mscL to push a percentile-of-negatives cutoff high),
+    that rule could reject a large fraction of genuine positives just to
+    protect against an already-mostly-cleaned negative pool. Confirmed in
+    production: mscL's old cutoff rejected a real, 100%-identical protein
+    outright when tested against a real genome (Rhodopirellula baltica).
+    The F1 sweep balances both distributions instead of only bounding
+    false positives, and this family is still flagged in the manifest for
+    manual review — the benchmark (ROC/PR) remains the final word on
+    whether the family is usable with an HMM.
 
 Usage: python 06_calibrate_cutoffs.py [--hmms hmms] [--families families.yaml]
 Output: updates hmms/<family>.hmm in place with a GA line
@@ -33,8 +48,6 @@ from pathlib import Path
 
 import numpy as np
 import yaml
-
-NEG_PERCENTILE = 99.0
 
 
 def load_family_names(path: Path) -> list[str]:
@@ -59,9 +72,12 @@ def parse_tblout_scores(path: Path) -> np.ndarray:
     return np.array(scores)
 
 
-def choose_cutoff(pos_scores: np.ndarray, neg_scores: np.ndarray, neg_file_exists: bool) -> tuple[float, str]:
+MIN_NEG_FOR_RELIABLE_F1 = 30
+
+
+def choose_cutoff(pos_scores: np.ndarray, neg_scores: np.ndarray, neg_file_exists: bool) -> tuple[float, str, float | None]:
     if len(pos_scores) == 0:
-        return 0.0, "no_positive_scores"
+        return 0.0, "no_positive_scores", None
 
     min_pos = float(np.min(pos_scores))
 
@@ -71,17 +87,67 @@ def choose_cutoff(pos_scores: np.ndarray, neg_scores: np.ndarray, neg_file_exist
             # HMMER's default reporting threshold (E<=10) — i.e. the HMM is
             # highly specific and doesn't detect the negative family at all.
             # This is the best possible outcome, not a missing-data case.
-            return max(min_pos - 1.0, 0.0), "clean_separation_no_negative_hits"
-        return max(min_pos - 1.0, 0.0), "no_negatives_available"
+            return max(min_pos - 1.0, 0.0), "clean_separation_no_negative_hits", 1.0
+        return max(min_pos - 1.0, 0.0), "no_negatives_available", None
 
     max_neg = float(np.max(neg_scores))
 
     if max_neg < min_pos:
         cutoff = (max_neg + min_pos) / 2.0
-        return cutoff, "clean_separation"
+        return cutoff, "clean_separation", 1.0
+    elif len(neg_scores) < MIN_NEG_FOR_RELIABLE_F1:
+        # Too few negatives to trust an F1 sweep. With e.g. only 10 points
+        # against hundreds of positives, "F1-optimal" can degenerate to
+        # "accept everything" -- a handful of false positives barely dents
+        # F1 when true positives vastly outnumber them in the calibration
+        # set, but that class balance is an artifact of how few negatives
+        # survived curation, not a reflection of the real ratio of
+        # "family member" to "everything else" in an actual genome.
+        # Confirmed in production: proP's 10-negative F1 sweep produced a
+        # cutoff that accepted every calibration positive, then let
+        # through several weak, high-compositional-bias false positives
+        # on a real genome. Fall back to requiring the cutoff clear every
+        # observed negative instead -- conservative, and flagged as a
+        # data problem (see families.yaml's negative_query design notes
+        # for this family) rather than papered over with a cleverer
+        # formula, since no cutoff-selection algorithm substitutes for a
+        # negative set too small to be representative.
+        cutoff = max_neg + 1.0
+        return cutoff, "insufficient_negative_data", None
     else:
-        cutoff = float(np.percentile(neg_scores, NEG_PERCENTILE))
-        return cutoff, "overlapping_distributions_review_needed"
+        cutoff, f1 = choose_cutoff_by_f1(pos_scores, neg_scores)
+        return cutoff, "overlapping_distributions_f1_calibrated", f1
+
+
+def choose_cutoff_by_f1(pos_scores: np.ndarray, neg_scores: np.ndarray) -> tuple[float, float]:
+    """
+    Sweep every distinct score in the combined positive+negative
+    population as a candidate cutoff (>=) and return the one that
+    maximizes F1, plus the F1 achieved at that cutoff.
+
+    Ties (multiple thresholds achieving the same best F1) are broken by
+    preferring the LOWEST such threshold, i.e. the most permissive one
+    that still achieves the best balance -- favors recall when the
+    balance point is genuinely ambiguous, rather than an arbitrary
+    numpy-sort-order tiebreak.
+    """
+    n_pos_total = len(pos_scores)
+    candidates = sorted(set(pos_scores.tolist()) | set(neg_scores.tolist()))
+
+    best_f1 = -1.0
+    best_thr = candidates[0] if candidates else 0.0
+    for thr in candidates:
+        tp = int((pos_scores >= thr).sum())
+        fn = n_pos_total - tp
+        fp = int((neg_scores >= thr).sum())
+        precision = tp / (tp + fp) if (tp + fp) else 0.0
+        recall = tp / (tp + fn) if (tp + fn) else 0.0
+        f1 = (2 * precision * recall / (precision + recall)) if (precision + recall) else 0.0
+        if f1 > best_f1:
+            best_f1 = f1
+            best_thr = thr
+
+    return best_thr, best_f1
 
 
 def set_ga_line(hmm_path: Path, cutoff: float) -> None:
@@ -123,17 +189,19 @@ def main() -> None:
         # actually run against a non-empty negative FASTA; distinguishing
         # "ran but found nothing" from "never ran" changes the interpretation.
         neg_file_exists = neg_path.exists() and neg_path.stat().st_size > 0
-        cutoff, status = choose_cutoff(pos_scores, neg_scores, neg_file_exists)
+        cutoff, status, f1_at_cutoff = choose_cutoff(pos_scores, neg_scores, neg_file_exists)
 
         set_ga_line(hmm_path, cutoff)
 
-        print(f"[{family}] cutoff={cutoff:.2f} status={status} "
+        f1_str = f"{f1_at_cutoff:.3f}" if f1_at_cutoff is not None else "n/a"
+        print(f"[{family}] cutoff={cutoff:.2f} status={status} f1={f1_str} "
               f"(n_pos={len(pos_scores)}, n_neg={len(neg_scores)})")
 
         manifest_rows.append({
             "family": family,
             "cutoff_bits": round(cutoff, 2),
             "status": status,
+            "f1_at_cutoff": round(f1_at_cutoff, 3) if f1_at_cutoff is not None else "",
             "n_positive_scored": len(pos_scores),
             "n_negative_scored": len(neg_scores),
             "min_positive_score": round(float(np.min(pos_scores)), 2) if len(pos_scores) else "",
