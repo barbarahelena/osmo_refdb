@@ -194,3 +194,8 @@ Once you're happy with a release's benchmark results, publish
 release asset or Zenodo record) that `osmotool` users download and point
 `--database` at. Cite the specific release version in any publication using
 `osmotool`.
+
+**Latest release: v5** — DOI: [10.5281/zenodo.21420253](https://doi.org/10.5281/zenodo.21420253).
+Download the full release (databases + cutoffs/exclusion files + full
+build/benchmark provenance) from that record. Cite this DOI when using
+`osmotool` with this database.
