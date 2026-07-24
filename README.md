@@ -234,8 +234,9 @@ cutoff) if the same pattern is useful for a future family.
 ### Structural negative-pool contamination: when more data can't fix it
 
 For several families — mrpB, mrpC, mrpE, gshA, gshB, gshF, otsA, mazG,
-mscL — a large fraction of the "negative" pool drawn from the shared Pfam
-accession turns out to be real orthologs of the target gene that UniProt
+mscL, and (confirmed later, see below) trkH, ktrB, ktrD — a large
+fraction of the "negative" pool drawn from the shared Pfam accession
+turns out to be real orthologs of the target gene that UniProt
 never assigned a curated gene symbol to (bare locus tags, confirmed by hand
 for each family via `refs/<family>.negative.flagged.faa`). This is a
 different failure mode from a missing gene-symbol alias (see mrpF/mrpG's
@@ -271,17 +272,20 @@ flags that Pfam's cutoff needs a human check against this repo's own
 held-out sets — see the `pfam_model` section above — not that the model is
 broken.)
 
-For families without a `pfam_model` fallback (otsA, mazG, mscL, gshA),
-`osmo_refdb.profile_cascade.tsv`'s DIAMOND→HMM fallback does **not** rescue
-them: all four carry `hmm_status=overlapping_distributions_f1_calibrated`,
+For families without a `pfam_model` fallback (otsA, mrpC, mazG, mscL,
+gshA, and — confirmed via a later re-check, see below — trkH, ktrB,
+ktrD), `osmo_refdb.profile_cascade.tsv`'s DIAMOND→HMM fallback does
+**not** rescue them: all carry `hmm_status=overlapping_distributions_f1_calibrated`,
 meaning the HMM cutoff was calibrated against the exact same contaminated
 negative pool as DIAMOND, not an independent clean source. Checked
 individually rather than assumed uniformly unreliable, though:
 
-- otsA: DIAMOND precision 0.543 — genuinely too low for confident
-  profile-mode reporting. `scope: annotate_only` set (same treatment as
-  murB): still built and searchable for `osmotool annotate` co-occurrence
-  checks, excluded from `osmotool profile`'s reported output.
+- otsA (DIAMOND precision 0.543) and mrpC (0.479, found during this check
+  to be worse than otsA despite not being in the original four-family
+  list) — genuinely too low for confident profile-mode reporting.
+  `scope: annotate_only` set (same treatment as murB): still built and
+  searchable for `osmotool annotate` co-occurrence checks, excluded from
+  `osmotool profile`'s reported output.
 - mazG: DIAMOND precision 0.870, borderline — kept in profile mode;
   already carries its own caveat in `families.yaml` ("treat any mazG
   signal as suggestive... rather than confirmed osmotic-stress-specific
@@ -289,6 +293,20 @@ individually rather than assumed uniformly unreliable, though:
 - mscL, gshA: DIAMOND precision 0.927 / 0.905 — fine in practice despite
   the contaminated pool; calibration still found a workable separating
   cutoff. No scope change.
+- **trkH, ktrB, ktrD** (added after re-checking whether the numbered-paralog
+  fix or a decoy conversion could help this group, per `docs/CHANGELOG.md`'s
+  Phase 5): same structural contamination pattern, and neither of the two
+  usual fixes applies here — the numbered-paralog additions barely moved
+  their purity-flag rates (e.g. trkH 27%→29%), and `decoy_from_negatives`
+  is specifically ruled out for this trio, since they share PF02386 the
+  same close-paralog way proX/opuAC/opuBC/opuCC shared PF04069, and that
+  exact clique shape was shown to catastrophically backfire (see the decoy
+  section above). No `pfam_model` fallback is possible either (that's
+  what removing it fixed the byte-identical-HMM bug for, above). Both
+  DIAMOND (0.265–0.293) and HMM (0.121–0.288) precision are low across
+  all three, with neither method offering a reliable alternative to the
+  other. `scope: annotate_only` set on all three, same criteria as
+  otsA/mrpC.
 
 ### Test-driving a new family before the full rebuild
 
