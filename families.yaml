@@ -533,25 +533,51 @@ families:
 
   - name: mrpF
     description: >
-      Subunit F of the Mrp/Mnh complex (Task 1b). mrpF/mnhF synonym pair
-      (Pfam also documents a third alias, PhaF, from yet another organism's
-      nomenclature for this same protein). PF04066 ("MrpF_PhaF") checked: 9
-      domain architectures, name matches directly -- adopted via
-      pfam_model.
-    positive_query: "(gene:mrpF OR gene:mnhF) AND taxonomy_id:2"
-    negative_query: "xref:pfam-PF04066 NOT (gene:mrpF OR gene:mnhF) AND taxonomy_id:2"
+      Subunit F of the Mrp/Mnh complex (Task 1b). mrpF/mnhF/PhaF synonym
+      trio (Pfam documents PhaF as a third alias, from yet another
+      organism's nomenclature for this same protein). PF04066
+      ("MrpF_PhaF") checked: 9 domain architectures, name matches
+      directly -- adopted via pfam_model. The PhaF alias was documented
+      here from the start but NOT originally carried into either query --
+      a real bug, confirmed via the v6 QC scorecard (42% neg_purity
+      contamination) and directly verified: 142 PhaF-gene-tagged, real
+      PF04066-carrying UniProt entries were sitting in the "negative" pool
+      because the query only excluded mrpF/mnhF. Fixing it gave a real,
+      confirmed benchmark improvement (DIAMOND F1 0.244->0.329, HMM F1
+      0.193->0.250) but only a partial one -- checking the entries still
+      flagged after the fix shows this family shares mrpG's structural
+      problem too (see mrpG's entry below): most of what's left in the
+      "negative" pool are real orthologs UniProt never assigned a curated
+      gene symbol to (bare locus tags), which no synonym addition can
+      catch. neg_purity barely moved (42%->46%) because PhaF was only one
+      of several contamination sources, not the dominant one.
+    positive_query: "(gene:mrpF OR gene:mnhF OR gene:PhaF) AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF04066 NOT (gene:mrpF OR gene:mnhF OR gene:PhaF) AND taxonomy_id:2"
     negative_pfam: PF04066
     pfam_model: PF04066
 
   - name: mrpG
     description: >
-      Subunit G of the Mrp/Mnh complex (Task 1b). mrpG/mnhG synonym pair
-      (Pfam also documents yufB, B. subtilis's own locus-tag-derived alias
-      for this gene, as a third name for the same family). PF03334
+      Subunit G of the Mrp/Mnh complex (Task 1b). mrpG/mnhG/yufB synonym
+      trio (Pfam documents yufB, B. subtilis's own locus-tag-derived
+      alias, as a third name for the same family). PF03334
       ("PhaG_MnhG_YufB") checked: 12 domain architectures, name matches --
-      adopted via pfam_model.
-    positive_query: "(gene:mrpG OR gene:mnhG) AND taxonomy_id:2"
-    negative_query: "xref:pfam-PF03334 NOT (gene:mrpG OR gene:mnhG) AND taxonomy_id:2"
+      adopted via pfam_model. yufB was documented here from the start but
+      NOT originally carried into either query, the same gap mrpF/PhaF
+      had -- added for consistency/completeness, but verified this does
+      NOT explain mrpG's own 59% neg_purity contamination the way PhaF
+      explains mrpF's: every yufB-tagged PF03334 UniProt entry already
+      also carries the mrpG gene name on the same record (so gene:mrpG
+      alone already matched it), and the actual flagged "negative"
+      entries checked directly carry no informative gene symbol at all
+      (bare locus tags) -- real orthologs UniProt never assigned a
+      curated name to, which no alias addition could catch. mrpG's
+      negative-pool contamination looks structural: PF03334 apparently
+      has few members that are genuinely distinct from mrpG/mnhG itself,
+      not a missing-synonym problem. Worth a separate look if this
+      family's calibration keeps flagging poorly after this fix.
+    positive_query: "(gene:mrpG OR gene:mnhG OR gene:yufB) AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF03334 NOT (gene:mrpG OR gene:mnhG OR gene:yufB) AND taxonomy_id:2"
     negative_pfam: PF03334
     pfam_model: PF03334
 
