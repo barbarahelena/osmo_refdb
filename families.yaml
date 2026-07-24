@@ -666,6 +666,51 @@ families:
     pfam_model: PF00313
     max_positive_override: 5000
 
+  - name: trkA
+    description: >
+      Regulatory/NAD-binding subunit of constitutive K+ uptake (Trk/Ktr
+      systems; Task 1d, "Kdp backup/disambiguation" -- an alternative K+
+      uptake route to the inducible Kdp system already in this panel via
+      kdpA, useful for telling "no Kdp signal" apart from "no K+ uptake
+      capability at all"). IMPORTANT naming trap found during research: the
+      literal gene symbol "trkA" in Bacillota mostly does NOT refer to this
+      system -- B. subtilis's own "trkA" (UniProt O07085) is an unrelated
+      CBS-domain protein (PF13738); the real Firmicutes-lineage ortholog of
+      E. coli TrkA (matching PF02080+PF02254 domain pair) is consistently
+      named ktrA instead (confirmed via B. subtilis, B. licheniformis, and
+      several Clostridium/Staphylococcus/Enterococcus UniProt entries).
+      Both gene symbols are included as a synonym pair for exactly this
+      reason -- omitting ktrA would silently fail to close the Bacillota
+      gap this family exists to fill. (The same bare-symbol trap showed up
+      while researching opuB/opuC: neither resolves to the intended
+      Bacillus-type transporter operon in UniProt, which is why this panel
+      uses the real per-subunit symbols opuAB/opuBB/opuCB etc. instead --
+      see those entries above.) PF02080 (TrkA_N) rejected for pfam_model: a
+      broad RCK-domain family, shared across many unrelated K+/Ca2+ channel
+      regulatory subunits.
+    positive_query: "(gene:trkA OR gene:ktrA) AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF02080 NOT (gene:trkA OR gene:ktrA) AND taxonomy_id:2"
+    negative_pfam: PF02080   # TrkA_N, broad RCK-domain regulatory-subunit family
+
+  - name: trkH
+    description: >
+      Pore-forming subunit of the Trk/Ktr system, paired with trkA/ktrA
+      above (Task 1d). Same trkH/ktrB/ktrD naming split confirmed in
+      Bacillota (B. subtilis carries both ktrB and ktrD, a second paralog,
+      both matching PF02386) -- all three gene symbols included as
+      synonyms. PF02386 ("TrkH") checked: 89 domain architectures is
+      higher than this batch's other pfam_model adoptions (worth a caution
+      flag), but still a clean single-function family name/description
+      (cation transport) and a comparatively small protein count (25394)
+      next to truly broad folds like PF00005/PF00528 -- adopted via
+      pfam_model, but check qc_scorecard.tsv after the first build to
+      confirm the extra caution wasn't warranted before trusting it the
+      way mrpE/mrpF/mrpG's cleaner adoptions can be.
+    positive_query: "(gene:trkH OR gene:ktrB OR gene:ktrD) AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF02386 NOT (gene:trkH OR gene:ktrB OR gene:ktrD) AND taxonomy_id:2"
+    negative_pfam: PF02386   # TrkH cation transport family
+    pfam_model: PF02386
+
 # Considered and deferred (2026-07-16): proV, proW, gbsA, gbsB
 #
 # Requested alongside proX/proP/gbsAB, but skipped for now because their
