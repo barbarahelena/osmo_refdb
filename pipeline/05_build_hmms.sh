@@ -74,7 +74,7 @@ text = re.sub(r'^NAME  .*$', f'NAME  {family}', text, count=1, flags=re.MULTILIN
 # NAME rewrite above, so two families adopting the SAME pfam_model
 # accession (e.g. trkH/ktrB/ktrD all -> PF02386) collide at press time
 # unless ACC is also made unique per family. Rewritten to the family name
-# too, same as NAME -- families.yaml's own `name` field is already
+# too, same as NAME -- families.yaml's own name field is already
 # required-unique, so this can't collide.
 if re.search(r'^ACC   ', text, flags=re.MULTILINE):
     text = re.sub(r'^ACC   .*$', f'ACC   {family}', text, count=1, flags=re.MULTILINE)
