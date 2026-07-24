@@ -4,9 +4,11 @@ Saved copy of the active plan, in case the working session crashes before
 this lands as commits. See `docs/CHANGELOG.md` for a narrative summary of
 what's already done; this file is the working plan itself.
 
-**Status as of commit `6d03487`**: Phases 1-4 are done and committed on
-`fix-numbered-paralog-gaps` (pushed, PR #9 and issue #8 updated). Only
-Phases 5 and 6 are still open — see those sections below. The
+**Status**: Phases 1-4 are done and committed on `fix-numbered-paralog-gaps`
+(commits `69f80a4`/`6d03487`/`da5caf2`/`837e600`, pushed, PR #9 and issue
+#8 updated). Phase 5 is done and committed on `phase5-trk-ktr-scope`
+(commit `8b49d2d`, pushed, PR #11 open against `fix-numbered-paralog-gaps`).
+Only **Phase 6** is still open — see that section below. The
 crash-recovery notes that used to live here (git worktree state, pending
 `v7` build, uncommitted changes) are no longer relevant now that
 everything has landed; kept only in `git log` if needed for reference.
@@ -202,22 +204,27 @@ different outcome** — see the finding below.
   confusion) is an open question without a known fix, not a pending
   decision.
 
-## Phase 5 — Re-evaluate trkH/ktrB/ktrD decoy need — NOT STARTED, REFRAMED
+## Phase 5 — Re-evaluate trkH/ktrB/ktrD decoy need — DONE (PR #11)
 
-**Reframed by Phase 4's result.** trkH/ktrB/ktrD share a Pfam accession
-(PF02386) the same way proX/opuAC/opuBC/opuCC shared PF04069 — close
-paralogs of each other, not a betL-style superficial score collision.
-Phase 4 showed `decoy_from_negatives` catastrophically backfires on
-exactly that shape of clique. The decoy option here should now be treated
-as disfavored by default, not a neutral thing to re-evaluate — would need
-a specific reason to expect a different outcome (e.g. much larger,
-less-thin reference sets than opuBC's 93 members) before trying it, not
-just "purity contamination is still present."
+Checked `v7`'s real numbers rather than assuming either fix helps:
 
-Still worth checking post-Phase-2 `v7` numbers to see whether the
-numbered-paralog fix alone brought trkH/ktrB/ktrD's contamination down
-enough that no further action is needed at all. Not necessarily its own
-PR unless it results in a real change.
+- Numbered-paralog fix (Phase 2) barely moved purity-flag rates (trkH
+  27%→29%, ktrB 14.5%→15.5%, ktrD 2.4%→2.8% flagged, v6 vs v7) — same
+  structural pattern as Phase 3's families, not a missing-symbol gap.
+- `decoy_from_negatives` ruled out per Phase 4's finding — trkH/ktrB/ktrD
+  share PF02386 the same close-paralog way proX/opuAC/opuBC/opuCC shared
+  PF04069, the exact clique shape that catastrophically backfired.
+- No `pfam_model` fallback possible (removing it fixed the byte-identical-
+  HMM bug on this same trio).
+
+Both DIAMOND (0.265–0.293) and HMM (0.121–0.288) precision are low with
+no independent cascade rescue. Set `scope: annotate_only` on all three,
+same criteria as otsA/mrpC — confirmed explicitly with the user first
+since this removes the entire Trk/Ktr K+-uptake system from
+`osmotool profile`'s output, a bigger call than extending scope on 1-2
+families. Committed `8b49d2d` on branch `phase5-trk-ktr-scope`, pushed,
+PR #11 open against `fix-numbered-paralog-gaps`. Also backfilled mrpC's
+missing README documentation from the prior commit.
 
 ## Phase 6 — qc_scorecard as a mandatory gate for pfam_model — NOT STARTED
 

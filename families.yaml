@@ -1092,9 +1092,31 @@ families:
       e.g. Edwardsiella tarda, Azoarcus sp. BH72, carry two real,
       distinctly-named paralogs) -- confirmed via UniProt, same
       numbered-paralog gap as murB1/murB2/trkA1/trkA2/ktrB1/ktrD1 etc.
+
+      Same structural negative-pool contamination as mrpB/otsA/etc. (see
+      README's "Structural negative-pool contamination" section):
+      confirmed via v7's negative_purity_manifest.tsv that the
+      numbered-paralog fix above barely moved this family's contamination
+      (v6 27% flagged -> v7 29%), consistent with the pattern being real
+      unlabeled orthologs, not a missing-symbol gap. decoy_from_negatives
+      is not a fix either: Phase 4's proX/opuAC/opuBC/opuCC experiment
+      (see issue tracker / docs/CHANGELOG.md) showed this exact
+      shared-Pfam-clique shape (trkH/ktrB/ktrD share PF02386 the same way
+      proX/opuAC/opuBC/opuCC share PF04069) catastrophically backfires --
+      close paralogs outcompete a family's own reference set once added
+      back into the searchable pool as decoys. No pfam_model fallback is
+      possible here either (removing pfam_model from all three was the
+      fix for the byte-identical-HMM bug above), so both DIAMOND (0.293)
+      and HMM (0.288) precision are low with no independent rescue via
+      profile_cascade.tsv (hmm_status=overlapping_distributions_f1_calibrated,
+      same contaminated pool). scope: annotate_only set, same criteria and
+      treatment as otsA/mrpC: still built and searchable for osmotool
+      annotate co-occurrence checks, excluded from osmotool profile's
+      reported output where this precision would be misleading.
     positive_query: "(gene:trkH OR gene:trkH1 OR gene:trkH2) AND taxonomy_id:2"
     negative_query: "xref:pfam-PF02386 NOT (gene:trkH OR gene:trkH1 OR gene:trkH2 OR gene:ktrB OR gene:ktrB1 OR gene:ktrB2 OR gene:ktrD OR gene:ktrD1 OR gene:ktrD2) AND taxonomy_id:2"
     negative_pfam: PF02386   # TrkH cation transport family
+    scope: annotate_only
 
   - name: ktrA
     description: >
@@ -1136,9 +1158,18 @@ families:
       Also includes ktrB1/ktrB2 (some organisms, e.g. Paenibacillus larvae,
       Nonomuraea coxensis, carry two real, distinctly-named paralogs) --
       confirmed via UniProt, same numbered-paralog gap as trkH1/trkH2.
+
+      Same structural negative-pool contamination and same disposition as
+      trkH above (v6 14.5% flagged -> v7 15.5%, barely moved by the
+      numbered-paralog fix; decoy_from_negatives ruled out by Phase 4's
+      finding on the same PF02386 clique shape; no pfam_model fallback
+      possible; DIAMOND 0.265/HMM 0.247 precision, neither rescued by
+      profile_cascade.tsv). scope: annotate_only set, same criteria as
+      otsA/mrpC/trkH.
     positive_query: "(gene:ktrB OR gene:ktrB1 OR gene:ktrB2) AND taxonomy_id:2"
     negative_query: "xref:pfam-PF02386 NOT (gene:trkH OR gene:trkH1 OR gene:trkH2 OR gene:ktrB OR gene:ktrB1 OR gene:ktrB2 OR gene:ktrD OR gene:ktrD1 OR gene:ktrD2) AND taxonomy_id:2"
     negative_pfam: PF02386
+    scope: annotate_only
 
   - name: ktrD
     description: >
@@ -1157,9 +1188,20 @@ families:
       positives), treat this specific number with extra caution regardless
       of direction -- small-n reliability risk applies here the same way
       it does to gshB/murB elsewhere in this panel.
+
+      Same structural negative-pool contamination and same disposition as
+      trkH/ktrB above (2.4% -> 2.8% flagged, barely moved by the
+      numbered-paralog fix; decoy_from_negatives ruled out by Phase 4's
+      finding; no pfam_model fallback possible). HMM precision here is the
+      worst in this cluster (0.121, with very high recall 0.904 -- calling
+      almost everything positive, consistent with the small-n calibration
+      risk already noted above), DIAMOND 0.287, neither rescued by
+      profile_cascade.tsv. scope: annotate_only set, same criteria as
+      otsA/mrpC/trkH/ktrB.
     positive_query: "(gene:ktrD OR gene:ktrD1 OR gene:ktrD2) AND taxonomy_id:2"
     negative_query: "xref:pfam-PF02386 NOT (gene:trkH OR gene:trkH1 OR gene:trkH2 OR gene:ktrB OR gene:ktrB1 OR gene:ktrB2 OR gene:ktrD OR gene:ktrD1 OR gene:ktrD2) AND taxonomy_id:2"
     negative_pfam: PF02386
+    scope: annotate_only
 
 # Considered and deferred (2026-07-16): proV, proW, gbsA, gbsB
 #
