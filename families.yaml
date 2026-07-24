@@ -259,9 +259,15 @@ families:
       to let `osmotool annotate` check whether all three Culligan loci
       genes co-occur in a given genome, not for `osmotool profile`.
       scope: annotate_only below is what encodes that distinction; see
-      08c_write_scope_manifest.py.
-    positive_query: "gene:murB AND taxonomy_id:2"
-    negative_query: "xref:pfam-PF02873 NOT gene:murB AND taxonomy_id:2"
+      08c_write_scope_manifest.py. Also includes murB1/murB2 (some
+      organisms, e.g. Bacillus cereus/thuringiensis, Symbiobacterium
+      thermophilum, carry two real, reviewed, distinctly-named paralogs
+      rather than a single plain "murB") -- confirmed via UniProt (11
+      members not already matched by bare gene:murB); a genuine missing-
+      positive gap, not a negative-pool issue, found while investigating
+      the same class of bug as mrpF/mrpG's PhaF/yufB gap.
+    positive_query: "(gene:murB OR gene:murB1 OR gene:murB2) AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF02873 NOT (gene:murB OR gene:murB1 OR gene:murB2) AND taxonomy_id:2"
     negative_pfam: PF02873   # MurB C-terminal domain (murB-specific; skips the broader shared PF01565 FAD-binding domain)
     scope: annotate_only
 
@@ -769,9 +775,25 @@ families:
       ktrA gene symbols even though they're separate families, for the
       same reason proX/opuAC/opuBC/opuCC cross-exclude each other: ktrA
       is a real, distinct true positive elsewhere in this panel, not a
-      clean negative for trkA.
-    positive_query: "gene:trkA AND taxonomy_id:2"
-    negative_query: "xref:pfam-PF02080 NOT (gene:trkA OR gene:ktrA) AND taxonomy_id:2"
+      clean negative for trkA. Also includes trkA1/trkA2 (some organisms,
+      e.g. Azoarcus sp. BH72, Streptococcus thermophilus, carry two real,
+      distinctly-named paralogs) -- confirmed via UniProt, the same
+      numbered-paralog gap found for murB1/murB2 and trkH1/ktrB1/ktrD1
+      below while investigating the class of bug mrpF/mrpG's PhaF/yufB
+      gap belongs to. Adding trkA1/trkA2 has a measured cost: of 372
+      UniProt trkA1/trkA2 entries, 82% (median 223aa) are short
+      single-RCK-domain proteins already excluded by the length-outlier
+      filter (canonical trkA median 457aa), but the 68 that pass the
+      filter are real, taxonomically scattered full-length orthologs
+      (e.g. Halomonas, Cupriavidus, Roseobacter, Fusobacterium,
+      Ruminococcus) whose diversity widens the DIAMOND reference cloud
+      and measurably increases false positives on a held-out benchmark
+      (subset-test F1 0.920->0.879). Kept anyway: these are real trkA
+      genes a genuine read could come from, not an artifact, so this is
+      a recall-vs-specificity trade-off structurally like the negative-
+      pool findings below, not a bug to chase further.
+    positive_query: "(gene:trkA OR gene:trkA1 OR gene:trkA2) AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF02080 NOT (gene:trkA OR gene:trkA1 OR gene:trkA2 OR gene:ktrA OR gene:ktrA1 OR gene:ktrA2) AND taxonomy_id:2"
     negative_pfam: PF02080   # TrkA_N, broad RCK-domain regulatory-subunit family
 
   - name: trkH
@@ -799,9 +821,12 @@ families:
       each family's own distinct reference sequences, not the shared
       profile) -- trkH/ktrB/ktrD all get real, distinct DIAMOND numbers.
       Kept as a custom, gene-symbol-anchored model instead, same as
-      proX/opuAC/opuBC/opuCC.
-    positive_query: "gene:trkH AND taxonomy_id:2"
-    negative_query: "xref:pfam-PF02386 NOT (gene:trkH OR gene:ktrB OR gene:ktrD) AND taxonomy_id:2"
+      proX/opuAC/opuBC/opuCC. Also includes trkH1/trkH2 (some organisms,
+      e.g. Edwardsiella tarda, Azoarcus sp. BH72, carry two real,
+      distinctly-named paralogs) -- confirmed via UniProt, same
+      numbered-paralog gap as murB1/murB2/trkA1/trkA2/ktrB1/ktrD1 etc.
+    positive_query: "(gene:trkH OR gene:trkH1 OR gene:trkH2) AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF02386 NOT (gene:trkH OR gene:trkH1 OR gene:trkH2 OR gene:ktrB OR gene:ktrB1 OR gene:ktrB2 OR gene:ktrD OR gene:ktrD1 OR gene:ktrD2) AND taxonomy_id:2"
     negative_pfam: PF02386   # TrkH cation transport family
 
   - name: ktrA
@@ -812,9 +837,12 @@ families:
       above for the full naming-trap explanation and why this is its own
       family rather than a trkA synonym, matching nhaA/mrp's treatment).
       Same domain pair (PF02080+PF02254) as trkA; PF02080 rejected for
-      pfam_model for the same broad-RCK-domain reason as trkA.
-    positive_query: "gene:ktrA AND taxonomy_id:2"
-    negative_query: "xref:pfam-PF02080 NOT (gene:trkA OR gene:ktrA) AND taxonomy_id:2"
+      pfam_model for the same broad-RCK-domain reason as trkA. Also
+      includes ktrA1/ktrA2 (some organisms, e.g. Halobacillus karajensis,
+      Clostridium scindens, carry two real, distinctly-named paralogs) --
+      confirmed via UniProt, same numbered-paralog gap as trkA1/trkA2.
+    positive_query: "(gene:ktrA OR gene:ktrA1 OR gene:ktrA2) AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF02080 NOT (gene:trkA OR gene:trkA1 OR gene:trkA2 OR gene:ktrA OR gene:ktrA1 OR gene:ktrA2) AND taxonomy_id:2"
     negative_pfam: PF02080
 
   - name: ktrB
@@ -831,8 +859,11 @@ families:
       three of trkH/ktrB/ktrD, breaks HMM detection specifically when more
       than one sibling adopts it (byte-identical models, so hmmscan can't
       discriminate them -- confirmed via the v6 benchmark). Kept custom.
-    positive_query: "gene:ktrB AND taxonomy_id:2"
-    negative_query: "xref:pfam-PF02386 NOT (gene:trkH OR gene:ktrB OR gene:ktrD) AND taxonomy_id:2"
+      Also includes ktrB1/ktrB2 (some organisms, e.g. Paenibacillus larvae,
+      Nonomuraea coxensis, carry two real, distinctly-named paralogs) --
+      confirmed via UniProt, same numbered-paralog gap as trkH1/trkH2.
+    positive_query: "(gene:ktrB OR gene:ktrB1 OR gene:ktrB2) AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF02386 NOT (gene:trkH OR gene:trkH1 OR gene:trkH2 OR gene:ktrB OR gene:ktrB1 OR gene:ktrB2 OR gene:ktrD OR gene:ktrD1 OR gene:ktrD2) AND taxonomy_id:2"
     negative_pfam: PF02386
 
   - name: ktrD
@@ -841,9 +872,12 @@ families:
       ktrB above (Task 1d) -- see ktrB's entry for why these two are kept
       as separate families rather than merged as synonyms, and trkH's
       entry for why none of trkH/ktrB/ktrD get pfam_model treatment
-      despite sharing PF02386.
-    positive_query: "gene:ktrD AND taxonomy_id:2"
-    negative_query: "xref:pfam-PF02386 NOT (gene:trkH OR gene:ktrB OR gene:ktrD) AND taxonomy_id:2"
+      despite sharing PF02386. Also includes ktrD1/ktrD2 (some organisms,
+      e.g. Peribacillus simplex, Salinibacillus aidingensis, Bacillus
+      carboniphilus, carry two real, distinctly-named paralogs) --
+      confirmed via UniProt, same numbered-paralog gap as ktrB1/ktrB2.
+    positive_query: "(gene:ktrD OR gene:ktrD1 OR gene:ktrD2) AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF02386 NOT (gene:trkH OR gene:trkH1 OR gene:trkH2 OR gene:ktrB OR gene:ktrB1 OR gene:ktrB2 OR gene:ktrD OR gene:ktrD1 OR gene:ktrD2) AND taxonomy_id:2"
     negative_pfam: PF02386
 
 # Considered and deferred (2026-07-16): proV, proW, gbsA, gbsB
