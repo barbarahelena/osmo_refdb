@@ -2,12 +2,16 @@
 # ---------------------------------------------------------------------------
 # osmo_refdb — 08_build_diamond_db.sh
 # Build a DIAMOND database from each family's TRAIN positives (never the
-# TEST split, to avoid leakage into the benchmark), plus any decoy
-# references from 08a_build_decoy_refs.py (families.yaml:
-# decoy_from_negatives) -- confusable-paralog sequences that must be
-# searchable so they can win select_best_hits' contest away from a
-# mislabeled call, but are excluded from all reported output (see
-# 08c_write_scope_manifest.py). Run 08a before this script.
+# TEST split, to avoid leakage into the benchmark), plus:
+#   * any decoy references from 08a_build_decoy_refs.py (families.yaml:
+#     decoy_from_negatives) -- confusable-paralog sequences that must be
+#     searchable so they can win select_best_hits' contest away from a
+#     mislabeled call, but are excluded from all reported output (see
+#     08c_write_scope_manifest.py).
+#   * any fused-ORF references from 08d_build_fusion_refs.py (families.yaml:
+#     fusion_partner) -- e.g. mrpA_mrpD_fused -- real, reportable detection
+#     targets, unlike decoys, so NOT excluded via 08c.
+# Run 08a and 08d before this script.
 #
 # Usage: bash 08_build_diamond_db.sh [refs_dir] [release_dir] [release_name]
 # ---------------------------------------------------------------------------
@@ -25,6 +29,9 @@ COMBINED_FAA="${RELEASE_DIR}/${RELEASE_NAME}.train_refs.faa"
 cat "${REFS_DIR}"/*.positive.train.faa > "${COMBINED_FAA}"
 if compgen -G "${REFS_DIR}/*.decoy.faa" > /dev/null; then
     cat "${REFS_DIR}"/*.decoy.faa >> "${COMBINED_FAA}"
+fi
+if compgen -G "${REFS_DIR}/*_fused.faa" > /dev/null; then
+    cat "${REFS_DIR}"/*_fused.faa >> "${COMBINED_FAA}"
 fi
 
 diamond makedb --in "${COMBINED_FAA}" --db "${RELEASE_DIR}/${RELEASE_NAME}" --threads "${THREADS}"

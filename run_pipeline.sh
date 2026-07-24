@@ -92,8 +92,8 @@ do_build() {
     THREADS="${THREADS}" bash pipeline/04_align_trim.sh "${REFS_DIR}" "${ALN_DIR}" "${FAMILIES_FILE}"
 
     echo ""
-    echo "--- 5. hmmbuild + score positive-test/negative sets ---"
-    THREADS="${THREADS}" bash pipeline/05_build_hmms.sh "${REFS_DIR}" "${ALN_DIR}" "${HMM_DIR}"
+    echo "--- 5. hmmbuild (or fetch curated Pfam model) + score positive-test/negative sets ---"
+    THREADS="${THREADS}" bash pipeline/05_build_hmms.sh "${REFS_DIR}" "${ALN_DIR}" "${HMM_DIR}" "${FAMILIES_FILE}"
 
     echo ""
     echo "--- 6. Calibrate GA cutoffs ---"
@@ -113,7 +113,11 @@ do_build() {
     python pipeline/08a_build_decoy_refs.py --refs "${REFS_DIR}" --families "${FAMILIES_FILE}"
 
     echo ""
-    echo "--- 8. Build DIAMOND database (TRAIN positives + any decoy refs) ---"
+    echo "--- 8d. Build fused-ORF references (e.g. mrpA/mrpB single-ORF lineages) ---"
+    python pipeline/08d_build_fusion_refs.py --refs "${REFS_DIR}" --families "${FAMILIES_FILE}"
+
+    echo ""
+    echo "--- 8. Build DIAMOND database (TRAIN positives + any decoy/fused refs) ---"
     THREADS="${THREADS}" bash pipeline/08_build_diamond_db.sh "${REFS_DIR}" "${RELEASE_DIR}" osmo_refdb
 
     echo ""

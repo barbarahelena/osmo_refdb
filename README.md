@@ -130,6 +130,107 @@ signal — validate with the subset-testing workflow below before keeping
 it, since it doesn't always help (see ectB's `families.yaml` entry, where
 the same experiment made DIAMOND meaningfully worse and was reverted).
 
+Optional `pfam_model: PFxxxxx` field: use that Pfam family's own curated
+HMM directly — built from Pfam's hand-curated seed alignment, carrying its
+own GA/TC/NC gathering-threshold lines — instead of `hmmbuild`-ing a fresh
+model from this repo's own fetched-and-aligned UniProt sequences. Only
+worth setting when a gene's real biological target is essentially
+co-extensive with a single, specific Pfam family — check via the
+[InterPro API](https://www.ebi.ac.uk/interpro/api/entry/pfam/PFxxxxx): a
+low `domain_architectures` count and a family name/description that
+matches the gene one-to-one are good signs; a domain shared by many
+unrelated protein families (e.g. a generic ABC-transporter ATPase or
+permease fold) is not, however narrow it looks from protein *count* alone.
+Also check no *other* family already in this panel is built from the same
+Pfam accession as a genuinely distinct true positive — see `families.yaml`'s
+opuAC/opuBC/opuCC vs. proX (all four share PF04069 but are real, separate
+paralogs; adopting Pfam's one model+cutoff there would make them
+indistinguishable from each other, so none of them use `pfam_model` despite
+PF04069 being a reasonably narrow domain by domain-architecture-count
+standards). **This isn't just a specificity nicety — for HMM detection
+specifically it's a hard failure mode, confirmed in production**: an
+earlier version of this panel gave `pfam_model: PF02386` to all three of
+trkH/ktrB/ktrD (real, distinct siblings sharing that Pfam family, same
+situation as proX/opuAC/opuBC/opuCC). Adopting the same accession for more
+than one of them made their HMMs byte-identical — every read scores
+exactly the same against all three, `07_press_hmms.sh`'s alphabetical
+`cat hmms/*.hmm` plus `11_compute_metrics.py`'s best-hit tie-break means
+whichever sorts first absorbs 100% of the shared signal, and the rest get
+exactly zero HMM recall. The v6 benchmark caught this directly: ktrB
+scored real hits, trkH and ktrD scored 0 true positives each, despite
+normal, non-trivial DIAMOND recall on the same reads (DIAMOND discriminates
+via each family's own distinct reference sequences, not the shared
+profile, so it's unaffected). `01_fetch_refs.py` now fails fast
+(`check_no_duplicate_pfam_models`) if two families.yaml entries share a
+`pfam_model` accession, specifically to catch this mistake before a full
+build wastes time on it again. `05_build_hmms.sh` fetches the actual
+`.hmm` file (gzipped) from
+`https://www.ebi.ac.uk/interpro/api/entry/pfam/<PFxxxxx>/?annotation=hmm` —
+confirmed working on that host; note this is **not** the same thing as the
+InterPro entry metadata endpoint's `entry_annotations.hmm` counter, which
+reports `0` regardless of whether the model is actually fetchable, so don't
+use that counter to decide. DIAMOND references are unaffected either way —
+those always come from this repo's own UniProt fetch; `pfam_model` only
+changes where the HMM comes from. `06_calibrate_cutoffs.py` reads (and
+leaves untouched) the GA line Pfam shipped, rather than computing one, but
+still scores this repo's own held-out positive/negative sets against it and
+flags the family (`pfam_ga_review_needed` in `cutoff_manifest.tsv`) if
+Pfam's cutoff doesn't cleanly separate them — that's a signal the
+gene-specificity assumption above was wrong for this particular family, not
+that the number needs recalculating; remove `pfam_model` and let it fall
+back to a normal custom-built model instead.
+
+Optional `fusion_partner: <other family name>` + `fusion_marker_pfam:
+PFxxxxx` fields: for a pair of families whose gene products occur as a
+single fused ORF in some lineages instead of two separate genes (currently
+only mrpA/mrpB — the Mrp/Mnh Na+/H+ antiporter's A and B subunits, confirmed
+via UniProt domain-architecture evidence across Actinomycetota, Bacillota
+specifically Paenibacillaceae, and some Alphaproteobacteria — see
+`families.yaml`'s mrpA/mrpB entries for the taxonomic detail). Without this,
+`01c_check_length_outliers.py` would drop a genuine fused-ORF sequence as a
+probable fusion *artifact* (it's roughly the sum of both subunits' lengths)
+— exactly wrong here, since Task 1b explicitly wants the fused form
+recognized as a real detection target. With `fusion_partner` declared, an
+over-length candidate is checked against a second length window centered on
+(this family's median + the partner's median) instead of being discarded
+outright; `fusion_marker_pfam` (a Pfam domain unique to one partner, absent
+from a standalone copy of the other — confirmed via UniProt's own domain
+annotation, fetched by `01_fetch_refs.py` for `fusion_partner` families
+specifically) confirms it's a true fusion rather than an unrelated length
+outlier when domain evidence is available, and is advisory (not required)
+otherwise. Confirmed fusion candidates are routed to
+`refs/<family>.positive.fusion_candidates.faa` — excluded from this
+family's own MAFFT alignment/HMM (a ~1000aa fused sequence would badly gap
+the alignment of ~800aa standalone sequences) but picked up by
+`pipeline/08d_build_fusion_refs.py`, which merges a pair's fusion
+candidates (deduped by UniProt accession) into one `<familyA>_<familyB>_fused`
+DIAMOND-only reference set. Unlike a decoy reference, a fused-ORF hit is a
+**real, reportable** detection target, not a sink for mislabeled calls — it
+is not added to `osmotool profile`/`annotate`'s exclusion lists. What a
+`_fused` hit should imply for the two individual family calls is
+complex-aware scoring logic that lives downstream in `osmotool`, not in
+this repo. See `pipeline/01c_check_length_outliers.py` and
+`pipeline/08d_build_fusion_refs.py` docstrings for the full mechanism.
+
+Optional `max_positive_override: <int>` field: per-family cap on
+`01_fetch_refs.py`'s positive-set fetch, overriding the global
+`--max-positive` CLI flag for just that family. Needed for a family whose
+`positive_query` is deliberately anchored on a broad Pfam accession rather
+than a gene symbol (see cspA below) and would otherwise try to fetch every
+UniProt member of that Pfam family.
+
+### A family whose positive set is a whole Pfam family, not a gene symbol
+
+Every family above is anchored on a gene symbol (`gene:xxx`). cspA
+(`families.yaml`, 2026-07-23) is deliberately different: its
+`positive_query` is `xref:pfam-PF00313 AND taxonomy_id:2` — the Pfam
+cold-shock-domain family itself — because the goal is to capture every csp
+paralog in a genome (cspA through cspI-type genes and organism-specific
+equivalents), not just literally-"cspA"-named orthologs. Pair this with
+`max_positive_override` (PF00313 has on the order of 80,000 UniProt member
+proteins) and `pfam_model` (Pfam's own long-established CSD gathering
+cutoff) if the same pattern is useful for a future family.
+
 ### Test-driving a new family before the full rebuild
 
 A full `build` + `benchmark` across every family takes on the order of 90
@@ -161,12 +262,13 @@ everything together.
 | 2 | `02_cluster_cdhit.sh` | CD-HIT cluster positives at 90% identity (remove redundancy) |
 | 3 | `03_split_train_test.py` | Split positives into train (build) / test (held-out benchmark). For families marked `decoy_from_negatives: true`, also splits their negative set the same way (see step 8a) |
 | 4 | `04_align_trim.sh` | MAFFT align + trimAl trim the TRAIN positives. trimAl's gap threshold defaults to 0.8 but can be overridden per family via `families.yaml`'s `trim_gt` |
-| 5 | `05_build_hmms.sh` | hmmbuild per family; score positive-test/negative sets |
-| 6 | `06_calibrate_cutoffs.py` | Set per-family HMM GA (gathering) cutoffs |
+| 5 | `05_build_hmms.sh` | hmmbuild per family (or, for a family marked `pfam_model`, fetch that curated Pfam-A HMM directly instead); score positive-test/negative sets |
+| 6 | `06_calibrate_cutoffs.py` | Set per-family HMM GA (gathering) cutoffs (or, for `pfam_model` families, read and keep Pfam's own GA line, only flagging it if it doesn't separate this repo's own curated sets well) |
 | 6b | `06b_qc_scorecard.py` | Consolidate negative-purity, length-outlier, and HMM-cutoff-overlap manifests into one per-family scorecard (`qc_scorecard.tsv`) flagging families that need review |
 | 7 | `07_press_hmms.sh` | Concatenate + hmmpress into one binary HMM database |
 | 8a | `08a_build_decoy_refs.py` | For families marked `decoy_from_negatives: true` (e.g. betL), turn their held-out negative-train split into searchable `<family>_decoy` DIAMOND references -- confusable paralogs (e.g. betT/caiT) that can win DIAMOND's best-hit contest away from a mislabeled call, since a single score threshold can't separate them (see betL's `families.yaml` entry) |
-| 8 | `08_build_diamond_db.sh` | Build a DIAMOND db from TRAIN positives + any decoy refs from step 8a |
+| 8d | `08d_build_fusion_refs.py` | For families.yaml pairs marked `fusion_partner` (e.g. mrpA/mrpB), merge each pair's fusion-candidate sequences (flagged by 01c, deduped by UniProt accession) into one searchable `<familyA>_<familyB>_fused` DIAMOND reference -- a real, reportable detection target for a single-ORF fused lineage, not excluded from output the way decoys are |
+| 8 | `08_build_diamond_db.sh` | Build a DIAMOND db from TRAIN positives + any decoy refs from step 8a + any fused refs from step 8d |
 | 8b | `08b_calibrate_diamond_cutoffs.py` | Calibrate a per-family minimum DIAMOND bitscore, mirroring HMM's GA cutoff -- DIAMOND otherwise applies one flat `--min_identity` across every family, which can't separate a true gene from a genuinely close paralog (e.g. betL vs betT) whose identity to it happens to exceed that flat threshold |
 | 8c | `08c_write_scope_manifest.py` | Write `osmo_refdb.profile_excluded_families.txt` (families marked `scope: annotate_only`, e.g. murB, plus all decoy labels) and `osmo_refdb.annotate_excluded_families.txt` (decoy labels only), consumed by `osmotool profile`/`annotate --exclude_families` |
 | 9 | `09_simulate_reads.py` | Simulate reads from held-out TEST positives + negatives (for decoy families, from the negative-test split disjoint from what became decoy refs, so a benchmark read can never trivially match its own literal source sequence sitting in the db) |
