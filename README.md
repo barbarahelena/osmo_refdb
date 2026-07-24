@@ -247,6 +247,83 @@ equivalents), not just literally-"cspA"-named orthologs. Pair this with
 proteins) and `pfam_model` (Pfam's own long-established CSD gathering
 cutoff) if the same pattern is useful for a future family.
 
+### Structural negative-pool contamination: when more data can't fix it
+
+For several families — mrpB, mrpC, mrpE, gshA, gshB, gshF, otsA, mazG,
+mscL, and (confirmed later, see below) trkH, ktrB, ktrD — a large
+fraction of the "negative" pool drawn from the shared Pfam accession
+turns out to be real orthologs of the target gene that UniProt
+never assigned a curated gene symbol to (bare locus tags, confirmed by hand
+for each family via `refs/<family>.negative.flagged.faa`). This is a
+different failure mode from a missing gene-symbol alias (see mrpF/mrpG's
+PhaF/yufB fix) or a missing numbered-paralog variant (see murB1/murB2 etc.,
+issue #8): those are fixable by widening the query; this one is not,
+because there's no alias or symbol to add — the sequences are simply
+unannotated at the gene-symbol level.
+
+Confirmed not fixable by adding more data, in either direction:
+
+- Negative side: raising mrpF/mrpG's negative-fetch cap 1000→4000
+  (`max_negative_override`) gave 4-5x more *clean* negatives after purity
+  filtering but made benchmark F1 measurably worse (mrpF DIAMOND F1
+  0.329→0.109), not better — more volume from the same narrow Pfam pool
+  dilutes with borderline/confusable cases rather than adding real
+  discriminative signal.
+- Positive side: the same principle showed up fixing trkA's
+  numbered-paralog gap (issue #8) — the added trkA1/trkA2 sequences are
+  real orthologs, not an artifact, but their taxonomic diversity widened
+  the DIAMOND reference cloud and cost specificity (F1 0.920→0.879).
+
+For `pfam_model` families in this situation (mrpB, mrpE, gshB), this
+structural finding *validates* the `pfam_model` choice for a second,
+independent reason beyond the domain-architecture screening that
+originally justified it: since a locally-calibrated negative set can't be
+trusted here, deferring to Pfam's own GA cutoff (trained on Pfam's own
+curated seed alignment, not this repo's contaminated pool) is the reliable
+path, not just a shortcut. Confirmed via `qc_scorecard.tsv`: all three
+carry `hmm_status=pfam_ga_review_needed` rather than
+`overlapping_distributions_f1_calibrated`, meaning their HMM path already
+sidesteps this problem the same way. (`pfam_ga_review_needed` itself just
+flags that Pfam's cutoff needs a human check against this repo's own
+held-out sets — see the `pfam_model` section above — not that the model is
+broken.)
+
+For families without a `pfam_model` fallback (otsA, mrpC, mazG, mscL,
+gshA, and — confirmed via a later re-check, see below — trkH, ktrB,
+ktrD), `osmo_refdb.profile_cascade.tsv`'s DIAMOND→HMM fallback does
+**not** rescue them: all carry `hmm_status=overlapping_distributions_f1_calibrated`,
+meaning the HMM cutoff was calibrated against the exact same contaminated
+negative pool as DIAMOND, not an independent clean source. Checked
+individually rather than assumed uniformly unreliable, though:
+
+- otsA (DIAMOND precision 0.543) and mrpC (0.479, found during this check
+  to be worse than otsA despite not being in the original four-family
+  list) — genuinely too low for confident profile-mode reporting.
+  `scope: annotate_only` set (same treatment as murB): still built and
+  searchable for `osmotool annotate` co-occurrence checks, excluded from
+  `osmotool profile`'s reported output.
+- mazG: DIAMOND precision 0.870, borderline — kept in profile mode;
+  already carries its own caveat in `families.yaml` ("treat any mazG
+  signal as suggestive... rather than confirmed osmotic-stress-specific
+  function").
+- mscL, gshA: DIAMOND precision 0.927 / 0.905 — fine in practice despite
+  the contaminated pool; calibration still found a workable separating
+  cutoff. No scope change.
+- **trkH, ktrB, ktrD** (added after re-checking whether the numbered-paralog
+  fix or a decoy conversion could help this group, per `docs/CHANGELOG.md`'s
+  Phase 5): same structural contamination pattern, and neither of the two
+  usual fixes applies here — the numbered-paralog additions barely moved
+  their purity-flag rates (e.g. trkH 27%→29%), and `decoy_from_negatives`
+  is specifically ruled out for this trio, since they share PF02386 the
+  same close-paralog way proX/opuAC/opuBC/opuCC shared PF04069, and that
+  exact clique shape was shown to catastrophically backfire (see the decoy
+  section above). No `pfam_model` fallback is possible either (that's
+  what removing it fixed the byte-identical-HMM bug for, above). Both
+  DIAMOND (0.265–0.293) and HMM (0.121–0.288) precision are low across
+  all three, with neither method offering a reliable alternative to the
+  other. `scope: annotate_only` set on all three, same criteria as
+  otsA/mrpC.
+
 ### Test-driving a new family before the full rebuild
 
 A full `build` + `benchmark` across every family takes on the order of 90

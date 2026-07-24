@@ -44,9 +44,21 @@
 families:
   - name: ectA
     description: >
-      L-2,4-diaminobutyric acid acetyltransferase (ectoine synthesis step 1)
-    positive_query: "gene:ectA AND taxonomy_id:2"
-    negative_query: "xref:pfam-PF00583 NOT gene:ectA AND taxonomy_id:2"
+      L-2,4-diaminobutyric acid acetyltransferase (ectoine synthesis step 1).
+      Also includes ectA1/ectA2 (real, reviewed numbered-paralog gene
+      symbols, same class of gap as murB1/murB2 -- see issue #8).
+
+      Full 43-family v7 rebuild shows a real HMM regression here (F1
+      0.735->0.701) not visible in any smaller subset test -- consistent
+      with the numbered-paralog sweep's broader finding that a full-panel
+      build can shift a family's result even when that family's own query
+      didn't change much, because the combined HMM/DIAMOND db's
+      composition (many more competing reference sequences across the
+      whole panel) changes too. Not investigated further; documented
+      rather than chased, same treatment as the other full-panel
+      regressions this rebuild surfaced.
+    positive_query: "(gene:ectA OR gene:ectA1 OR gene:ectA2) AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF00583 NOT (gene:ectA OR gene:ectA1 OR gene:ectA2) AND taxonomy_id:2"
     negative_pfam: PF00583   # GNAT acetyltransferase family
     # Flanking-signal experiment, validated via a benchmarked subset test
     # (v5-trimgt-test): PF00583 is an extremely broad, promiscuous fold
@@ -59,9 +71,11 @@ families:
 
   - name: ectB
     description: >
-      Diaminobutyric acid aminotransferase (ectoine synthesis step 2)
-    positive_query: "gene:ectB AND taxonomy_id:2"
-    negative_query: "xref:pfam-PF00202 NOT gene:ectB AND taxonomy_id:2"
+      Diaminobutyric acid aminotransferase (ectoine synthesis step 2). Also
+      includes ectB1/ectB2 (real, reviewed numbered-paralog gene symbols,
+      same class of gap as murB1/murB2 -- see issue #8).
+    positive_query: "(gene:ectB OR gene:ectB1 OR gene:ectB2) AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF00202 NOT (gene:ectB OR gene:ectB1 OR gene:ectB2) AND taxonomy_id:2"
     negative_pfam: PF00202   # Aminotransferase class-III
     # Same flanking-signal hypothesis as ectA was tested here too (v5-trimgt-test,
     # trim_gt: 0.6) but DIDN'T hold: DIAMOND got meaningfully worse (F1
@@ -72,9 +86,11 @@ families:
 
   - name: ectC
     description: >
-      Ectoine synthase (ectoine synthesis step 3)
-    positive_query: "gene:ectC AND taxonomy_id:2"
-    negative_query: "xref:pfam-PF07883 NOT gene:ectC AND taxonomy_id:2"
+      Ectoine synthase (ectoine synthesis step 3). Also includes ectC1/ectC2
+      (real, reviewed numbered-paralog gene symbols, same class of gap as
+      murB1/murB2 -- see issue #8).
+    positive_query: "(gene:ectC OR gene:ectC1 OR gene:ectC2) AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF07883 NOT (gene:ectC OR gene:ectC1 OR gene:ectC2) AND taxonomy_id:2"
     negative_pfam: PF07883   # Cupin_2 domain
 
   - name: betL
@@ -93,9 +109,12 @@ families:
       glycine betaine. ectP/lcoP are deliberately excluded from both sets:
       they're broad-specificity BCCT transporters that also carry some
       glycine betaine, so labeling them as clean negatives would repeat
-      the same mistake.
-    positive_query: "(gene:betL OR gene:betP OR gene:opuD OR gene:betS) AND taxonomy_id:2"
-    negative_query: "xref:pfam-PF02028 AND (gene:betT OR gene:caiT) NOT (gene:betL OR gene:betP OR gene:opuD OR gene:betS OR gene:ectP OR gene:lcoP) AND taxonomy_id:2"
+      the same mistake. Also includes numbered-paralog variants of all
+      four alias symbols (betL1/betL2/betP1/betP2/betS1/betS2/opuD1/opuD2
+      -- 289 UniProt members combined), same class of gap as murB1/murB2
+      -- see issue #8.
+    positive_query: "(gene:betL OR gene:betL1 OR gene:betL2 OR gene:betP OR gene:betP1 OR gene:betP2 OR gene:opuD OR gene:opuD1 OR gene:opuD2 OR gene:betS OR gene:betS1 OR gene:betS2) AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF02028 AND (gene:betT OR gene:caiT) NOT (gene:betL OR gene:betL1 OR gene:betL2 OR gene:betP OR gene:betP1 OR gene:betP2 OR gene:opuD OR gene:opuD1 OR gene:opuD2 OR gene:betS OR gene:betS1 OR gene:betS2 OR gene:ectP OR gene:lcoP) AND taxonomy_id:2"
     negative_pfam: PF02028   # BCCT transporter family
     # v4 calibration proved a single score threshold cannot separate betL
     # from betT/caiT (min_positive_score=87.2 vs max_negative_score=642.1 --
@@ -108,16 +127,24 @@ families:
 
   - name: kdpA
     description: >
-      K+-translocating ATPase subunit A (high-affinity K+ uptake)
-    positive_query: "gene:kdpA AND taxonomy_id:2"
-    negative_query: "xref:pfam-PF02705 NOT gene:kdpA AND taxonomy_id:2"
+      K+-translocating ATPase subunit A (high-affinity K+ uptake). Also
+      includes kdpA1/kdpA2 (real, reviewed numbered-paralog gene symbols,
+      same class of gap as murB1/murB2 -- see issue #8).
+    positive_query: "(gene:kdpA OR gene:kdpA1 OR gene:kdpA2) AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF02705 NOT (gene:kdpA OR gene:kdpA1 OR gene:kdpA2) AND taxonomy_id:2"
     negative_pfam: PF02705   # KUP/HAK/KT K+ transporter domain
 
   - name: nhaA
     description: >
-      Na+/H+ antiporter A (Na+ extrusion under osmotic stress)
-    positive_query: "gene:nhaA AND taxonomy_id:2"
-    negative_query: "xref:pfam-PF06450 NOT gene:nhaA AND taxonomy_id:2"
+      Na+/H+ antiporter A (Na+ extrusion under osmotic stress). Also
+      includes nhaA1/nhaA2 -- the largest numbered-paralog population found
+      in this panel's systematic sweep (304/389 UniProt members
+      respectively, e.g. Campylobacter jejuni, Mycobacterium spp.,
+      Salinispora arenicola), same class of gap as murB1/murB2 -- see issue
+      #8. Worth extra attention given nhaA is one of the two original
+      Task-1 gap-closing genes.
+    positive_query: "(gene:nhaA OR gene:nhaA1 OR gene:nhaA2) AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF06450 NOT (gene:nhaA OR gene:nhaA1 OR gene:nhaA2) AND taxonomy_id:2"
     negative_pfam: PF06450   # NhaB, a distinct bacterial Na+/H+ antiporter family
 
   - name: proX
@@ -138,9 +165,32 @@ families:
       failure mode betL's fix addressed, now relevant here too since PF04069
       is shared by four families in this panel instead of one. Still rely
       on the negative-purity QC step (01b) as a backstop for anything this
-      hand-maintained exclusion list misses.
-    positive_query: "gene:proX AND taxonomy_id:2"
-    negative_query: "xref:pfam-PF04069 NOT (gene:proX OR gene:opuAC OR gene:opuBC OR gene:opuCC) AND taxonomy_id:2"
+      hand-maintained exclusion list misses. Also includes proX1/proX2
+      (real, reviewed numbered-paralog gene symbols, same class of gap as
+      murB1/murB2 -- see issue #8); the other three siblings' numbered
+      variants are added below and excluded here too, same as the base
+      symbols.
+
+      decoy_from_negatives tried and reverted (tested via a 4-family
+      subset build, releases/v-test-phase4): redesigning negative_query to
+      target opuAC/opuBC/opuCC specifically as this family's decoy source,
+      mirroring betL vs. betT/caiT, catastrophically collapsed DIAMOND
+      recall for all four families in this clique instead of improving
+      precision (opuBC recall dropped to exactly 0.0; proX/opuAC/opuCC all
+      under 0.08). Root-caused, not just reverted: opuBC's own genuine
+      positive reads were found scoring best against opuAC_decoy/
+      proX_decoy/opuCC_decoy entries rather than opuBC's own (sparse, only
+      93 UniProt members) positive references -- unlike betT/caiT, which
+      are only superficially score-confusable with betL but genuinely
+      distinguishable at the sequence level, proX/opuAC/opuBC/opuCC are
+      close enough paralogs of each other that adding them back into the
+      searchable pool as decoys lets them systematically outcompete a
+      family's own thin reference set. decoy_from_negatives does not
+      generalize from betL's 2-negative case to this 4-way clique of
+      closely related siblings; reverted to PR #6's cross-exclusion-only
+      design below.
+    positive_query: "(gene:proX OR gene:proX1 OR gene:proX2) AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF04069 NOT (gene:proX OR gene:proX1 OR gene:proX2 OR gene:opuAC OR gene:opuAC1 OR gene:opuAC2 OR gene:opuBC OR gene:opuBC1 OR gene:opuBC2 OR gene:opuCC OR gene:opuCC1 OR gene:opuCC2) AND taxonomy_id:2"
     negative_pfam: PF04069   # OpuAC-like ABC transporter substrate-binding domain
   - name: proP
     description: >
@@ -169,31 +219,63 @@ families:
       strip out anything that turns out to be a hidden proP ortholog or
       fusion protein, so a broader, less "hard" raw pull is fine as long
       as enough survives QC to clear the 30-negative reliability floor.
-    positive_query: "gene:proP AND taxonomy_id:2"
-    negative_query: "xref:pfam-PF00083 NOT gene:proP AND taxonomy_id:2"
+
+      Also includes proP1/proP2 (real, reviewed numbered-paralog gene
+      symbols, same class of gap as murB1/murB2 -- see issue #8).
+    positive_query: "(gene:proP OR gene:proP1 OR gene:proP2) AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF00083 NOT (gene:proP OR gene:proP1 OR gene:proP2) AND taxonomy_id:2"
     negative_pfam: PF00083   # Sugar_tr, generic MFS transporter domain
 
   - name: otsA
     description: >
       Trehalose-6-phosphate synthase (trehalose synthesis step 1;
-      compatible solute pathway parallel to ectoine synthesis)
-    positive_query: "gene:otsA AND taxonomy_id:2"
-    negative_query: "xref:pfam-PF00982 NOT gene:otsA AND taxonomy_id:2"
+      compatible solute pathway parallel to ectoine synthesis). Also
+      includes otsA1/otsA2 (real, reviewed numbered-paralog gene symbols,
+      same class of gap as murB1/murB2 -- see issue #8).
+
+      Negative-pool contamination here (58% flagged) is structural, same
+      root cause as mrpB above (real orthologs UniProt never assigned a
+      curated symbol to, not a synonym gap), and there's no pfam_model
+      fallback to route around it -- profile_cascade.tsv's HMM fallback is
+      calibrated against the same contaminated pool, so it doesn't rescue
+      DIAMOND precision here (0.543, the lowest of this cluster along with
+      mrpC). scope: annotate_only set: still built and searchable for
+      osmotool annotate co-occurrence checks, excluded from osmotool
+      profile's reported output where 0.543 precision would be
+      misleading. See README's "Structural negative-pool contamination"
+      section.
+    positive_query: "(gene:otsA OR gene:otsA1 OR gene:otsA2) AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF00982 NOT (gene:otsA OR gene:otsA1 OR gene:otsA2) AND taxonomy_id:2"
+    scope: annotate_only
     negative_pfam: PF00982   # Glyco_transf_20, GT20/trehalose synthase family
 
   - name: otsB
     description: >
-      Trehalose-6-phosphate phosphatase (trehalose synthesis step 2)
-    positive_query: "gene:otsB AND taxonomy_id:2"
-    negative_query: "xref:pfam-PF02358 NOT gene:otsB AND taxonomy_id:2"
+      Trehalose-6-phosphate phosphatase (trehalose synthesis step 2). Also
+      includes otsB1/otsB2 (real, reviewed numbered-paralog gene symbols,
+      same class of gap as murB1/murB2 -- see issue #8).
+    positive_query: "(gene:otsB OR gene:otsB1 OR gene:otsB2) AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF02358 NOT (gene:otsB OR gene:otsB1 OR gene:otsB2) AND taxonomy_id:2"
     negative_pfam: PF02358   # Trehalose_PPase
 
   - name: mscL
     description: >
       Large-conductance mechanosensitive channel (emergency osmolyte
-      release valve during hypoosmotic downshock)
-    positive_query: "gene:mscL AND taxonomy_id:2"
-    negative_query: "xref:pfam-PF01741 NOT gene:mscL AND taxonomy_id:2"
+      release valve during hypoosmotic downshock). Also includes
+      mscL1/mscL2 (real, reviewed numbered-paralog gene symbols, same
+      class of gap as murB1/murB2 -- see issue #8).
+
+      Negative-pool contamination here (72%, the highest raw flag rate in
+      this panel) is the same structural pattern as mrpB/otsA/gshA/mazG
+      above, and profile_cascade.tsv's HMM fallback doesn't rescue it (no
+      pfam_model, same reason as otsA/mrpC/gshA). Despite that, DIAMOND
+      precision (0.927) is fine in practice -- calibration still found a
+      workable separating cutoff -- so no scope change; the highest
+      contamination rate in the panel doesn't automatically mean the
+      worst outcome. See README's "Structural negative-pool contamination"
+      section.
+    positive_query: "(gene:mscL OR gene:mscL1 OR gene:mscL2) AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF01741 NOT (gene:mscL OR gene:mscL1 OR gene:mscL2) AND taxonomy_id:2"
     negative_pfam: PF01741
 
   - name: mscS
@@ -204,8 +286,10 @@ families:
       that aren't necessarily functionally interchangeable with mscS
       itself, so treat this one with the same caution as ectB — check
       the benchmark and cutoff_manifest.tsv status before trusting it.
-    positive_query: "gene:mscS AND taxonomy_id:2"
-    negative_query: "xref:pfam-PF00924 NOT gene:mscS AND taxonomy_id:2"
+      Also includes mscS1/mscS2 (real, reviewed numbered-paralog gene
+      symbols, same class of gap as murB1/murB2 -- see issue #8).
+    positive_query: "(gene:mscS OR gene:mscS1 OR gene:mscS2) AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF00924 NOT (gene:mscS OR gene:mscS1 OR gene:mscS2) AND taxonomy_id:2"
     negative_pfam: PF00924   # MS_channel, broad MscS-like channel family
 
   - name: galE
@@ -226,8 +310,10 @@ families:
       not just galE. Same shape of risk as ectA/ectB's promiscuous-domain
       problem: check cutoff_manifest.tsv/qc_scorecard.tsv status before
       trusting it, don't assume it behaves like a narrow-domain family.
-    positive_query: "gene:galE AND taxonomy_id:2"
-    negative_query: "xref:pfam-PF01370 NOT gene:galE AND taxonomy_id:2"
+      Also includes galE1/galE2 (real, reviewed numbered-paralog gene
+      symbols, same class of gap as murB1/murB2 -- see issue #8).
+    positive_query: "(gene:galE OR gene:galE1 OR gene:galE2) AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF01370 NOT (gene:galE OR gene:galE1 OR gene:galE2) AND taxonomy_id:2"
     negative_pfam: PF01370   # NAD_epimerase/dehydratase, broad NDP-sugar enzyme family
 
   - name: mazG
@@ -242,9 +328,21 @@ families:
       metagenomic clone) that mazG is one of three genes (with galE and
       murB) required for that clone's salt tolerance phenotype. Treat any
       mazG signal as suggestive of a general stress-response contribution
-      rather than confirmed osmotic-stress-specific function.
-    positive_query: "gene:mazG AND taxonomy_id:2"
-    negative_query: "xref:pfam-PF03819 NOT gene:mazG AND taxonomy_id:2"
+      rather than confirmed osmotic-stress-specific function. Also includes
+      mazG1/mazG2 (real, reviewed numbered-paralog gene symbols, same class
+      of gap as murB1/murB2 -- see issue #8).
+
+      Negative-pool contamination here (64%, highest raw flag rate along
+      with gshB) is the same structural pattern as mrpB/otsA/gshA/mscL,
+      and profile_cascade.tsv's HMM fallback doesn't rescue it (no
+      pfam_model, same reason as otsA/mrpC/gshA). DIAMOND precision
+      (0.870) is borderline but kept in profile mode rather than scoped
+      out, since this family's own description already carries a
+      biological-confidence caveat above -- a second, structural caveat on
+      top would be redundant. See README's "Structural negative-pool
+      contamination" section.
+    positive_query: "(gene:mazG OR gene:mazG1 OR gene:mazG2) AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF03819 NOT (gene:mazG OR gene:mazG1 OR gene:mazG2) AND taxonomy_id:2"
     negative_pfam: PF03819   # MazG family (Pfam name is gene-specific, likely narrower than galE's)
 
   - name: murB
@@ -259,9 +357,15 @@ families:
       to let `osmotool annotate` check whether all three Culligan loci
       genes co-occur in a given genome, not for `osmotool profile`.
       scope: annotate_only below is what encodes that distinction; see
-      08c_write_scope_manifest.py.
-    positive_query: "gene:murB AND taxonomy_id:2"
-    negative_query: "xref:pfam-PF02873 NOT gene:murB AND taxonomy_id:2"
+      08c_write_scope_manifest.py. Also includes murB1/murB2 (some
+      organisms, e.g. Bacillus cereus/thuringiensis, Symbiobacterium
+      thermophilum, carry two real, reviewed, distinctly-named paralogs
+      rather than a single plain "murB") -- confirmed via UniProt (11
+      members not already matched by bare gene:murB); a genuine missing-
+      positive gap, not a negative-pool issue, found while investigating
+      the same class of bug as mrpF/mrpG's PhaF/yufB gap.
+    positive_query: "(gene:murB OR gene:murB1 OR gene:murB2) AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF02873 NOT (gene:murB OR gene:murB1 OR gene:murB2) AND taxonomy_id:2"
     negative_pfam: PF02873   # MurB C-terminal domain (murB-specific; skips the broader shared PF01565 FAD-binding domain)
     scope: annotate_only
 
@@ -290,27 +394,37 @@ families:
       ATPases specifically. Still a moderately broad pool (CBS domains
       appear in many otherwise-unrelated regulatory/transport contexts) --
       check qc_scorecard.tsv/cutoff_manifest.tsv before trusting the HMM
-      the way ectA/mscS were flagged.
-    positive_query: "gene:opuAA AND taxonomy_id:2"
-    negative_query: "xref:pfam-PF00571 NOT (gene:opuAA OR gene:opuBA OR gene:opuCA) AND taxonomy_id:2"
+      the way ectA/mscS were flagged. Also includes opuAA1/opuAA2 (real,
+      reviewed numbered-paralog gene symbols, same class of gap as
+      murB1/murB2 -- see issue #8).
+    positive_query: "(gene:opuAA OR gene:opuAA1 OR gene:opuAA2) AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF00571 NOT (gene:opuAA OR gene:opuAA1 OR gene:opuAA2 OR gene:opuBA OR gene:opuBA1 OR gene:opuBA2 OR gene:opuCA OR gene:opuCA1 OR gene:opuCA2) AND taxonomy_id:2"
     negative_pfam: PF00571   # CBS domain pair, co-occurring with ABC_tran in this transporter class
 
   - name: opuBA
     description: >
       ATP-binding subunit of the OpuB system (choline-specific relative of
       OpuA; Task 1a). Same domain architecture and negative-query caveats
-      as opuAA above.
-    positive_query: "gene:opuBA AND taxonomy_id:2"
-    negative_query: "xref:pfam-PF00571 NOT (gene:opuAA OR gene:opuBA OR gene:opuCA) AND taxonomy_id:2"
+      as opuAA above. Also includes opuBA1/opuBA2 (real, reviewed
+      numbered-paralog gene symbols, same class of gap as murB1/murB2 --
+      see issue #8).
+    positive_query: "(gene:opuBA OR gene:opuBA1 OR gene:opuBA2) AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF00571 NOT (gene:opuAA OR gene:opuAA1 OR gene:opuAA2 OR gene:opuBA OR gene:opuBA1 OR gene:opuBA2 OR gene:opuCA OR gene:opuCA1 OR gene:opuCA2) AND taxonomy_id:2"
     negative_pfam: PF00571
 
   - name: opuCA
     description: >
       ATP-binding subunit of the OpuC system (carnitine/choline/betaine
       relative of OpuA; Task 1a). Same domain architecture and
-      negative-query caveats as opuAA above.
-    positive_query: "gene:opuCA AND taxonomy_id:2"
-    negative_query: "xref:pfam-PF00571 NOT (gene:opuAA OR gene:opuBA OR gene:opuCA) AND taxonomy_id:2"
+      negative-query caveats as opuAA above. Also includes opuCA1/opuCA2
+      (real, reviewed numbered-paralog gene symbols, same class of gap as
+      murB1/murB2 -- see issue #8).
+
+      Full 43-family v7 rebuild shows a real HMM regression here (F1
+      0.541->0.490) -- same full-panel db-composition effect noted on
+      several other families in this rebuild (see ectA's entry).
+    positive_query: "(gene:opuCA OR gene:opuCA1 OR gene:opuCA2) AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF00571 NOT (gene:opuAA OR gene:opuAA1 OR gene:opuAA2 OR gene:opuBA OR gene:opuBA1 OR gene:opuBA2 OR gene:opuCA OR gene:opuCA1 OR gene:opuCA2) AND taxonomy_id:2"
     negative_pfam: PF00571
 
   - name: opuAB
@@ -324,25 +438,43 @@ families:
       first, consider a trim_gt experiment (see ectA), and if HMM detection
       genuinely can't be made reliable here, that's a legitimate outcome --
       fall back to DIAMOND-only / gene-symbol identity for this one rather
-      than trusting a poorly-separated HMM cutoff.
-    positive_query: "gene:opuAB AND taxonomy_id:2"
-    negative_query: "xref:pfam-PF00528 NOT (gene:opuAB OR gene:opuBB OR gene:opuCB OR gene:proW) AND taxonomy_id:2"
+      than trusting a poorly-separated HMM cutoff. Also includes
+      opuAB1/opuAB2 (real, reviewed numbered-paralog gene symbols, same
+      class of gap as murB1/murB2 -- see issue #8).
+
+      Full 43-family v7 rebuild shows a real HMM regression here (F1
+      0.830->0.789) -- same full-panel db-composition effect as
+      ectA/ktrA/ktrD/mrpB above. Consistent with this family already being
+      flagged as needing the most scrutiny in this batch.
+    positive_query: "(gene:opuAB OR gene:opuAB1 OR gene:opuAB2) AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF00528 NOT (gene:opuAB OR gene:opuAB1 OR gene:opuAB2 OR gene:opuBB OR gene:opuBB1 OR gene:opuBB2 OR gene:opuCB OR gene:opuCB1 OR gene:opuCB2 OR gene:proW) AND taxonomy_id:2"
     negative_pfam: PF00528   # BPD_transp_1, generic ABC transporter permease domain (same fold flagged for proW below)
 
   - name: opuBB
     description: >
       Permease subunit of the OpuB system (Task 1a). Same domain and
-      caveats as opuAB above.
-    positive_query: "gene:opuBB AND taxonomy_id:2"
-    negative_query: "xref:pfam-PF00528 NOT (gene:opuAB OR gene:opuBB OR gene:opuCB OR gene:proW) AND taxonomy_id:2"
+      caveats as opuAB above. Also includes opuBB1/opuBB2 (real, reviewed
+      numbered-paralog gene symbols, same class of gap as murB1/murB2 --
+      see issue #8).
+    positive_query: "(gene:opuBB OR gene:opuBB1 OR gene:opuBB2) AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF00528 NOT (gene:opuAB OR gene:opuAB1 OR gene:opuAB2 OR gene:opuBB OR gene:opuBB1 OR gene:opuBB2 OR gene:opuCB OR gene:opuCB1 OR gene:opuCB2 OR gene:proW) AND taxonomy_id:2"
     negative_pfam: PF00528
 
   - name: opuCB
     description: >
       Permease subunit of the OpuC system (Task 1a). Same domain and
-      caveats as opuAB above.
-    positive_query: "gene:opuCB AND taxonomy_id:2"
-    negative_query: "xref:pfam-PF00528 NOT (gene:opuAB OR gene:opuBB OR gene:opuCB OR gene:proW) AND taxonomy_id:2"
+      caveats as opuAB above. Also includes opuCB1/opuCB2 (real, reviewed
+      numbered-paralog gene symbols, same class of gap as murB1/murB2 --
+      see issue #8).
+
+      Full 43-family v7 rebuild shows a real regression on both methods
+      here (DIAMOND F1 0.557->0.500, HMM F1 0.377->0.334) -- the only
+      family in this rebuild flagged on both methods at once, same
+      full-panel db-composition effect as opuAB above but larger and on
+      both sides here. Consistent with this family already carrying the
+      same "needs the most scrutiny" caution as opuAB.
+    positive_query: "(gene:opuCB OR gene:opuCB1 OR gene:opuCB2) AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF00528 NOT (gene:opuAB OR gene:opuAB1 OR gene:opuAB2 OR gene:opuBB OR gene:opuBB1 OR gene:opuBB2 OR gene:opuCB OR gene:opuCB1 OR gene:opuCB2 OR gene:proW) AND taxonomy_id:2"
     negative_pfam: PF00528
 
   - name: opuAC
@@ -362,25 +494,49 @@ families:
       Pfam's single model+cutoff would make proX/opuAC/opuBC/opuCC
       indistinguishable from each other, defeating the point of separating
       them. This is exactly the "check condition 2" case flagged in this
-      section's header comment.
-    positive_query: "gene:opuAC AND taxonomy_id:2"
-    negative_query: "xref:pfam-PF04069 NOT (gene:proX OR gene:opuAC OR gene:opuBC OR gene:opuCC) AND taxonomy_id:2"
+      section's header comment. Also includes opuAC1/opuAC2 (real,
+      reviewed numbered-paralog gene symbols, same class of gap as
+      murB1/murB2 -- see issue #8).
+
+      decoy_from_negatives tried and reverted -- see proX's entry above
+      for the mechanism (catastrophic DIAMOND recall collapse, tested via
+      a 4-family subset build). This family's own reads were among the
+      ones swamped by decoy entries from its siblings.
+    positive_query: "(gene:opuAC OR gene:opuAC1 OR gene:opuAC2) AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF04069 NOT (gene:proX OR gene:proX1 OR gene:proX2 OR gene:opuAC OR gene:opuAC1 OR gene:opuAC2 OR gene:opuBC OR gene:opuBC1 OR gene:opuBC2 OR gene:opuCC OR gene:opuCC1 OR gene:opuCC2) AND taxonomy_id:2"
     negative_pfam: PF04069
 
   - name: opuBC
     description: >
       Substrate-binding subunit of the OpuB system (Task 1a). Same Pfam
-      family and caveats as opuAC above.
-    positive_query: "gene:opuBC AND taxonomy_id:2"
-    negative_query: "xref:pfam-PF04069 NOT (gene:proX OR gene:opuAC OR gene:opuBC OR gene:opuCC) AND taxonomy_id:2"
+      family and caveats as opuAC above. Also includes opuBC1/opuBC2
+      (real, reviewed numbered-paralog gene symbols, same class of gap as
+      murB1/murB2 -- see issue #8).
+
+      decoy_from_negatives tried and reverted -- see proX's entry above
+      for the mechanism (catastrophic DIAMOND recall collapse, tested via
+      a 4-family subset build). This family in particular was the worst
+      hit: its own real positive reads (240 test reads, only 93 UniProt
+      members to begin with) scored zero true positives, with every
+      aligned read attributed to a sibling's decoy label instead --
+      opuBC's thin reference set couldn't compete once the other three
+      siblings' sequences were added back into the searchable pool.
+    positive_query: "(gene:opuBC OR gene:opuBC1 OR gene:opuBC2) AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF04069 NOT (gene:proX OR gene:proX1 OR gene:proX2 OR gene:opuAC OR gene:opuAC1 OR gene:opuAC2 OR gene:opuBC OR gene:opuBC1 OR gene:opuBC2 OR gene:opuCC OR gene:opuCC1 OR gene:opuCC2) AND taxonomy_id:2"
     negative_pfam: PF04069
 
   - name: opuCC
     description: >
       Substrate-binding subunit of the OpuC system (Task 1a). Same Pfam
-      family and caveats as opuAC above.
-    positive_query: "gene:opuCC AND taxonomy_id:2"
-    negative_query: "xref:pfam-PF04069 NOT (gene:proX OR gene:opuAC OR gene:opuBC OR gene:opuCC) AND taxonomy_id:2"
+      family and caveats as opuAC above. Also includes opuCC1/opuCC2
+      (real, reviewed numbered-paralog gene symbols, same class of gap as
+      murB1/murB2 -- see issue #8).
+
+      decoy_from_negatives tried and reverted -- see proX's entry above
+      for the mechanism (catastrophic DIAMOND recall collapse, tested via
+      a 4-family subset build).
+    positive_query: "(gene:opuCC OR gene:opuCC1 OR gene:opuCC2) AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF04069 NOT (gene:proX OR gene:proX1 OR gene:proX2 OR gene:opuAC OR gene:opuAC1 OR gene:opuAC2 OR gene:opuBC OR gene:opuBC1 OR gene:opuBC2 OR gene:opuCC OR gene:opuCC1 OR gene:opuCC2) AND taxonomy_id:2"
     negative_pfam: PF04069
 
   # opuD (Task 1a) is NOT added as its own family: it's already one of
@@ -459,9 +615,11 @@ families:
       the ORF's own domain/length signature (see
       01c_check_length_outliers.py, 08d_build_fusion_refs.py) rather than
       from a taxonomic rule. mrpD has no fusion_partner set -- no evidence
-      of an mrpD fusion turned up in any search run.
-    positive_query: "(gene:mrpA OR gene:mnhA) AND taxonomy_id:2"
-    negative_query: "xref:pfam-PF00361 NOT (gene:mrpA OR gene:mnhA OR gene:mrpD OR gene:mnhD) AND taxonomy_id:2"
+      of an mrpD fusion turned up in any search run. Also includes
+      mrpA1/mrpA2/mnhA1/mnhA2 (real, reviewed numbered-paralog gene
+      symbols, same class of gap as murB1/murB2 -- see issue #8).
+    positive_query: "(gene:mrpA OR gene:mrpA1 OR gene:mrpA2 OR gene:mnhA OR gene:mnhA1 OR gene:mnhA2) AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF00361 NOT (gene:mrpA OR gene:mrpA1 OR gene:mrpA2 OR gene:mnhA OR gene:mnhA1 OR gene:mnhA2 OR gene:mrpD OR gene:mrpD1 OR gene:mrpD2 OR gene:mnhD OR gene:mnhD1 OR gene:mnhD2) AND taxonomy_id:2"
     negative_pfam: PF00361   # shared with mrpD's own architecture and with generic Complex I NuoL/M/N-type subunits
     fusion_partner: mrpB
     fusion_marker_pfam: PF13244
@@ -486,9 +644,35 @@ families:
       N-terminal domain is mrpA's); with fusion_partner declared here, 01c
       routes them to fusion_candidates.faa instead of the ordinary
       length-outlier pile, and 08d_build_fusion_refs.py merges them into a
-      searchable mrpA_mrpB_fused DIAMOND reference.
-    positive_query: "(gene:mrpB OR gene:mnhB) AND taxonomy_id:2"
-    negative_query: "xref:pfam-PF04039 NOT (gene:mrpB OR gene:mnhB) AND taxonomy_id:2"
+      searchable mrpA_mrpB_fused DIAMOND reference. Also includes
+      mrpB1/mrpB2/mnhB1/mnhB2 (real, reviewed numbered-paralog gene
+      symbols, same class of gap as murB1/murB2 -- see issue #8).
+
+      Negative-pool contamination here (23% flagged) is structural, not a
+      synonym gap: flagged sequences are real Mrp/Mnh orthologs UniProt
+      never assigned a curated gene symbol to, confirmed via direct
+      sequence check -- not fixable by widening positive_query (disproven
+      on trkA, see that entry) or raising max_negative_override (disproven
+      on mrpF/mrpG). This is exactly the case pfam_model exists to route
+      around: cutoff_manifest.tsv shows hmm_status=pfam_ga_review_needed,
+      meaning the HMM path already defers to Pfam's own GA cutoff instead
+      of a locally-calibrated one, so the domain-architecture screening
+      that justified pfam_model here turns out to be the right call for a
+      second, independent reason. See README's "Structural negative-pool
+      contamination" section for the full analysis.
+
+      Full 43-family v7 rebuild shows the largest single regression in
+      this rebuild: DIAMOND F1 0.673->0.587. Notably DIAMOND-only -- HMM
+      is essentially unaffected (0.214->0.219), consistent with the
+      pfam_model vindication above: the HMM path already doesn't rely on
+      this repo's own calibration, so it isn't exposed to whatever shifted
+      in the full-panel DIAMOND db's composition. Same full-panel
+      db-composition effect as ectA/ktrA/ktrD above, just larger in
+      magnitude here; not investigated further given the pattern is
+      consistent with the other unexplained regressions in this rebuild
+      rather than something specific to mrpB.
+    positive_query: "(gene:mrpB OR gene:mrpB1 OR gene:mrpB2 OR gene:mnhB OR gene:mnhB1 OR gene:mnhB2) AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF04039 NOT (gene:mrpB OR gene:mrpB1 OR gene:mrpB2 OR gene:mnhB OR gene:mnhB1 OR gene:mnhB2) AND taxonomy_id:2"
     negative_pfam: PF04039
     pfam_model: PF04039
     fusion_partner: mrpA
@@ -502,9 +686,25 @@ families:
       nuoK/ndhK Complex I subunit-4L family well beyond Mrp/Mnh -- kept as
       a custom gene-symbol-anchored model, same caution tier as ectB/mscS/
       galE elsewhere in this panel; check qc_scorecard.tsv before trusting.
-    positive_query: "(gene:mrpC OR gene:mnhC) AND taxonomy_id:2"
-    negative_query: "xref:pfam-PF00420 NOT (gene:mrpC OR gene:mnhC) AND taxonomy_id:2"
+      Also includes mrpC1/mrpC2/mnhC1/mnhC2 (real, reviewed
+      numbered-paralog gene symbols, same class of gap as murB1/murB2 --
+      see issue #8).
+
+      Negative-pool contamination here (26% flagged) is structural, same
+      root cause as mrpB above (real orthologs UniProt never assigned a
+      curated symbol to, not a synonym gap) but with no pfam_model
+      fallback to route around it -- DIAMOND precision here (0.479) has no
+      independent rescue mechanism either, since profile_cascade.tsv's HMM
+      fallback is calibrated against the same contaminated pool. Worse
+      precision than otsA (0.543), which got the same treatment for this
+      exact reason -- scope: annotate_only set here too: still built and
+      searchable for osmotool annotate co-occurrence checks, excluded from
+      osmotool profile's reported output. See README's "Structural
+      negative-pool contamination" section.
+    positive_query: "(gene:mrpC OR gene:mrpC1 OR gene:mrpC2 OR gene:mnhC OR gene:mnhC1 OR gene:mnhC2) AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF00420 NOT (gene:mrpC OR gene:mrpC1 OR gene:mrpC2 OR gene:mnhC OR gene:mnhC1 OR gene:mnhC2) AND taxonomy_id:2"
     negative_pfam: PF00420   # Oxidored_q2, broad Complex-I-type subunit 4L family, also covers nuoK/ndhK
+    scope: annotate_only
 
   - name: mrpD
     description: >
@@ -515,9 +715,11 @@ families:
       negative pool too) -- kept custom, not pfam_model-adopted. No
       fusion_partner set: the confirmed fused-ORF pair in this complex is
       mrpA+mrpB (see those entries above); no evidence turned up of mrpD
-      participating in a fusion with anything.
-    positive_query: "(gene:mrpD OR gene:mnhD) AND taxonomy_id:2"
-    negative_query: "xref:pfam-PF00361 NOT (gene:mrpD OR gene:mnhD OR gene:mrpA OR gene:mnhA) AND taxonomy_id:2"
+      participating in a fusion with anything. Also includes
+      mrpD1/mrpD2/mnhD1/mnhD2 (real, reviewed numbered-paralog gene
+      symbols, same class of gap as murB1/murB2 -- see issue #8).
+    positive_query: "(gene:mrpD OR gene:mrpD1 OR gene:mrpD2 OR gene:mnhD OR gene:mnhD1 OR gene:mnhD2) AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF00361 NOT (gene:mrpD OR gene:mrpD1 OR gene:mrpD2 OR gene:mnhD OR gene:mnhD1 OR gene:mnhD2 OR gene:mrpA OR gene:mrpA1 OR gene:mrpA2 OR gene:mnhA OR gene:mnhA1 OR gene:mnhA2) AND taxonomy_id:2"
     negative_pfam: PF00361
 
   - name: mrpE
@@ -525,9 +727,20 @@ families:
       Subunit E of the Mrp/Mnh complex (Task 1b). mrpE/mnhE synonym pair.
       PF01899 ("MNHE" in Pfam's own naming) checked: 9 domain
       architectures, 10745 proteins, name matches directly -- adopted via
-      pfam_model.
-    positive_query: "(gene:mrpE OR gene:mnhE) AND taxonomy_id:2"
-    negative_query: "xref:pfam-PF01899 NOT (gene:mrpE OR gene:mnhE) AND taxonomy_id:2"
+      pfam_model. Also includes mrpE1/mrpE2/mnhE1/mnhE2 (real, reviewed
+      numbered-paralog gene symbols, same class of gap as murB1/murB2 --
+      see issue #8).
+
+      Negative-pool contamination here (21% flagged) is structural, same
+      root cause as mrpB/mrpC above. Same vindication as mrpB:
+      cutoff_manifest.tsv shows hmm_status=pfam_ga_review_needed, meaning
+      the HMM path already defers to Pfam's own GA cutoff rather than a
+      locally-calibrated one, so the domain-architecture screening that
+      justified pfam_model here is validated for a second, independent
+      reason. See README's "Structural negative-pool contamination"
+      section.
+    positive_query: "(gene:mrpE OR gene:mrpE1 OR gene:mrpE2 OR gene:mnhE OR gene:mnhE1 OR gene:mnhE2) AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF01899 NOT (gene:mrpE OR gene:mrpE1 OR gene:mrpE2 OR gene:mnhE OR gene:mnhE1 OR gene:mnhE2) AND taxonomy_id:2"
     negative_pfam: PF01899
     pfam_model: PF01899
 
@@ -550,9 +763,12 @@ families:
       "negative" pool are real orthologs UniProt never assigned a curated
       gene symbol to (bare locus tags), which no synonym addition can
       catch. neg_purity barely moved (42%->46%) because PhaF was only one
-      of several contamination sources, not the dominant one.
-    positive_query: "(gene:mrpF OR gene:mnhF OR gene:PhaF) AND taxonomy_id:2"
-    negative_query: "xref:pfam-PF04066 NOT (gene:mrpF OR gene:mnhF OR gene:PhaF) AND taxonomy_id:2"
+      of several contamination sources, not the dominant one. Also
+      includes mrpF1/mrpF2/mnhF1/mnhF2/PhaF1/PhaF2 (real, reviewed
+      numbered-paralog gene symbols, same class of gap as murB1/murB2 --
+      see issue #8).
+    positive_query: "(gene:mrpF OR gene:mrpF1 OR gene:mrpF2 OR gene:mnhF OR gene:mnhF1 OR gene:mnhF2 OR gene:PhaF OR gene:PhaF1 OR gene:PhaF2) AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF04066 NOT (gene:mrpF OR gene:mrpF1 OR gene:mrpF2 OR gene:mnhF OR gene:mnhF1 OR gene:mnhF2 OR gene:PhaF OR gene:PhaF1 OR gene:PhaF2) AND taxonomy_id:2"
     negative_pfam: PF04066
     pfam_model: PF04066
 
@@ -575,9 +791,12 @@ families:
       negative-pool contamination looks structural: PF03334 apparently
       has few members that are genuinely distinct from mrpG/mnhG itself,
       not a missing-synonym problem. Worth a separate look if this
-      family's calibration keeps flagging poorly after this fix.
-    positive_query: "(gene:mrpG OR gene:mnhG OR gene:yufB) AND taxonomy_id:2"
-    negative_query: "xref:pfam-PF03334 NOT (gene:mrpG OR gene:mnhG OR gene:yufB) AND taxonomy_id:2"
+      family's calibration keeps flagging poorly after this fix. Also
+      includes mrpG1/mrpG2/mnhG1/mnhG2 (real, reviewed numbered-paralog
+      gene symbols, same class of gap as murB1/murB2 -- see issue #8;
+      yufB1/yufB2 checked with zero UniProt hits, not added).
+    positive_query: "(gene:mrpG OR gene:mrpG1 OR gene:mrpG2 OR gene:mnhG OR gene:mnhG1 OR gene:mnhG2 OR gene:yufB) AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF03334 NOT (gene:mrpG OR gene:mrpG1 OR gene:mrpG2 OR gene:mnhG OR gene:mnhG1 OR gene:mnhG2 OR gene:yufB) AND taxonomy_id:2"
     negative_pfam: PF03334
     pfam_model: PF03334
 
@@ -598,9 +817,11 @@ families:
       checked and rejected for pfam_model, kept custom. Confirmed present
       in Bacillota directly (e.g. Staphylococcus aureus UniProt entries
       carry it), consistent with this being a genuinely Firmicutes-relevant
-      gut subsystem per Ng et al.
-    positive_query: "gene:betA AND taxonomy_id:2"
-    negative_query: "xref:pfam-PF00732 NOT gene:betA AND taxonomy_id:2"
+      gut subsystem per Ng et al. Also includes betA1/betA2 (real, reviewed
+      numbered-paralog gene symbols, same class of gap as murB1/murB2 --
+      see issue #8).
+    positive_query: "(gene:betA OR gene:betA1 OR gene:betA2) AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF00732 NOT (gene:betA OR gene:betA1 OR gene:betA2) AND taxonomy_id:2"
     negative_pfam: PF00732   # GMC_oxred_C, broad GMC oxidoreductase family (glucose oxidase, other choline/alcohol oxidoreductases)
 
   - name: betB
@@ -615,9 +836,11 @@ families:
       treat with at least as much caution as ectB/mscS -- check
       qc_scorecard.tsv/cutoff_manifest.tsv before trusting the HMM, and
       don't take betB's inclusion as evidence that gbsA is now safe to add
-      by the same reasoning.
-    positive_query: "gene:betB AND taxonomy_id:2"
-    negative_query: "xref:pfam-PF00171 NOT gene:betB AND taxonomy_id:2"
+      by the same reasoning. Also includes betB1/betB2 (real, reviewed
+      numbered-paralog gene symbols, same class of gap as murB1/murB2 --
+      see issue #8).
+    positive_query: "(gene:betB OR gene:betB1 OR gene:betB2) AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF00171 NOT (gene:betB OR gene:betB1 OR gene:betB2) AND taxonomy_id:2"
     negative_pfam: PF00171   # Aldedh, broad aldehyde dehydrogenase superfamily (same domain flagged for gbsA below)
 
   - name: gshA
@@ -635,9 +858,21 @@ families:
       trained across the whole family, gshF included, so using it directly
       risks calling gshF proteins as gshA. Negative pool now also excludes
       gshF/gshAB gene symbols, for the same reason proX's negative_query
-      was updated when opuAC/opuBC/opuCC were added.
-    positive_query: "gene:gshA AND taxonomy_id:2"
-    negative_query: "xref:pfam-PF04262 NOT (gene:gshA OR gene:gshF OR gene:gshAB) AND taxonomy_id:2"
+      was updated when opuAC/opuBC/opuCC were added. Also includes
+      gshA1/gshA2/gshAB1/gshAB2 (real, reviewed numbered-paralog gene
+      symbols, same class of gap as murB1/murB2 -- see issue #8; gshF1/
+      gshF2 checked with zero UniProt hits, not added).
+
+      Negative-pool contamination here (25% flagged) is the same
+      structural pattern as mrpB/otsA/mazG/mscL (real orthologs UniProt
+      never assigned a curated symbol to), and profile_cascade.tsv's HMM
+      fallback doesn't rescue it either (no pfam_model here, same reason
+      as mrpC/otsA). Unlike otsA/mrpC, though, DIAMOND precision (0.905)
+      is fine in practice -- calibration still found a workable separating
+      cutoff despite the noisy pool -- so no scope change. See README's
+      "Structural negative-pool contamination" section.
+    positive_query: "(gene:gshA OR gene:gshA1 OR gene:gshA2) AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF04262 NOT (gene:gshA OR gene:gshA1 OR gene:gshA2 OR gene:gshF OR gene:gshAB OR gene:gshAB1 OR gene:gshAB2) AND taxonomy_id:2"
     negative_pfam: PF04262
 
   - name: gshF
@@ -668,9 +903,26 @@ families:
       checked closely enough to trust as gshF-specific on its own (unlike
       PF04262, it isn't independently paired with a confirmed-narrow
       partner domain the way e.g. mrpE/mrpF/mrpG were verified) -- kept
-      custom out of caution rather than assumed safe.
-    positive_query: "(gene:gshF OR gene:gshAB) AND taxonomy_id:2"
-    negative_query: "xref:pfam-PF04262 NOT (gene:gshA OR gene:gshF OR gene:gshAB) AND taxonomy_id:2"
+      custom out of caution rather than assumed safe. Also includes
+      gshAB1/gshAB2 (real, reviewed numbered-paralog gene symbols, same
+      class of gap as murB1/murB2 -- see issue #8; gshF1/gshF2 checked
+      with zero UniProt hits, not added).
+
+      Different situation from gshA/gshB/mrpB above: gshF's own
+      negative-pool purity is actually reasonably clean (only ~8% flagged,
+      well below the rest of this cluster), so this isn't the same
+      bare-locus-tag contamination pattern. Its moderate DIAMOND precision
+      (0.654) instead reflects a genuinely small, hard-to-calibrate
+      training set for a family this taxonomically narrow (Streptococcus/
+      Enterococcus/Listeria and relatives specifically) -- profile_cascade
+      .tsv's HMM fallback doesn't rescue it either (no pfam_model here,
+      same reason as gshA). No scope change: this family exists
+      specifically to avoid a false "no glutathione biosynthesis" signal
+      in exactly the gut genera gshA/gshB's evidence-tier claim rests on
+      (see this family's main description above), so excluding it from
+      profile mode would defeat its own purpose.
+    positive_query: "(gene:gshF OR gene:gshAB OR gene:gshAB1 OR gene:gshAB2) AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF04262 NOT (gene:gshA OR gene:gshA1 OR gene:gshA2 OR gene:gshF OR gene:gshAB OR gene:gshAB1 OR gene:gshAB2) AND taxonomy_id:2"
     negative_pfam: PF04262
 
   - name: gshB
@@ -682,9 +934,24 @@ families:
       unrelated ATP-grasp enzymes) -- same "prefer the narrower co-occurring
       domain over the broad catalytic fold" choice proP already makes
       elsewhere in this panel (PF08946 vs. generic MFS_1). 10 domain
-      architectures, 7964 proteins -- adopted via pfam_model.
-    positive_query: "gene:gshB AND taxonomy_id:2"
-    negative_query: "xref:pfam-PF02951 NOT gene:gshB AND taxonomy_id:2"
+      architectures, 7964 proteins -- adopted via pfam_model. Also includes
+      gshB1/gshB2 (real, reviewed numbered-paralog gene symbols, same class
+      of gap as murB1/murB2 -- see issue #8).
+
+      Negative-pool contamination here is the worst in this panel (63%
+      flagged) but structural, same root cause as mrpB above. Same
+      vindication: cutoff_manifest.tsv shows
+      hmm_status=pfam_ga_review_needed, meaning the HMM path already
+      defers to Pfam's own GA cutoff rather than a locally-calibrated one
+      that this contaminated pool couldn't have produced reliably anyway
+      -- the domain-architecture screening that justified pfam_model here
+      is validated for a second, independent reason, and matters more here
+      than anywhere else in this panel given gshA/gshB are pitched as this
+      panel's strongest evidence-tier genes (Ng et al. 2023 in vivo
+      validation). See README's "Structural negative-pool contamination"
+      section.
+    positive_query: "(gene:gshB OR gene:gshB1 OR gene:gshB2) AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF02951 NOT (gene:gshB OR gene:gshB1 OR gene:gshB2) AND taxonomy_id:2"
     negative_pfam: PF02951   # GSH-S_N, glutathione-synthetase-specific substrate-binding domain (not the generic PF02955 ATP-grasp fold)
     pfam_model: PF02951
 
@@ -700,9 +967,10 @@ families:
       betL uses. If calibration shows the same near-total score overlap
       betL had (see cutoff_manifest.tsv), revisit decoy_from_negatives here
       too -- not set yet, no calibration data to justify it until the first
-      build runs.
-    positive_query: "gene:gor AND taxonomy_id:2"
-    negative_query: "xref:pfam-PF07992 AND gene:trxB NOT gene:gor AND taxonomy_id:2"
+      build runs. Also includes gor1/gor2 (real, reviewed numbered-paralog
+      gene symbols, same class of gap as murB1/murB2 -- see issue #8).
+    positive_query: "(gene:gor OR gene:gor1 OR gene:gor2) AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF07992 AND gene:trxB NOT (gene:gor OR gene:gor1 OR gene:gor2) AND taxonomy_id:2"
     negative_pfam: PF07992   # Pyr_redox_2, broad FAD-disulfide oxidoreductase family; negative set narrowed to the trxB paralog specifically
 
   - name: cspA
@@ -769,9 +1037,30 @@ families:
       ktrA gene symbols even though they're separate families, for the
       same reason proX/opuAC/opuBC/opuCC cross-exclude each other: ktrA
       is a real, distinct true positive elsewhere in this panel, not a
-      clean negative for trkA.
-    positive_query: "gene:trkA AND taxonomy_id:2"
-    negative_query: "xref:pfam-PF02080 NOT (gene:trkA OR gene:ktrA) AND taxonomy_id:2"
+      clean negative for trkA. Also includes trkA1/trkA2 (some organisms,
+      e.g. Azoarcus sp. BH72, Streptococcus thermophilus, carry two real,
+      distinctly-named paralogs) -- confirmed via UniProt, the same
+      numbered-paralog gap found for murB1/murB2 and trkH1/ktrB1/ktrD1
+      below while investigating the class of bug mrpF/mrpG's PhaF/yufB
+      gap belongs to. Adding trkA1/trkA2 has a measured cost: of 372
+      UniProt trkA1/trkA2 entries, 82% (median 223aa) are short
+      single-RCK-domain proteins already excluded by the length-outlier
+      filter (canonical trkA median 457aa), but the 68 that pass the
+      filter are real, taxonomically scattered full-length orthologs
+      (e.g. Halomonas, Cupriavidus, Roseobacter, Fusobacterium,
+      Ruminococcus) whose diversity widens the DIAMOND reference cloud
+      and measurably increases false positives on a held-out benchmark
+      (6-family subset-test F1 0.920->0.879; confirmed in the full
+      43-family v7 rebuild at 0.920->0.887, same regression, close to but
+      not identical to the subset-test number -- see the "full 43-family
+      v7 rebuild" notes on ectA/ktrA/mrpB/etc. for why full-panel and
+      subset-test numbers for the same family don't always match exactly).
+      Kept anyway: these are real trkA genes a genuine read could come
+      from, not an artifact, so this is a recall-vs-specificity trade-off
+      structurally like the negative-pool findings below, not a bug to
+      chase further.
+    positive_query: "(gene:trkA OR gene:trkA1 OR gene:trkA2) AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF02080 NOT (gene:trkA OR gene:trkA1 OR gene:trkA2 OR gene:ktrA OR gene:ktrA1 OR gene:ktrA2) AND taxonomy_id:2"
     negative_pfam: PF02080   # TrkA_N, broad RCK-domain regulatory-subunit family
 
   - name: trkH
@@ -799,10 +1088,35 @@ families:
       each family's own distinct reference sequences, not the shared
       profile) -- trkH/ktrB/ktrD all get real, distinct DIAMOND numbers.
       Kept as a custom, gene-symbol-anchored model instead, same as
-      proX/opuAC/opuBC/opuCC.
-    positive_query: "gene:trkH AND taxonomy_id:2"
-    negative_query: "xref:pfam-PF02386 NOT (gene:trkH OR gene:ktrB OR gene:ktrD) AND taxonomy_id:2"
+      proX/opuAC/opuBC/opuCC. Also includes trkH1/trkH2 (some organisms,
+      e.g. Edwardsiella tarda, Azoarcus sp. BH72, carry two real,
+      distinctly-named paralogs) -- confirmed via UniProt, same
+      numbered-paralog gap as murB1/murB2/trkA1/trkA2/ktrB1/ktrD1 etc.
+
+      Same structural negative-pool contamination as mrpB/otsA/etc. (see
+      README's "Structural negative-pool contamination" section):
+      confirmed via v7's negative_purity_manifest.tsv that the
+      numbered-paralog fix above barely moved this family's contamination
+      (v6 27% flagged -> v7 29%), consistent with the pattern being real
+      unlabeled orthologs, not a missing-symbol gap. decoy_from_negatives
+      is not a fix either: Phase 4's proX/opuAC/opuBC/opuCC experiment
+      (see issue tracker / docs/CHANGELOG.md) showed this exact
+      shared-Pfam-clique shape (trkH/ktrB/ktrD share PF02386 the same way
+      proX/opuAC/opuBC/opuCC share PF04069) catastrophically backfires --
+      close paralogs outcompete a family's own reference set once added
+      back into the searchable pool as decoys. No pfam_model fallback is
+      possible here either (removing pfam_model from all three was the
+      fix for the byte-identical-HMM bug above), so both DIAMOND (0.293)
+      and HMM (0.288) precision are low with no independent rescue via
+      profile_cascade.tsv (hmm_status=overlapping_distributions_f1_calibrated,
+      same contaminated pool). scope: annotate_only set, same criteria and
+      treatment as otsA/mrpC: still built and searchable for osmotool
+      annotate co-occurrence checks, excluded from osmotool profile's
+      reported output where this precision would be misleading.
+    positive_query: "(gene:trkH OR gene:trkH1 OR gene:trkH2) AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF02386 NOT (gene:trkH OR gene:trkH1 OR gene:trkH2 OR gene:ktrB OR gene:ktrB1 OR gene:ktrB2 OR gene:ktrD OR gene:ktrD1 OR gene:ktrD2) AND taxonomy_id:2"
     negative_pfam: PF02386   # TrkH cation transport family
+    scope: annotate_only
 
   - name: ktrA
     description: >
@@ -812,9 +1126,19 @@ families:
       above for the full naming-trap explanation and why this is its own
       family rather than a trkA synonym, matching nhaA/mrp's treatment).
       Same domain pair (PF02080+PF02254) as trkA; PF02080 rejected for
-      pfam_model for the same broad-RCK-domain reason as trkA.
-    positive_query: "gene:ktrA AND taxonomy_id:2"
-    negative_query: "xref:pfam-PF02080 NOT (gene:trkA OR gene:ktrA) AND taxonomy_id:2"
+      pfam_model for the same broad-RCK-domain reason as trkA. Also
+      includes ktrA1/ktrA2 (some organisms, e.g. Halobacillus karajensis,
+      Clostridium scindens, carry two real, distinctly-named paralogs) --
+      confirmed via UniProt, same numbered-paralog gap as trkA1/trkA2.
+
+      Full 43-family v7 rebuild shows a real DIAMOND regression here (F1
+      0.838->0.785) not predicted by the earlier 6-family subset test
+      (which showed this family roughly flat) -- a full-panel build
+      changes the combined DIAMOND db's composition beyond what a small
+      subset test can capture. Not investigated further; documented
+      rather than chased.
+    positive_query: "(gene:ktrA OR gene:ktrA1 OR gene:ktrA2) AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF02080 NOT (gene:trkA OR gene:trkA1 OR gene:trkA2 OR gene:ktrA OR gene:ktrA1 OR gene:ktrA2) AND taxonomy_id:2"
     negative_pfam: PF02080
 
   - name: ktrB
@@ -831,9 +1155,21 @@ families:
       three of trkH/ktrB/ktrD, breaks HMM detection specifically when more
       than one sibling adopts it (byte-identical models, so hmmscan can't
       discriminate them -- confirmed via the v6 benchmark). Kept custom.
-    positive_query: "gene:ktrB AND taxonomy_id:2"
-    negative_query: "xref:pfam-PF02386 NOT (gene:trkH OR gene:ktrB OR gene:ktrD) AND taxonomy_id:2"
+      Also includes ktrB1/ktrB2 (some organisms, e.g. Paenibacillus larvae,
+      Nonomuraea coxensis, carry two real, distinctly-named paralogs) --
+      confirmed via UniProt, same numbered-paralog gap as trkH1/trkH2.
+
+      Same structural negative-pool contamination and same disposition as
+      trkH above (v6 14.5% flagged -> v7 15.5%, barely moved by the
+      numbered-paralog fix; decoy_from_negatives ruled out by Phase 4's
+      finding on the same PF02386 clique shape; no pfam_model fallback
+      possible; DIAMOND 0.265/HMM 0.247 precision, neither rescued by
+      profile_cascade.tsv). scope: annotate_only set, same criteria as
+      otsA/mrpC/trkH.
+    positive_query: "(gene:ktrB OR gene:ktrB1 OR gene:ktrB2) AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF02386 NOT (gene:trkH OR gene:trkH1 OR gene:trkH2 OR gene:ktrB OR gene:ktrB1 OR gene:ktrB2 OR gene:ktrD OR gene:ktrD1 OR gene:ktrD2) AND taxonomy_id:2"
     negative_pfam: PF02386
+    scope: annotate_only
 
   - name: ktrD
     description: >
@@ -841,10 +1177,31 @@ families:
       ktrB above (Task 1d) -- see ktrB's entry for why these two are kept
       as separate families rather than merged as synonyms, and trkH's
       entry for why none of trkH/ktrB/ktrD get pfam_model treatment
-      despite sharing PF02386.
-    positive_query: "gene:ktrD AND taxonomy_id:2"
-    negative_query: "xref:pfam-PF02386 NOT (gene:trkH OR gene:ktrB OR gene:ktrD) AND taxonomy_id:2"
+      despite sharing PF02386. Also includes ktrD1/ktrD2 (some organisms,
+      e.g. Peribacillus simplex, Salinibacillus aidingensis, Bacillus
+      carboniphilus, carry two real, distinctly-named paralogs) --
+      confirmed via UniProt, same numbered-paralog gap as ktrB1/ktrB2.
+
+      Full 43-family v7 rebuild shows a real HMM regression here (F1
+      0.245->0.214) -- same full-panel db-composition effect noted on
+      ectA/ktrA above. Given ktrD's already-tiny reference set (54 UniProt
+      positives), treat this specific number with extra caution regardless
+      of direction -- small-n reliability risk applies here the same way
+      it does to gshB/murB elsewhere in this panel.
+
+      Same structural negative-pool contamination and same disposition as
+      trkH/ktrB above (2.4% -> 2.8% flagged, barely moved by the
+      numbered-paralog fix; decoy_from_negatives ruled out by Phase 4's
+      finding; no pfam_model fallback possible). HMM precision here is the
+      worst in this cluster (0.121, with very high recall 0.904 -- calling
+      almost everything positive, consistent with the small-n calibration
+      risk already noted above), DIAMOND 0.287, neither rescued by
+      profile_cascade.tsv. scope: annotate_only set, same criteria as
+      otsA/mrpC/trkH/ktrB.
+    positive_query: "(gene:ktrD OR gene:ktrD1 OR gene:ktrD2) AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF02386 NOT (gene:trkH OR gene:trkH1 OR gene:trkH2 OR gene:ktrB OR gene:ktrB1 OR gene:ktrB2 OR gene:ktrD OR gene:ktrD1 OR gene:ktrD2) AND taxonomy_id:2"
     negative_pfam: PF02386
+    scope: annotate_only
 
 # Considered and deferred (2026-07-16): proV, proW, gbsA, gbsB
 #
