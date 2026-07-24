@@ -542,6 +542,130 @@ families:
     negative_pfam: PF03334
     pfam_model: PF03334
 
+# --- 2026-07-23: Gut-validated osmotic-stress subsystems (Task 1c) -------
+#
+# Ng et al. 2023 (mBio), in vivo humanized-mouse osmotic-perturbation data --
+# a functionally demonstrated evidentiary tier, the same as the Culligan et
+# al. 2012 loci (galE/mazG/murB) already in this panel, and a step up from
+# genomic-co-occurrence-only support.
+
+  - name: betA
+    description: >
+      Choline dehydrogenase (choline -> glycine betaine oxidation, step 1
+      of 2 with betB; Task 1c). Basis: Ng et al. 2023 (mBio), in vivo
+      humanized-mouse osmotic-perturbation data. Domain pair
+      PF05199+PF00732 (GMC oxidoreductase family) is broad -- shared with
+      glucose oxidase and other choline/alcohol oxidoreductases --
+      checked and rejected for pfam_model, kept custom. Confirmed present
+      in Bacillota directly (e.g. Staphylococcus aureus UniProt entries
+      carry it), consistent with this being a genuinely Firmicutes-relevant
+      gut subsystem per Ng et al.
+    positive_query: "gene:betA AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF00732 NOT gene:betA AND taxonomy_id:2"
+    negative_pfam: PF00732   # GMC_oxred_C, broad GMC oxidoreductase family (glucose oxidase, other choline/alcohol oxidoreductases)
+
+  - name: betB
+    description: >
+      Betaine aldehyde dehydrogenase (choline -> glycine betaine oxidation,
+      step 2 of 2 with betA; Task 1c). Same Ng et al. 2023 in vivo basis as
+      betA above. PF00171 (Aldedh) is the SAME broad generic
+      aldehyde-dehydrogenase-superfamily domain already flagged in the
+      gbsA deferral below -- gbsA was deferred specifically because of this
+      domain's promiscuity. betB is built anyway (explicitly requested,
+      with in vivo validation behind it) but carries the identical risk;
+      treat with at least as much caution as ectB/mscS -- check
+      qc_scorecard.tsv/cutoff_manifest.tsv before trusting the HMM, and
+      don't take betB's inclusion as evidence that gbsA is now safe to add
+      by the same reasoning.
+    positive_query: "gene:betB AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF00171 NOT gene:betB AND taxonomy_id:2"
+    negative_pfam: PF00171   # Aldedh, broad aldehyde dehydrogenase superfamily (same domain flagged for gbsA below)
+
+  - name: gshA
+    description: >
+      Glutamate-cysteine ligase (glutathione biosynthesis step 1 of 2, with
+      gshB; Task 1c). PF04262 ("Glu_cys_ligase") checked: 19 domain
+      architectures, 4430 proteins -- tight and specific -- adopted via
+      pfam_model. Caveat found while researching: several Firmicutes genera
+      (Streptococcus, Enterococcus, Listeria and relatives) use a single
+      bifunctional gshF/gshAB fusion enzyme (PF18419+PF04262) instead of
+      separate gshA+gshB genes -- a second real gene-fusion case beyond the
+      one Task 1b called out for mrpA/mrpD, but out of scope to build
+      dedicated fusion-handling for here since it wasn't requested; those
+      organisms will simply show no gshA/gshB hit despite having functional
+      glutathione biosynthesis. Worth revisiting (a fusion_partner-style
+      mechanism, or a dedicated gshF family) if Streptococcus/Enterococcus
+      false-negatives turn up in real-genome validation.
+    positive_query: "gene:gshA AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF04262 NOT gene:gshA AND taxonomy_id:2"
+    negative_pfam: PF04262
+    pfam_model: PF04262
+
+  - name: gshB
+    description: >
+      Glutathione synthetase (glutathione biosynthesis step 2 of 2, with
+      gshA; Task 1c). Anchored on PF02951 (GSH-S_N, the substrate-binding
+      domain specific to this enzyme) rather than the broader PF02955
+      ATP-grasp fold it's paired with in the full protein (shared by many
+      unrelated ATP-grasp enzymes) -- same "prefer the narrower co-occurring
+      domain over the broad catalytic fold" choice proP already makes
+      elsewhere in this panel (PF08946 vs. generic MFS_1). 10 domain
+      architectures, 7964 proteins -- adopted via pfam_model.
+    positive_query: "gene:gshB AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF02951 NOT gene:gshB AND taxonomy_id:2"
+    negative_pfam: PF02951   # GSH-S_N, glutathione-synthetase-specific substrate-binding domain (not the generic PF02955 ATP-grasp fold)
+    pfam_model: PF02951
+
+  - name: gor
+    description: >
+      Glutathione reductase (closes the gamma-glutamyl/glutathione redox
+      cycle with gshA/gshB; Task 1c). PF07992 (Pyr_redox_2) is broad --
+      shared with thioredoxin reductase (trxB) and other FAD-dependent
+      pyridine-nucleotide disulfide oxidoreductases -- rejected for
+      pfam_model. Negative set anchored on trxB specifically (a real,
+      functionally close, same-fold paralog gene symbol) rather than the
+      raw broad Pfam pool, the same "named confusable paralog" approach
+      betL uses. If calibration shows the same near-total score overlap
+      betL had (see cutoff_manifest.tsv), revisit decoy_from_negatives here
+      too -- not set yet, no calibration data to justify it until the first
+      build runs.
+    positive_query: "gene:gor AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF07992 AND gene:trxB NOT gene:gor AND taxonomy_id:2"
+    negative_pfam: PF07992   # Pyr_redox_2, broad FAD-disulfide oxidoreductase family; negative set narrowed to the trxB paralog specifically
+
+  - name: cspA
+    description: >
+      Cold-shock domain family (Task 1c: "cspA-family cold shock proteins
+      -- use a curated Pfam cold-shock domain model; expect multiple
+      paralogs per genome -- capture all matches, do not dedupe to one per
+      genome at the refdb stage"). positive_query is deliberately anchored
+      on the Pfam accession itself (xref:pfam-PF00313), NOT a single gene
+      symbol -- the only family in this panel built this way -- so it
+      captures every csp paralog (cspA through cspI-type genes and
+      organism-specific equivalents), not just literally-"cspA"-named
+      orthologs. This structurally satisfies "capture all matches, don't
+      dedupe": every paralog is its own independent UniProt entry / DIAMOND
+      reference / HMM hit, and nothing in this repo's build collapses
+      them -- if per-genome deduplication happens anywhere, it would be in
+      osmotool's annotate/profile output (Task 2, a separate repo), not
+      here, so there is nothing to disable in this repo either way.
+      pfam_model: PF00313 adopted directly (Pfam's own long-established CSD
+      gathering cutoff). max_positive_override caps the fetch at 5000 --
+      PF00313 has roughly 80,000 UniProt member proteins total, and
+      fetching/clustering/aligning all of them would be disproportionate;
+      capped safely here since the HMM path doesn't use our alignment at
+      all (pfam_model) and DIAMOND reference diversity plateaus well before
+      80k largely-redundant paralogs. Negative set anchored on PF00436
+      (SSB, single-stranded DNA-binding protein) -- a related-but-distinct
+      OB-fold family, not a literal confusable paralog the way betL/gor's
+      negatives are, just the closest well-curated "different function,
+      similar fold" Pfam family available.
+    positive_query: "xref:pfam-PF00313 AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF00436 NOT xref:pfam-PF00313 AND taxonomy_id:2"
+    negative_pfam: PF00436   # SSB, single-stranded DNA-binding protein (related OB-fold, functionally distinct)
+    pfam_model: PF00313
+    max_positive_override: 5000
+
 # Considered and deferred (2026-07-16): proV, proW, gbsA, gbsB
 #
 # Requested alongside proX/proP/gbsAB, but skipped for now because their

@@ -195,6 +195,25 @@ this repo. See `pipeline/01c_check_length_outliers.py` and
 directly for confirmed mrpA/mrpD fusion examples (none found at time of
 writing — the mechanism is built defensively per the spec regardless).
 
+Optional `max_positive_override: <int>` field: per-family cap on
+`01_fetch_refs.py`'s positive-set fetch, overriding the global
+`--max-positive` CLI flag for just that family. Needed for a family whose
+`positive_query` is deliberately anchored on a broad Pfam accession rather
+than a gene symbol (see cspA below) and would otherwise try to fetch every
+UniProt member of that Pfam family.
+
+### A family whose positive set is a whole Pfam family, not a gene symbol
+
+Every family above is anchored on a gene symbol (`gene:xxx`). cspA
+(`families.yaml`, 2026-07-23) is deliberately different: its
+`positive_query` is `xref:pfam-PF00313 AND taxonomy_id:2` — the Pfam
+cold-shock-domain family itself — because the goal is to capture every csp
+paralog in a genome (cspA through cspI-type genes and organism-specific
+equivalents), not just literally-"cspA"-named orthologs. Pair this with
+`max_positive_override` (PF00313 has on the order of 80,000 UniProt member
+proteins) and `pfam_model` (Pfam's own long-established CSD gathering
+cutoff) if the same pattern is useful for a future family.
+
 ### Test-driving a new family before the full rebuild
 
 A full `build` + `benchmark` across every family takes on the order of 90

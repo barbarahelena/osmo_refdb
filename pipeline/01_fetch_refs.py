@@ -205,10 +205,15 @@ def main() -> None:
         pos_query = fam["positive_query"]
         neg_query = fam["negative_query"]
         description = fam.get("description", "").strip()
+        # Per-family cap, for a family whose positive_query is deliberately
+        # anchored on a broad Pfam accession rather than a gene symbol (e.g.
+        # cspA-family: xref:pfam-PF00313 alone matches ~80k UniProt proteins)
+        # -- overrides --max-positive for that family only.
+        max_pos = fam.get("max_positive_override", args.max_positive)
 
         print(f"[{name}]")
 
-        pos_fasta, n_pos = fetch_set(pos_query, name, "positive", max_seqs=args.max_positive)
+        pos_fasta, n_pos = fetch_set(pos_query, name, "positive", max_seqs=max_pos)
         (args.out / f"{name}.positive.faa").write_text(pos_fasta)
 
         neg_fasta, n_neg = fetch_set(neg_query, f"{name}_neg", "negative", max_seqs=args.max_negative)
@@ -219,7 +224,7 @@ def main() -> None:
         # fused ORF apart from an unrelated length outlier in step 01c --
         # fetch it now while we have network access to UniProt.
         if fam.get("fusion_partner"):
-            domains = fetch_pfam_domains(pos_query, max_seqs=args.max_positive)
+            domains = fetch_pfam_domains(pos_query, max_seqs=max_pos)
             domains_path = args.out / f"{name}.positive.domains.tsv"
             with open(domains_path, "w", newline="") as fh:
                 writer = csv.writer(fh, delimiter="\t")
