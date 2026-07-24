@@ -1,12 +1,159 @@
 # Changelog
 
-Summary of the negative-pool quality follow-up work on branch
-`fix-numbered-paralog-gaps` (built on top of PR #6's Task 1 gene panel and
-PR #7's mrpF/mrpG PhaF/yufB synonym fix). Full rationale and evidence for
+Chronological summary of osmo_refdb's development, from the initial
+pipeline build through the current negative-pool quality follow-up work
+on branch `fix-numbered-paralog-gaps`. Full rationale and evidence for
 each item lives in `families.yaml`'s per-family `description` fields and
-`README.md`; this file is a chronological summary, not the source of truth.
+`README.md`; this file is a summary, not the source of truth.
 
-## Investigation (Context)
+## v5 release — QC infrastructure and pipeline foundations
+
+Consolidated the project's accumulated pipeline work into its first real
+checkpoint (`6f60d1a`):
+
+- **QC infrastructure**: `01b`/`01c` flag/drop hard negatives that are
+  secretly true positives (identity check against positives) and length
+  outliers (fusion proteins/fragments); `06_calibrate_cutoffs.py` moved
+  from a 99th-percentile-of-negatives heuristic to an F1-maximizing
+  threshold sweep for HMM GA cutoffs, with a minimum-negative-sample-size
+  guard; `06b_qc_scorecard.py` added a consolidated per-family review
+  scorecard; `08b_calibrate_diamond_cutoffs.py` added per-family DIAMOND
+  bitscore cutoffs (mirroring the HMM side, since a single flat
+  `--min_identity` can't separate close paralogs); `09b_compute_read_truth.py`
+  moved to CDS-overlap-based read truth instead of blanket per-construct
+  labeling; `11_compute_metrics.py` added read-length-stratified metrics
+  and the DIAMOND+HMM profile-mode cascade config.
+- **New families**: galE, mazG, murB (Culligan et al. 2012 ISME J
+  salt-tolerance locus), murB scoped `annotate_only`.
+- **betL decoy fix**: betL's positive/negative score distributions
+  overlapped almost completely with its named confusable paralogs
+  betT/caiT — no threshold could separate them. Introduced
+  `decoy_from_negatives`, adding betL's own QC'd negative pool to the
+  DIAMOND db as excluded-from-output decoy references so the existing
+  best-hit contest could win real betT/caiT reads away from mislabeled
+  betL calls. Required splitting negatives into train/test
+  (`03_split_train_test.py`) and independent per-family RNG seeding.
+  Validated: betL DIAMOND F1 0.291→0.897.
+- **ectA/ectB trim_gt experiment**: per-family trimAl gap-threshold
+  override. Kept for ectA (F1 0.773→0.806); reverted for ectB after it
+  made DIAMOND meaningfully worse — an early example of "tried, measured,
+  reverted" discipline this project uses throughout.
+- **Tooling**: `make_family_subset.py` + `FAMILIES_FILE` for testing a
+  single family in minutes instead of a full ~90-minute rebuild;
+  `real_genome_validation/` formalized checking gene calls against real,
+  independently-annotated genomes rather than only synthetic
+  UniProt-derived benchmarks.
+
+## PR #6 — Task 1 gene panel (Firmicutes gap-filling)
+
+Closed two confirmed gaps: Bacillota lacking a phylum-appropriate
+specificity gene, and nhaA being functionally absent in Bacillota.
+
+- **Task 1a** (`1780b9b`) — Firmicutes compatible-solute transporters:
+  the *B. subtilis*-type glycine betaine/carnitine/choline ABC
+  transporter systems (opuA/opuB/opuC, 9 subunit families). Updated
+  proX's `negative_query` to cross-exclude the new opuAC/opuBC/opuCC
+  symbols, since all four families share Pfam domain PF04069 as real,
+  distinct true positives.
+- **Task 1b** (`bbd6972`) — Mrp/Mnh Na+/H+ antiporter complex (mrpA-mrpG):
+  Bacillota's functional substitute for nhaA. Introduced `pfam_model`
+  (use a Pfam family's own curated HMM+GA cutoff directly, after
+  per-gene InterPro specificity checks) and `fusion_partner`/
+  `fusion_marker_pfam` (for gene pairs that occur as a single fused ORF
+  in some lineages).
+- **Task 1c** (`6b27254`) — gut-validated osmotic-stress subsystems:
+  betA/betB (choline→glycine betaine oxidation), gshA/gshB/gor
+  (glutathione biosynthesis), cspA-family cold shock proteins. Basis: Ng
+  et al. 2023 (mBio), in vivo humanized-mouse data. cspA is the one
+  family in this panel anchored on the bare Pfam accession
+  (`xref:pfam-PF00313`) rather than a gene symbol, to capture every csp
+  paralog per genome; introduced `max_positive_override` to cap its
+  ~80,000-member fetch.
+- **Task 1d** (`7eadb01`) — Trk/Ktr constitutive K+ uptake, an
+  alternative route to the inducible Kdp system already covered by
+  kdpA. Found a naming trap during research: the literal gene symbol
+  "trkA" mostly does NOT refer to this system in Firmicutes — the real
+  Firmicutes-lineage ortholog is consistently named ktrA/ktrB/ktrD
+  instead.
+
+**Bugs found and fixed while building out Task 1** (all same-day
+follow-ups, issues #1-#5):
+
+- `d175912` — **hmmpress SSI collision**: two families sharing a
+  `pfam_model` accession (trkH/ktrB/ktrD → PF02386) produced
+  byte-identical ACC lines and hmmpress failed outright. Fixed by
+  rewriting ACC to the family name, same as NAME.
+- `de60d2e` — **trkA/trkH vs. ktrA/ktrB/ktrD split**: originally folded
+  ktrA/ktrB/ktrD in as gene-symbol synonyms of trkA/trkH (the betL
+  pattern). Corrected to five separate families, matching how nhaA vs.
+  mrpA-mrpG are already kept separate for the same antiporter function
+  rather than merged.
+- `66b100b` — **trkH/ktrB/ktrD zero HMM recall** (issue #2): all three
+  adopted the same `pfam_model` accession, making their HMMs
+  byte-identical — hmmscan couldn't discriminate between them at all,
+  and the alphabetically-first family (ktrB) absorbed 100% of the shared
+  signal via the best-hit tie-break. Confirmed in the v6 benchmark: trkH
+  and ktrD scored exactly 0 true positives each despite normal DIAMOND
+  recall on the same reads. Fixed by reverting to independently
+  custom-built HMMs for all three; added `check_no_duplicate_pfam_models()`
+  to fail fast if this happens again.
+- `5602c06` — **fused-ORF pairing correction** (issue #3): Task 1b's
+  spec text named mrpA+mrpD as a fused-ORF pair, from general
+  recollection rather than verification, and was wrong. Direct UniProt
+  search found no confirmed mrpA-mrpD fusion, but did find a different,
+  real one: mrpA+mrpB, dispersed across Actinomycetota, Bacillota
+  (specifically Paenibacillaceae), and some Alphaproteobacteria — with
+  genus *Bacillus* itself never showing the fused form.
+- `2e19d24` — **UniProt fetch order bias** (issue #4): capped fetches
+  paginated UniProt in its default result order, which is not
+  representative (confirmed: a plain cspA-style query put E. coli/B.
+  subtilis in 8 of its first 10 hits) — systematically skewing every
+  capped family's reference/calibration set toward heavily-sequenced lab
+  organisms. Fixed via bounded oversampling on `sort=accession asc`
+  order rather than exhaustive enumeration (which doesn't scale — ectA's
+  negative pool alone has 311,116 UniProt members). Added
+  `diversity_stats()` reporting so a regression like this shows up in
+  the build's own output next time.
+- `faeddd6` — **gshF addition** (issue #5): several common gut genera
+  (Streptococcus, Enterococcus, Listeria, Clostridium) use a single
+  bifunctional gshF/gshAB enzyme instead of separate gshA+gshB genes,
+  which without a dedicated family showed a false "no glutathione
+  biosynthesis" signal in exactly the genera gshA/gshB's evidence-tier
+  claim depends on. Confirmed gshF is a genuinely distinct third enzyme
+  family (different synthetase domain than gshB), not a literal fusion
+  of gshA+gshB — modeled as an ordinary family, not `fusion_partner`.
+- `eb60e97` — **heredoc backtick fix**: a markdown-style backtick in a
+  Python comment embedded in a bash heredoc was interpreted as shell
+  command substitution (harmless in practice, but a stray error in every
+  `pfam_model` family's build log).
+
+## PR #7 — mrpF/mrpG PhaF/yufB synonym fix
+
+`8f1fbd5`: both families' descriptions documented a third gene-symbol
+alias from the start (PhaF for mrpF, yufB for mrpG) but never actually
+carried it into `positive_query`/`negative_query` — a straightforward
+query bug, independent of the `pfam_model` adoption itself.
+
+- mrpF: confirmed real and consequential — 142 PhaF-tagged genuine
+  PF04066 entries were sitting in the "negative" pool. Fixing it gave a
+  real, confirmed benchmark improvement (DIAMOND F1 0.244→0.329, HMM F1
+  0.193→0.250).
+- mrpG: added for consistency, but verified this does **not** explain
+  mrpG's own 59% purity contamination the way PhaF explains mrpF's —
+  every yufB-tagged entry already also carried the mrpG gene name on the
+  same record. F1 barely moved, within noise.
+- Both families' remaining negative-pool contamination was traced to the
+  same root structural cause later formalized in this branch's Phase 3
+  (see below): PF04066/PF03334 have few members genuinely distinct from
+  mrpF/mrpG themselves.
+
+## This branch (`fix-numbered-paralog-gaps`) — negative-pool quality follow-ups
+
+PR #6's gene panel and PR #7's mrpF/mrpG fix surfaced a family of related
+data-quality issues in how per-family hard-negative pools are built. The
+sections below cover the investigation and fix work that followed.
+
+### Investigation (Context)
 
 Before any fix landed, evidence was pulled from the last clean `v6` build
 (`releases/v6/refs/negative_purity_manifest.tsv`, flagged-sequence gene
@@ -29,12 +176,12 @@ lookups via UniProt) and one experiment was run live:
   genuine cross-paralog confusion between four real, distinct genes — see
   Phase 4.
 
-## Phase 1 — Cleanup
+### Phase 1 — Cleanup
 
 Discarded the `max_negative_override` experiment's code changes (kept the
 finding, not the code). No behavior change.
 
-## Phase 2 — Numbered-paralog gap fix (issue #8, PR #9)
+### Phase 2 — Numbered-paralog gap fix (issue #8, PR #9)
 
 - Started as a 6-family fix (murB, trkA, trkH, ktrA, ktrB, ktrD), each
   numbered variant verified per-accession against UniProt to confirm it
@@ -65,7 +212,7 @@ finding, not the code). No behavior change.
   rather than a subset test, per the project convention of using a new
   version number for any full rebuild.
 
-## Phase 3 — Structural negative-pool contamination (documentation)
+### Phase 3 — Structural negative-pool contamination (documentation)
 
 Documented, for mrpB/mrpC/mrpE/gshA/gshB/gshF/otsA/mazG/mscL, that their
 negative-pool contamination is structural (real, unlabeled orthologs from
@@ -92,7 +239,7 @@ finding, just triggered from different directions.
   when more data can't fix it," documenting the pattern for future family
   additions.
 
-## Phase 4 — proX/opuAC/opuBC/opuCC decoy conversion (tried, disproven, reverted)
+### Phase 4 — proX/opuAC/opuBC/opuCC decoy conversion (tried, disproven, reverted)
 
 - Redesigned all four families to target each other as decoy sources
   (mirroring betL vs. betT/caiT) instead of drawing negatives from the
@@ -125,7 +272,7 @@ finding, just triggered from different directions.
   precision problem — it's now an open question without a known fix, not
   a pending decision.
 
-## v7 full rebuild — verification result
+### v7 full rebuild — verification result
 
 Built and benchmarked all 43 families (`releases/v7`) against the last
 clean `v6` build to verify the full sweep before committing.
@@ -157,7 +304,7 @@ clean `v6` build to verify the full sweep before committing.
   can capture. Worth remembering for any future phase that relies on a
   subset test as a go/no-go signal.
 
-## Status at time of writing
+### Status at time of writing
 
 - **Phase 1, 2, 3**: committed (`6d03487` on `fix-numbered-paralog-gaps`,
   on top of the original 6-family commit `69f80a4`), pushed, PR #9 and
