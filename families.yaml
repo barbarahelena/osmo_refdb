@@ -707,22 +707,30 @@ families:
       Pore-forming subunit of the Trk system, paired with trkA above (Task
       1d). Proteobacteria-type naming (E. coli TrkH); see trkA's entry
       above for why this is kept separate from ktrB/ktrD (Firmicutes
-      naming, new entries below) rather than merged as synonyms, matching
-      the nhaA/mrp treatment. PF02386 ("TrkH") checked: 89 domain
-      architectures is higher than this batch's other pfam_model
-      adoptions (worth a caution flag), but still a clean single-function
-      family name/description (cation transport) and a comparatively
-      small protein count (25394) next to truly broad folds like
-      PF00005/PF00528 -- adopted via pfam_model, but check
-      qc_scorecard.tsv after the first build to confirm the extra caution
-      wasn't warranted before trusting it the way mrpE/mrpF/mrpG's cleaner
-      adoptions can be. Negative pool excludes trkH/ktrB/ktrD gene symbols
-      even though ktrB/ktrD are separate families, same cross-exclusion
-      reasoning as trkA/ktrA above.
+      naming, below) rather than merged as synonyms, matching the nhaA/mrp
+      treatment. PF02386 ("TrkH") is shared by all three of trkH/ktrB/ktrD
+      as real, distinct true positives in this panel -- the same situation
+      as proX vs. opuAC/opuBC/opuCC, and NOT given pfam_model treatment for
+      the same reason: adopting Pfam's one model+cutoff for more than one
+      of a same-Pfam-family sibling group makes their HMMs byte-identical,
+      which isn't just a specificity concern the way it is for proX/opuAC
+      -- confirmed via the v6 benchmark that it's a hard failure for HMM
+      detection specifically. All three sibling HMMs score exactly the
+      same on any given read (same underlying model), so hmmscan can't
+      tell them apart at all; 07_press_hmms.sh concatenates hmms/*.hmm in
+      alphabetical order and 11_compute_metrics.py's best_hit_per_read
+      keeps the first tied hit, so whichever of the three sorts first
+      alphabetically wins 100% of the shared signal and the other two get
+      systematically zero HMM recall -- observed directly: trkH and ktrD
+      both scored exactly 0 true positives in the v6 HMM benchmark, all
+      of it absorbed by ktrB. DIAMOND is unaffected (it discriminates via
+      each family's own distinct reference sequences, not the shared
+      profile) -- trkH/ktrB/ktrD all get real, distinct DIAMOND numbers.
+      Kept as a custom, gene-symbol-anchored model instead, same as
+      proX/opuAC/opuBC/opuCC.
     positive_query: "gene:trkH AND taxonomy_id:2"
     negative_query: "xref:pfam-PF02386 NOT (gene:trkH OR gene:ktrB OR gene:ktrD) AND taxonomy_id:2"
     negative_pfam: PF02386   # TrkH cation transport family
-    pfam_model: PF02386
 
   - name: ktrA
     description: >
@@ -746,24 +754,25 @@ families:
       and ktrD below) rather than merged as synonyms, the same treatment
       this panel already gives other same-organism paralog pairs (e.g.
       proX vs. opuAC/opuBC/opuCC, mscL vs. mscS) rather than cross-organism
-      orthologs (betL/betP/opuD/betS, mrpA/mnhA). PF02386 checked: same
-      family as trkH, adopted via pfam_model with the same caution flag --
-      check qc_scorecard.tsv.
+      orthologs (betL/betP/opuD/betS, mrpA/mnhA). NOT given pfam_model
+      treatment: see trkH's entry above for why PF02386, shared by all
+      three of trkH/ktrB/ktrD, breaks HMM detection specifically when more
+      than one sibling adopts it (byte-identical models, so hmmscan can't
+      discriminate them -- confirmed via the v6 benchmark). Kept custom.
     positive_query: "gene:ktrB AND taxonomy_id:2"
     negative_query: "xref:pfam-PF02386 NOT (gene:trkH OR gene:ktrB OR gene:ktrD) AND taxonomy_id:2"
     negative_pfam: PF02386
-    pfam_model: PF02386
 
   - name: ktrD
     description: >
       Second paralogous pore-forming subunit of the Ktr system, alongside
       ktrB above (Task 1d) -- see ktrB's entry for why these two are kept
-      as separate families rather than merged as synonyms. Same PF02386
-      family and pfam_model adoption as ktrB/trkH.
+      as separate families rather than merged as synonyms, and trkH's
+      entry for why none of trkH/ktrB/ktrD get pfam_model treatment
+      despite sharing PF02386.
     positive_query: "gene:ktrD AND taxonomy_id:2"
     negative_query: "xref:pfam-PF02386 NOT (gene:trkH OR gene:ktrB OR gene:ktrD) AND taxonomy_id:2"
     negative_pfam: PF02386
-    pfam_model: PF02386
 
 # Considered and deferred (2026-07-16): proV, proW, gbsA, gbsB
 #

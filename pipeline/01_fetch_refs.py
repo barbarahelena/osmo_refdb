@@ -179,6 +179,43 @@ def fetch_pfam_domains(query: str, max_seqs: int | None = None) -> dict[str, lis
     return domains
 
 
+def check_no_duplicate_pfam_models(families: list[dict]) -> None:
+    """
+    Fail fast if two families share a `pfam_model` accession.
+
+    05_build_hmms.sh fetches the literal Pfam-A HMM for a pfam_model family
+    and only rewrites its NAME/ACC lines -- the actual model weights are
+    untouched, so two families adopting the SAME accession end up with
+    byte-identical HMMs. hmmscan then can't discriminate between them at
+    all: every read scores exactly the same against both, and whichever
+    sorts first in 07_press_hmms.sh's alphabetical `cat hmms/*.hmm`
+    ordering wins 100% of the shared signal via 11_compute_metrics.py's
+    best-hit tie-break, leaving the other(s) at exactly zero HMM recall.
+    Confirmed in production (v6 benchmark): trkH/ktrB/ktrD all adopted
+    pfam_model: PF02386 -- ktrB absorbed every tied hit, trkH and ktrD
+    both scored 0 true positives despite real, non-trivial DIAMOND recall
+    on the same reads. Fixed by removing pfam_model from all three (see
+    families.yaml). If a future family group is tempted to make the same
+    choice: at most one member of a shared-Pfam-accession sibling group
+    (see families.yaml's proX/opuAC/opuBC/opuCC precedent) may use
+    pfam_model for that accession; the rest must use a custom-built model.
+    """
+    by_accession: dict[str, list[str]] = {}
+    for fam in families:
+        accession = fam.get("pfam_model")
+        if accession:
+            by_accession.setdefault(accession, []).append(fam["name"])
+    conflicts = {acc: names for acc, names in by_accession.items() if len(names) > 1}
+    if conflicts:
+        lines = [f"  {acc}: {', '.join(names)}" for acc, names in conflicts.items()]
+        raise SystemExit(
+            "ERROR: multiple families.yaml entries share a pfam_model accession -- "
+            "this makes their HMMs byte-identical and breaks HMM-based detection "
+            "for all but one of them (see check_no_duplicate_pfam_models docstring "
+            "for the confirmed failure mode):\n" + "\n".join(lines)
+        )
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--families", type=Path, default=Path("families.yaml"))
@@ -190,6 +227,7 @@ def main() -> None:
     args = ap.parse_args()
 
     families = load_families(args.families)
+    check_no_duplicate_pfam_models(families)
     args.out.mkdir(parents=True, exist_ok=True)
     fetch_date = date.today().isoformat()
 

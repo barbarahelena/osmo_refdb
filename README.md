@@ -147,7 +147,24 @@ opuAC/opuBC/opuCC vs. proX (all four share PF04069 but are real, separate
 paralogs; adopting Pfam's one model+cutoff there would make them
 indistinguishable from each other, so none of them use `pfam_model` despite
 PF04069 being a reasonably narrow domain by domain-architecture-count
-standards). `05_build_hmms.sh` fetches the actual `.hmm` file (gzipped) from
+standards). **This isn't just a specificity nicety — for HMM detection
+specifically it's a hard failure mode, confirmed in production**: an
+earlier version of this panel gave `pfam_model: PF02386` to all three of
+trkH/ktrB/ktrD (real, distinct siblings sharing that Pfam family, same
+situation as proX/opuAC/opuBC/opuCC). Adopting the same accession for more
+than one of them made their HMMs byte-identical — every read scores
+exactly the same against all three, `07_press_hmms.sh`'s alphabetical
+`cat hmms/*.hmm` plus `11_compute_metrics.py`'s best-hit tie-break means
+whichever sorts first absorbs 100% of the shared signal, and the rest get
+exactly zero HMM recall. The v6 benchmark caught this directly: ktrB
+scored real hits, trkH and ktrD scored 0 true positives each, despite
+normal, non-trivial DIAMOND recall on the same reads (DIAMOND discriminates
+via each family's own distinct reference sequences, not the shared
+profile, so it's unaffected). `01_fetch_refs.py` now fails fast
+(`check_no_duplicate_pfam_models`) if two families.yaml entries share a
+`pfam_model` accession, specifically to catch this mistake before a full
+build wastes time on it again. `05_build_hmms.sh` fetches the actual
+`.hmm` file (gzipped) from
 `https://www.ebi.ac.uk/interpro/api/entry/pfam/<PFxxxxx>/?annotation=hmm` —
 confirmed working on that host; note this is **not** the same thing as the
 InterPro entry metadata endpoint's `entry_annotations.hmm` counter, which
