@@ -123,16 +123,25 @@ families:
   - name: proX
     description: >
       Glycine betaine/proline betaine ABC transporter substrate-binding
-      protein (proU system uptake). Species-specific synonyms exist here
-      too (e.g. B. subtilis opuAC/opuBC/opuCC bind related solutes) — not
-      pre-expanded the way betL was, since we don't have a short verified
-      synonym list for this one yet. Rely on the negative-purity QC step
-      to flag it if PF04069 negatives turn out to include mislabeled
-      orthologs the way betL's did.
+      protein (proU system uptake). Species-specific synonyms (B. subtilis
+      opuAC/opuBC/opuCC, binding related solutes) are now genuinely in this
+      panel as their own families (2026-07-23, Firmicutes gap-filling —
+      see opuAC/opuBC/opuCC below), NOT folded into proX's own positive
+      set the way betL/betP/opuD/betS were: unlike that group, opuAC/opuBC/
+      opuCC aren't literal orthologs of proX under different names in
+      different organisms, they're paralogous substrate-binding proteins
+      with distinct (if overlapping) solute specificities within the same
+      organism, so treating them as one undifferentiated positive class
+      would blur real biology proX/opuAC/opuBC/opuCC's own negative_query
+      entries all now explicitly exclude every sibling gene symbol, so
+      none of them contaminates another's hard-negative pool — the exact
+      failure mode betL's fix addressed, now relevant here too since PF04069
+      is shared by four families in this panel instead of one. Still rely
+      on the negative-purity QC step (01b) as a backstop for anything this
+      hand-maintained exclusion list misses.
     positive_query: "gene:proX AND taxonomy_id:2"
-    negative_query: "xref:pfam-PF04069 NOT gene:proX AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF04069 NOT (gene:proX OR gene:opuAC OR gene:opuBC OR gene:opuCC) AND taxonomy_id:2"
     negative_pfam: PF04069   # OpuAC-like ABC transporter substrate-binding domain
-
   - name: proP
     description: >
       Proline/glycine betaine MFS transporter (proU system alternative
@@ -255,6 +264,130 @@ families:
     negative_query: "xref:pfam-PF02873 NOT gene:murB AND taxonomy_id:2"
     negative_pfam: PF02873   # MurB C-terminal domain (murB-specific; skips the broader shared PF01565 FAD-binding domain)
     scope: annotate_only
+
+
+# --- 2026-07-23: Bacillota gap-filling, part 1 -- compatible-solute
+# transporters (Task 1a) ------------------------------------------------
+#
+# Added per the osmo_refdb + osmotool extension spec, Task 1: Bacillota
+# (the largest phylum in our dataset) had no phylum-appropriate
+# specificity-tier gene -- only the core module (galE/murB/mazG/mscL/
+# mscS/kdpA), too conserved across phyla to serve as a salt-tolerance
+# marker on its own. opuAA-opuCC (Bacillus subtilis-type glycine
+# betaine/carnitine/choline ABC transporters) are the first piece closing
+# that gap; the Na+/H+ antiporter half (mrpA-mrpG) follows separately.
+
+  - name: opuAA
+    description: >
+      ATP-binding subunit of the Firmicutes-type glycine betaine/carnitine/
+      choline ABC transporter (Bacillus subtilis OpuA system; Task 1a).
+      Domain architecture PF00005 (ABC_tran) + PF00571 (CBS domain pair).
+      PF00005 alone is far too broad to anchor a negative set on -- the
+      same generic ATP-binding fold used by essentially every bacterial ABC
+      transporter, the exact reason proV was deferred below -- so the
+      negative pool is anchored on the co-occurring CBS-domain pair
+      instead, narrowing it to other CBS-domain-bearing ABC-transporter
+      ATPases specifically. Still a moderately broad pool (CBS domains
+      appear in many otherwise-unrelated regulatory/transport contexts) --
+      check qc_scorecard.tsv/cutoff_manifest.tsv before trusting the HMM
+      the way ectA/mscS were flagged.
+    positive_query: "gene:opuAA AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF00571 NOT (gene:opuAA OR gene:opuBA OR gene:opuCA) AND taxonomy_id:2"
+    negative_pfam: PF00571   # CBS domain pair, co-occurring with ABC_tran in this transporter class
+
+  - name: opuBA
+    description: >
+      ATP-binding subunit of the OpuB system (choline-specific relative of
+      OpuA; Task 1a). Same domain architecture and negative-query caveats
+      as opuAA above.
+    positive_query: "gene:opuBA AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF00571 NOT (gene:opuAA OR gene:opuBA OR gene:opuCA) AND taxonomy_id:2"
+    negative_pfam: PF00571
+
+  - name: opuCA
+    description: >
+      ATP-binding subunit of the OpuC system (carnitine/choline/betaine
+      relative of OpuA; Task 1a). Same domain architecture and
+      negative-query caveats as opuAA above.
+    positive_query: "gene:opuCA AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF00571 NOT (gene:opuAA OR gene:opuBA OR gene:opuCA) AND taxonomy_id:2"
+    negative_pfam: PF00571
+
+  - name: opuAB
+    description: >
+      Permease subunit of the OpuA system (Task 1a). Single domain PF00528
+      (BPD_transp_1) -- the same generic ABC-transporter permease fold
+      flagged in the proW deferral below; building this one anyway since
+      Task 1a explicitly requests it, but the same promiscuous-domain risk
+      applies in full. Expect this family to need the most scrutiny of the
+      whole 2026-07-23 batch: check qc_scorecard.tsv/cutoff_manifest.tsv
+      first, consider a trim_gt experiment (see ectA), and if HMM detection
+      genuinely can't be made reliable here, that's a legitimate outcome --
+      fall back to DIAMOND-only / gene-symbol identity for this one rather
+      than trusting a poorly-separated HMM cutoff.
+    positive_query: "gene:opuAB AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF00528 NOT (gene:opuAB OR gene:opuBB OR gene:opuCB OR gene:proW) AND taxonomy_id:2"
+    negative_pfam: PF00528   # BPD_transp_1, generic ABC transporter permease domain (same fold flagged for proW below)
+
+  - name: opuBB
+    description: >
+      Permease subunit of the OpuB system (Task 1a). Same domain and
+      caveats as opuAB above.
+    positive_query: "gene:opuBB AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF00528 NOT (gene:opuAB OR gene:opuBB OR gene:opuCB OR gene:proW) AND taxonomy_id:2"
+    negative_pfam: PF00528
+
+  - name: opuCB
+    description: >
+      Permease subunit of the OpuC system (Task 1a). Same domain and
+      caveats as opuAB above.
+    positive_query: "gene:opuCB AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF00528 NOT (gene:opuAB OR gene:opuBB OR gene:opuCB OR gene:proW) AND taxonomy_id:2"
+    negative_pfam: PF00528
+
+  - name: opuAC
+    description: >
+      Substrate-binding subunit of the OpuA system (Task 1a). Same Pfam
+      family (PF04069) as proX, already in this panel -- proX/opuAC/opuBC/
+      opuCC are genuine, distinct paralogs with different (if overlapping)
+      solute specificities within the same organism, not literal orthologs
+      of one another the way betL/betP/opuD/betS are, so they're kept as
+      four separate gene-symbol-anchored families, each excluding all three
+      siblings' gene symbols from its own negative pool (see proX's entry
+      above for the matching fix). Deliberately NOT given pfam_model
+      treatment despite PF04069 being a reasonably narrow, well-curated
+      Pfam family (not a broad multi-substrate fold on its own terms):
+      Pfam draws its boundary one level broader than what we need here --
+      "solute-binding protein of this structural class" -- so adopting
+      Pfam's single model+cutoff would make proX/opuAC/opuBC/opuCC
+      indistinguishable from each other, defeating the point of separating
+      them. This is exactly the "check condition 2" case flagged in this
+      section's header comment.
+    positive_query: "gene:opuAC AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF04069 NOT (gene:proX OR gene:opuAC OR gene:opuBC OR gene:opuCC) AND taxonomy_id:2"
+    negative_pfam: PF04069
+
+  - name: opuBC
+    description: >
+      Substrate-binding subunit of the OpuB system (Task 1a). Same Pfam
+      family and caveats as opuAC above.
+    positive_query: "gene:opuBC AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF04069 NOT (gene:proX OR gene:opuAC OR gene:opuBC OR gene:opuCC) AND taxonomy_id:2"
+    negative_pfam: PF04069
+
+  - name: opuCC
+    description: >
+      Substrate-binding subunit of the OpuC system (Task 1a). Same Pfam
+      family and caveats as opuAC above.
+    positive_query: "gene:opuCC AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF04069 NOT (gene:proX OR gene:opuAC OR gene:opuBC OR gene:opuCC) AND taxonomy_id:2"
+    negative_pfam: PF04069
+
+  # opuD (Task 1a) is NOT added as its own family: it's already one of
+  # betL's synonym orthologs (see betL's positive_query above, "gene:betL
+  # OR gene:betP OR gene:opuD OR gene:betS"), which predates this batch.
+  # Adding a second, separate opuD family here would create two
+  # conflicting reference/HMM targets for the same protein.
 
 # Considered and deferred (2026-07-16): proV, proW, gbsA, gbsB
 #
