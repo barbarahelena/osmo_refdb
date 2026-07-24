@@ -37,6 +37,19 @@ families.yaml are processed -- this only helps when negative_query targets
 specific named paralogs (as betL's does); a broad Pfam pool would make a
 weak, noisy decoy and shouldn't be used this way.
 
+Dedup against positive references: a decoy candidate is dropped if its
+accession is already used as a positive training reference for ANY family
+in the combined DIAMOND db (not just this decoy family's own siblings).
+Without this, a decoy set built from named-paralog negatives can contain
+the exact same sequence that's simultaneously a real positive reference
+elsewhere (e.g. a proX_decoy entry that's byte-identical to opuAC's own
+positive reference) -- select_best_hits() could then tie between the
+correct positive call and the decoy-labelled duplicate, and since decoys
+are excluded from reported output, an unlucky tie silently drops the read
+instead of correctly crediting the real family. Filtering these out by
+construction closes the collision at the source rather than relying on a
+benchmark to catch it after the fact.
+
 Usage:
   python 08a_build_decoy_refs.py --refs refs --families families.yaml
 Output:
@@ -55,6 +68,29 @@ def load_decoy_families(path: Path) -> list[str]:
     with open(path) as fh:
         data = yaml.safe_load(fh)
     return [fam["name"] for fam in data["families"] if fam.get("decoy_from_negatives")]
+
+
+def load_all_family_names(path: Path) -> list[str]:
+    with open(path) as fh:
+        data = yaml.safe_load(fh)
+    return [fam["name"] for fam in data["families"]]
+
+
+def header_accession(header: str) -> str:
+    """'<family>|UniProtID|Organism' -> 'UniProtID'."""
+    parts = header.split("|")
+    return parts[1] if len(parts) > 1 else header
+
+
+def load_all_positive_accessions(refs_dir: Path, family_names: list[str]) -> set[str]:
+    """Accessions already used as a positive training reference for any
+    family in the panel, regardless of whether that family builds decoys."""
+    accessions: set[str] = set()
+    for family in family_names:
+        pos_path = refs_dir / f"{family}.positive.train.faa"
+        for header, _ in parse_fasta(pos_path):
+            accessions.add(header_accession(header))
+    return accessions
 
 
 def parse_fasta(path: Path) -> list[tuple[str, str]]:
@@ -104,6 +140,9 @@ def main() -> None:
         print("No families marked decoy_from_negatives -- nothing to build.")
         return
 
+    all_family_names = load_all_family_names(args.families)
+    positive_accessions = load_all_positive_accessions(args.refs, all_family_names)
+
     for family in decoy_families:
         neg_path = args.refs / f"{family}.negative.train.faa"
         decoy_path = args.refs / f"{family}.decoy.faa"
@@ -114,9 +153,12 @@ def main() -> None:
             continue
 
         records = parse_fasta(neg_path)
+        n_dup = sum(1 for header, _ in records if header_accession(header) in positive_accessions)
+        records = [(h, s) for h, s in records if header_accession(h) not in positive_accessions]
         retagged = [(retag_as_decoy(header, family), seq) for header, seq in records]
         write_fasta(decoy_path, retagged)
-        print(f"[{family}] {len(retagged)} decoy references written -> {decoy_path}")
+        dup_note = f" ({n_dup} dropped as duplicate positive references elsewhere)" if n_dup else ""
+        print(f"[{family}] {len(retagged)} decoy references written -> {decoy_path}{dup_note}")
 
     print("\nDone.")
 
