@@ -304,6 +304,38 @@ clean `v6` build to verify the full sweep before committing.
   can capture. Worth remembering for any future phase that relies on a
   subset test as a go/no-go signal.
 
+### Phase 5 — trkH/ktrB/ktrD re-evaluation (PR #11)
+
+Checked whether the numbered-paralog fix (Phase 2) or a decoy conversion
+(Phase 4's approach) could address trkH/ktrB/ktrD's remaining negative-pool
+contamination, per the plan's original Phase 5 framing.
+
+- **Numbered-paralog fix didn't help**: purity-flag rates in v7 barely
+  moved from v6 (trkH 27%→29%, ktrB 14.5%→15.5%, ktrD 2.4%→2.8% flagged)
+  — confirms the same structural "unlabeled ortholog" pattern as Phase
+  3's families, not a missing-symbol gap.
+- **Decoy conversion ruled out**: trkH/ktrB/ktrD share PF02386 the same
+  close-paralog way proX/opuAC/opuBC/opuCC shared PF04069 — exactly the
+  clique shape Phase 4 showed catastrophically collapses DIAMOND recall.
+- **No `pfam_model` fallback possible**: removing it from all three was
+  the original fix for the byte-identical-HMM collision on this same
+  trio (see PR #6's bug-fix history above).
+- Both DIAMOND (0.265–0.293) and HMM (0.121–0.288) precision are low
+  across all three, with no independent rescue via `profile_cascade.tsv`.
+  ktrD's HMM is the worst in this cluster (0.121 precision, 0.904
+  recall — calling almost everything positive), consistent with its
+  already-noted small-n calibration risk (54 UniProt positives).
+- Set `scope: annotate_only` on all three, same criteria as otsA/mrpC:
+  removes the entire Trk/Ktr K+-uptake system from `osmotool profile`'s
+  reported output (a bigger call than extending scope on 1-2 families,
+  flagged and confirmed explicitly rather than applied by default) while
+  keeping it built and searchable for `osmotool annotate` co-occurrence
+  checks.
+- Also backfilled a documentation gap: mrpC's `scope: annotate_only`
+  change (from the prior commit) had been applied to `families.yaml` but
+  never reflected in README's "Structural negative-pool contamination"
+  section — fixed alongside trkH/ktrB/ktrD.
+
 ### Status at time of writing
 
 - **Phase 1, 2, 3**: committed (`6d03487` on `fix-numbered-paralog-gaps`,
@@ -311,9 +343,7 @@ clean `v6` build to verify the full sweep before committing.
   issue #8 updated with the final findings.
 - **Phase 4**: disproven and reverted, documented in the same commit —
   proX/opuAC/opuBC/opuCC match PR #6's original cross-exclusion design.
-- **Phase 5**: reframed by Phase 4's finding — trkH/ktrB/ktrD share a
-  Pfam accession the same way proX/opuAC/opuBC/opuCC did, so the decoy
-  option there is now disfavored by default rather than a neutral
-  re-evaluation. Not yet started.
+- **Phase 5**: done — committed (`8b49d2d` on `phase5-trk-ktr-scope`),
+  pushed, PR #11 open against `fix-numbered-paralog-gaps`.
 - **Phase 6** (qc_scorecard-as-gate documentation for `pfam_model`): not
   yet started.
