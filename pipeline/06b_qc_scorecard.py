@@ -41,6 +41,12 @@ def load_family_names(path: Path) -> list[str]:
     return [fam["name"] for fam in data["families"]]
 
 
+def load_pfam_model_families(path: Path) -> set[str]:
+    with open(path) as fh:
+        data = yaml.safe_load(fh)
+    return {fam["name"] for fam in data["families"] if fam.get("pfam_model")}
+
+
 def load_tsv_by_family(path: Path, key_field: str = "family") -> dict[str, list[dict]]:
     """Load a manifest TSV into {family: [row, ...]} (list, since
     length_outlier_manifest.tsv has one row per family+label)."""
@@ -69,6 +75,7 @@ def main() -> None:
     args = ap.parse_args()
 
     families = load_family_names(args.families)
+    pfam_model_families = load_pfam_model_families(args.families)
     purity = load_tsv_by_family(args.refs / "negative_purity_manifest.tsv")
     length = load_tsv_by_family(args.refs / "length_outlier_manifest.tsv")
     cutoffs = load_tsv_by_family(args.hmms / "cutoff_manifest.tsv")
@@ -127,6 +134,19 @@ def main() -> None:
         if r["review_needed"] == "yes":
             print(f"  [{r['family']}] {r['review_reasons']}")
     print(f"\nScorecard: {args.out}")
+
+    pfam_ga_review = [r["family"] for r in rows
+                       if r["family"] in pfam_model_families
+                       and r["hmm_cutoff_status"] == "pfam_ga_review_needed"]
+    if pfam_ga_review:
+        print(f"\n{'!' * 70}")
+        print(f"!! {len(pfam_ga_review)} pfam_model family/families flagged pfam_ga_review_needed:")
+        print(f"!! {', '.join(pfam_ga_review)}")
+        print(f"!! Pfam's own GA cutoff did NOT cleanly separate this repo's")
+        print(f"!! own held-out sets -- a signal the gene-specificity")
+        print(f"!! assumption behind pfam_model may be wrong here, not a")
+        print(f"!! number to recalibrate. Review before trusting.")
+        print(f"{'!' * 70}")
 
 
 if __name__ == "__main__":
