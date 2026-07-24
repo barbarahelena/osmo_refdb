@@ -180,6 +180,22 @@ gene-specificity assumption above was wrong for this particular family, not
 that the number needs recalculating; remove `pfam_model` and let it fall
 back to a normal custom-built model instead.
 
+**`domain_architectures` count is a screening heuristic, not sufficient on
+its own — `qc_scorecard.tsv` review after the first build is a required
+step before trusting a `pfam_model` adoption, not a follow-up nicety.**
+Confirmed in production: 5 of the 6 `pfam_model` families adopted in this
+panel (mrpB, mrpE, mrpF, mrpG, gshB) got flagged `pfam_ga_review_needed`
+despite each passing the InterPro domain-architecture screen beforehand —
+only cspA came back clean (`pfam_ga_clean`). A low `domain_architectures`
+count and a name/description match are necessary checks, but this repo's
+own held-out benchmark is the only thing that actually confirms Pfam's
+cutoff behaves well on *this* project's specific negative pool — a
+`pfam_model` adoption isn't done until that scorecard has been read.
+`06b_qc_scorecard.py` prints an extra, hard-to-miss banner specifically
+for `pfam_model` families flagged this way (separate from the general
+per-family review list), precisely so this can't be missed by skimming
+past a long scorecard run.
+
 Optional `fusion_partner: <other family name>` + `fusion_marker_pfam:
 PFxxxxx` fields: for a pair of families whose gene products occur as a
 single fused ORF in some lineages instead of two separate genes (currently
