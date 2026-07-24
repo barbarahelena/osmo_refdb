@@ -125,18 +125,45 @@ finding, just triggered from different directions.
   precision problem — it's now an open question without a known fix, not
   a pending decision.
 
+## v7 full rebuild — verification result
+
+Built and benchmarked all 43 families (`releases/v7`) against the last
+clean `v6` build to verify the full sweep before committing.
+
+- **Per family** (each weighted equally): DIAMOND 22 families improved
+  (sum +0.817 F1) vs. 18 worsened (sum -0.413); HMM 25 improved
+  (sum +0.706) vs. 17 worsened (sum -0.373). Net positive on both methods.
+- **Read-volume-weighted** (pooling tp/fp/fn across all families, which
+  better reflects real-world system performance): essentially **flat**.
+  DIAMOND F1 0.823→0.821, HMM F1 0.684→0.684. DIAMOND caught 2,018 more
+  true positives in absolute terms (real completeness gain, matching the
+  sweep's actual goal) but picked up proportionally similar new false
+  positives/negatives too.
+- **Honest framing**: this is a completeness fix (captures real gene
+  instances the panel was previously missing entirely), not a
+  performance-optimization win — worth stating plainly rather than
+  implying detection got "better" overall.
+- **9 regressions above 0.03 F1** documented individually in
+  `families.yaml` rather than chased: ectA (HMM), ktrA (DIAMOND), ktrD
+  (HMM), mrpB (DIAMOND, -0.086, the largest), opuAB (HMM), opuCA (HMM),
+  opuCB (both methods), trkA (DIAMOND, already known from Phase 2,
+  confirmed at 0.920→0.887 in the full build vs. 0.920→0.879 in the
+  earlier 6-family subset test).
+- **Methodological finding**: a subset test isn't a fully reliable
+  predictor of full-panel behavior — some families (ktrA, ktrD) showed
+  different results in the full 43-family build than they did in the
+  earlier 6-family subset test, because the full-panel build changes the
+  combined DIAMOND/HMM database's composition beyond what a small subset
+  can capture. Worth remembering for any future phase that relies on a
+  subset test as a go/no-go signal.
+
 ## Status at time of writing
 
-- **Phase 1, 2**: committed on `fix-numbered-paralog-gaps`; issue #8 filed;
-  PR #9 open against `fix-mrpF-mrpG-synonym-gap`.
-- **Phase 3**: implemented and validated (`yaml.safe_load`, 43 families,
-  no dupes) in an isolated git worktree (`.worktrees/phase3`, branch
-  `phase3-structural-docs`) to avoid editing `families.yaml` while the
-  `v7` full-rebuild Docker container has it mounted live. Pending `v7`'s
-  completion before merging back and committing alongside Phase 2's sweep.
-- **Phase 4**: disproven and reverted (see above) — no changes pending
-  merge for this phase; the worktree's `families.yaml` for
-  proX/opuAC/opuBC/opuCC now matches PR #6's original design again.
+- **Phase 1, 2, 3**: committed (`6d03487` on `fix-numbered-paralog-gaps`,
+  on top of the original 6-family commit `69f80a4`), pushed, PR #9 and
+  issue #8 updated with the final findings.
+- **Phase 4**: disproven and reverted, documented in the same commit —
+  proX/opuAC/opuBC/opuCC match PR #6's original cross-exclusion design.
 - **Phase 5**: reframed by Phase 4's finding — trkH/ktrB/ktrD share a
   Pfam accession the same way proX/opuAC/opuBC/opuCC did, so the decoy
   option there is now disfavored by default rather than a neutral

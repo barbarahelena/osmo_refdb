@@ -4,41 +4,29 @@ Saved copy of the active plan, in case the working session crashes before
 this lands as commits. See `docs/CHANGELOG.md` for a narrative summary of
 what's already done; this file is the working plan itself.
 
+**Status as of commit `6d03487`**: Phases 1-4 are done and committed on
+`fix-numbered-paralog-gaps` (pushed, PR #9 and issue #8 updated). Only
+Phases 5 and 6 are still open — see those sections below. The
+crash-recovery notes that used to live here (git worktree state, pending
+`v7` build, uncommitted changes) are no longer relevant now that
+everything has landed; kept only in `git log` if needed for reference.
+
 ## Resuming after a crash — check these first
 
-1. **`v7`'s background build may or may not still be running** (it's a
-   child process of the session that started it — check before assuming
-   either way): `releases/v7` in the main repo directory, full 43-family
-   rebuild. Check `releases/v7/results/metrics/summary.tsv` for whether it
-   finished; if absent, check `docker ps` for a container running
-   `run_pipeline.sh all v7`. If not running and no `results/metrics`
-   directory exists, just rerun it (command in Phase 2 below).
-   (Phase 4's own subset test, `releases/v-test-phase4`, already
-   completed and was deliberately deleted after use — see Phase 4 below,
-   it's disproven and reverted, nothing to resume there.)
-2. **Git state**:
-   - Main repo directory: branch `fix-numbered-paralog-gaps`, should have
-     one commit (`Add numbered-paralog gene symbols to
-     murB/trkA/trkH/ktrA/ktrB/ktrD queries`) plus uncommitted changes to
-     `families.yaml`/`README.md`/`pipeline/08a_build_decoy_refs.py` (the
-     full 43-family sweep — not yet committed, pending `v7`'s numbers).
-   - Worktree at `.worktrees/phase3`, branch `phase3-structural-docs`,
-     created off `fix-numbered-paralog-gaps`. Has its own copy of the
-     sweep changes plus Phase 3 (structural-contamination docs, otsA/mrpC
-     `scope: annotate_only`) — uncommitted there. Phase 4's decoy
-     conversion was tried, disproven, and reverted in this same worktree,
-     so proX/opuAC/opuBC/opuCC are back to PR #6's original
-     cross-exclusion design there (with a documentation note explaining
-     why), not a pending change.
-   - Run `git worktree list` to confirm the worktree still exists; if not,
-     the edits are gone and Phase 3 needs redoing (content fully described
-     below); Phase 4 doesn't need redoing since it ended in a revert —
-     just make sure proX/opuAC/opuBC/opuCC don't still have
-     `decoy_from_negatives: true` set anywhere.
-3. **GitHub**: issue #8 (numbered-paralog gap bug class) and PR #9
-   (`fix-numbered-paralog-gaps` → `fix-mrpF-mrpG-synonym-gap`) are open.
-   PR #9 currently only reflects the 6-family commit — the full-sweep
-   commit plus Phase 3/4 still need to be pushed as follow-up commits.
+1. **Git state**: branch `fix-numbered-paralog-gaps` should have two
+   commits on top of `fix-mrpF-mrpG-synonym-gap`: `69f80a4` (original
+   6-family fix) and `6d03487` (full 43-family sweep + Phase 3 docs +
+   Phase 4 finding). If `6d03487` is missing, Phases 2-4 need redoing —
+   full content is described below and was also in `git log`'s commit
+   message if the commit exists but wasn't pushed.
+2. **GitHub**: issue #8 (numbered-paralog gap bug class) and PR #9
+   (`fix-numbered-paralog-gaps` → `fix-mrpF-mrpG-synonym-gap`) are open,
+   both updated with the final findings. If a crash happened before the
+   `gh pr comment`/`gh issue comment` calls landed, the PR/issue may still
+   only show the original 6-family framing even though the commit itself
+   is complete and pushed — just re-run the comment calls (text is in
+   `git log`'s history of this conversation, or can be re-derived from
+   `docs/CHANGELOG.md`).
 
 ## Context
 
@@ -124,27 +112,22 @@ Branch `fix-numbered-paralog-gaps` off `fix-mrpF-mrpG-synonym-gap`.
     mrpA/mrpD (PF00361), mrpB/mrpC/mrpE/mrpF/mrpG (their own individual
     Pfam accessions, mnh/PhaF/yufB aliases numbered too), gshA/gshF
     (PF04262). All checked clean.
-  - **This part is NOT yet committed** — sitting as uncommitted changes to
-    `families.yaml`/`README.md`/`pipeline/08a_build_decoy_refs.py` in the
-    main repo directory, pending `v7`'s benchmark confirmation.
   - Given 36 of 43 families changed, treated as a full rebuild
     (`releases/v7`) rather than a subset test, per the project convention
-    of using a new version number for any full rebuild:
-    ```
-    rm -rf releases/v7
-    bash run_pipeline.sh all v7
-    ```
-  - **Next step once `v7` finishes**: pull `releases/v7/results/metrics/summary.tsv`,
-    compare every changed family against `v6`'s baseline numbers (same
-    file path in `releases/v6/`), watching for any other trkA-style
-    regression across the wider sweep. If clean, commit this sweep
-    (+ Phase 3, see below) as follow-up commits on `fix-numbered-paralog-gaps`,
-    update issue #8/PR #9, push.
+    of using a new version number for any full rebuild.
+  - **Verified against `v6`**: 22-25 families improved per method vs.
+    17-18 regressed above noise level (net positive per-family), but
+    read-volume-weighted precision/recall is essentially flat (DIAMOND F1
+    0.823→0.821, HMM 0.684→0.684) — a completeness fix, not a performance
+    win. Full numbers in `docs/CHANGELOG.md`. All regressions >0.03 F1
+    documented in their family's `families.yaml` entry.
+  - **Committed** as `6d03487` on `fix-numbered-paralog-gaps`, pushed,
+    issue #8/PR #9 updated with the final findings.
 
-## Phase 3 — Document the structural finding — DONE in worktree, pending merge
+## Phase 3 — Document the structural finding — DONE, committed
 
-Implemented in `.worktrees/phase3` (branch `phase3-structural-docs`), not
-yet committed or merged back.
+Committed together with Phase 2's sweep in `6d03487` (was implemented in
+a git worktree during development, since removed — no longer relevant).
 
 - Updated `families.yaml` entries for mrpB, mrpC, mrpE, gshA, gshB, gshF,
   otsA, mazG, mscL: purity contamination here is structural (Pfam family
@@ -175,10 +158,6 @@ yet committed or merged back.
 - Added a new README section, "Structural negative-pool contamination:
   when more data can't fix it," proofread for line-wrap issues (per user
   instruction to always check README diffs for this).
-- **Next step**: merge/copy these `families.yaml`/`README.md` changes
-  back into the main directory once `v7` confirms the underlying sweep is
-  good, then commit together as one logical unit (per the original plan's
-  "1 and 3 can ride along with 2's PR" branching note).
 
 ## Phase 4 — proX/opuAC/opuBC/opuCC decoy conversion — TRIED, DISPROVEN, REVERTED
 
@@ -216,10 +195,10 @@ different outcome** — see the finding below.
   useful distinction for judging any future `decoy_from_negatives`
   proposal.
 - **Reverted**: proX/opuAC/opuBC/opuCC back to PR #6's cross-exclusion-only
-  design in `.worktrees/phase3/families.yaml`, with the finding documented
-  in each family's description. No merge/commit needed for this phase —
-  the worktree's state for these four families now matches what's already
-  in production. Their remaining precision problem (genuine cross-paralog
+  design, committed as part of `6d03487` alongside Phases 2/3 (the
+  finding documented in each family's description, not a functional
+  change — these four families' queries match what was already in
+  production). Their remaining precision problem (genuine cross-paralog
   confusion) is an open question without a known fix, not a pending
   decision.
 
@@ -266,10 +245,13 @@ Docker `run_pipeline.sh all <throwaway-name>` build+benchmark before
 committing any family-affecting change; compare F1/precision against the
 last known-good numbers already recorded, not just "did it run." When
 editing `families.yaml` or any `pipeline/*.py` file while a build is
-actively running against the main directory, do the edits in the git
-worktree at `.worktrees/phase3` instead — editing a file a live pipeline
-run has mounted/is reading caused a real corruption incident earlier in
-this project's history.
+actively running against the main directory, do the edits in a separate
+`git worktree` instead (`git worktree add -b <branch> .worktrees/<name>
+<base-branch>`, remove it with `git worktree remove` once merged back) —
+editing a file a live pipeline run has mounted/is reading caused a real
+corruption incident earlier in this project's history, and a worktree is
+a physically separate checkout that avoids the problem entirely while
+still letting builds run in parallel.
 
 ## Branching / PR structure
 
