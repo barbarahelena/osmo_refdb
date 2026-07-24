@@ -27,12 +27,12 @@ Idempotent: the first run snapshots each as-is FASTA (refs/<family>.
 from that snapshot, so re-running with a different --max-ratio is safe.
 
 Fusion-partner families (families.yaml: `fusion_partner: <other family>`,
-e.g. mrpA/mrpD, whose gene product is a single fused ORF in some lineages
+e.g. mrpA/mrpB, whose gene product is a single fused ORF in some lineages
 -- see families.yaml): a sequence roughly double the family's own median
 length would normally get dropped here as a probable fusion artifact, which
 is exactly wrong for these two -- the fused ORF is a real, valid detection
 target (Task 1b), just one the standard single-family MSA/HMM can't
-represent (aligning a ~1300aa fused sequence alongside ~800aa standalone
+represent (aligning a ~1000aa fused sequence alongside ~800aa standalone
 mrpA sequences would badly gap the alignment for everyone). So for these
 families specifically, an over-length candidate is checked against a SECOND
 window centered on (own_median + partner_median) instead of being flagged

@@ -113,7 +113,7 @@ do_build() {
     python pipeline/08a_build_decoy_refs.py --refs "${REFS_DIR}" --families "${FAMILIES_FILE}"
 
     echo ""
-    echo "--- 8d. Build fused-ORF references (e.g. mrpA/mrpD single-ORF lineages) ---"
+    echo "--- 8d. Build fused-ORF references (e.g. mrpA/mrpB single-ORF lineages) ---"
     python pipeline/08d_build_fusion_refs.py --refs "${REFS_DIR}" --families "${FAMILIES_FILE}"
 
     echo ""

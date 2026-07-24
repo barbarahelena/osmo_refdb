@@ -4,15 +4,18 @@
 01c_check_length_outliers.py into a single, searchable DIAMOND reference
 per declared fusion pair (families.yaml: `fusion_partner`).
 
-Motivating case: mrpA/mrpD (Task 1b). In some lineages the Mrp/Mnh Na+/H+
-antiporter's A and D subunits occur as one fused ORF instead of two genes.
-01c already keeps these out of the standard positive.faa (a ~1300aa fused
+Motivating case: mrpA/mrpB (Task 1b). In some lineages the Mrp/Mnh Na+/H+
+antiporter's A and B subunits occur as one fused ORF instead of two genes,
+confirmed via direct UniProt search and dispersed across Actinomycetota,
+Bacillota (specifically Paenibacillaceae), and some Alphaproteobacteria --
+see families.yaml's mrpA/mrpB entries for the taxonomic evidence. 01c
+already keeps these out of the standard positive.faa (a ~1000aa fused
 sequence would badly gap the MAFFT alignment of ~800aa standalone mrpA
 sequences) and routes them to refs/<family>.positive.fusion_candidates.faa
 instead of the length-outliers pile. This script is what actually makes
 them searchable: it merges a pair's fusion candidates (deduped by UniProt
 accession, since the same fused protein can turn up in both mrpA's and
-mrpD's raw fetch depending which gene symbol it happened to be annotated
+mrpB's raw fetch depending which gene symbol it happened to be annotated
 under), retags them under one shared "<familyA>_<familyB>_fused" label, and
 writes a combined FASTA that 08_build_diamond_db.sh folds into the DIAMOND
 db like any other family.

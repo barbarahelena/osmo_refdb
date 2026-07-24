@@ -183,21 +183,24 @@ back to a normal custom-built model instead.
 Optional `fusion_partner: <other family name>` + `fusion_marker_pfam:
 PFxxxxx` fields: for a pair of families whose gene products occur as a
 single fused ORF in some lineages instead of two separate genes (currently
-only mrpA/mrpD — Bacillota's Mrp/Mnh Na+/H+ antiporter subunits A and D).
-Without this, `01c_check_length_outliers.py` would drop a genuine fused-ORF
-sequence as a probable fusion *artifact* (it's roughly the sum of both
-subunits' lengths) — exactly wrong here, since Task 1b explicitly wants the
-fused form recognized as a real detection target. With `fusion_partner`
-declared, an over-length candidate is checked against a second length
-window centered on (this family's median + the partner's median) instead of
-being discarded outright; `fusion_marker_pfam` (a Pfam domain unique to one
-partner, absent from a standalone copy of the other — confirmed via
-UniProt's own domain annotation, fetched by `01_fetch_refs.py` for
-`fusion_partner` families specifically) confirms it's a true fusion rather
-than an unrelated length outlier when domain evidence is available, and is
-advisory (not required) otherwise. Confirmed fusion candidates are routed
-to `refs/<family>.positive.fusion_candidates.faa` — excluded from this
-family's own MAFFT alignment/HMM (a ~1300aa fused sequence would badly gap
+only mrpA/mrpB — the Mrp/Mnh Na+/H+ antiporter's A and B subunits, confirmed
+via UniProt domain-architecture evidence across Actinomycetota, Bacillota
+specifically Paenibacillaceae, and some Alphaproteobacteria — see
+`families.yaml`'s mrpA/mrpB entries for the taxonomic detail). Without this,
+`01c_check_length_outliers.py` would drop a genuine fused-ORF sequence as a
+probable fusion *artifact* (it's roughly the sum of both subunits' lengths)
+— exactly wrong here, since Task 1b explicitly wants the fused form
+recognized as a real detection target. With `fusion_partner` declared, an
+over-length candidate is checked against a second length window centered on
+(this family's median + the partner's median) instead of being discarded
+outright; `fusion_marker_pfam` (a Pfam domain unique to one partner, absent
+from a standalone copy of the other — confirmed via UniProt's own domain
+annotation, fetched by `01_fetch_refs.py` for `fusion_partner` families
+specifically) confirms it's a true fusion rather than an unrelated length
+outlier when domain evidence is available, and is advisory (not required)
+otherwise. Confirmed fusion candidates are routed to
+`refs/<family>.positive.fusion_candidates.faa` — excluded from this
+family's own MAFFT alignment/HMM (a ~1000aa fused sequence would badly gap
 the alignment of ~800aa standalone sequences) but picked up by
 `pipeline/08d_build_fusion_refs.py`, which merges a pair's fusion
 candidates (deduped by UniProt accession) into one `<familyA>_<familyB>_fused`
@@ -207,10 +210,7 @@ is not added to `osmotool profile`/`annotate`'s exclusion lists. What a
 `_fused` hit should imply for the two individual family calls is
 complex-aware scoring logic that lives downstream in `osmotool`, not in
 this repo. See `pipeline/01c_check_length_outliers.py` and
-`pipeline/08d_build_fusion_refs.py` docstrings for the full mechanism, and
-`families.yaml`'s mrpA entry for an honest note on searching UniProt
-directly for confirmed mrpA/mrpD fusion examples (none found at time of
-writing — the mechanism is built defensively per the spec regardless).
+`pipeline/08d_build_fusion_refs.py` docstrings for the full mechanism.
 
 Optional `max_positive_override: <int>` field: per-family cap on
 `01_fetch_refs.py`'s positive-set fetch, overriding the global
@@ -267,7 +267,7 @@ everything together.
 | 6b | `06b_qc_scorecard.py` | Consolidate negative-purity, length-outlier, and HMM-cutoff-overlap manifests into one per-family scorecard (`qc_scorecard.tsv`) flagging families that need review |
 | 7 | `07_press_hmms.sh` | Concatenate + hmmpress into one binary HMM database |
 | 8a | `08a_build_decoy_refs.py` | For families marked `decoy_from_negatives: true` (e.g. betL), turn their held-out negative-train split into searchable `<family>_decoy` DIAMOND references -- confusable paralogs (e.g. betT/caiT) that can win DIAMOND's best-hit contest away from a mislabeled call, since a single score threshold can't separate them (see betL's `families.yaml` entry) |
-| 8d | `08d_build_fusion_refs.py` | For families.yaml pairs marked `fusion_partner` (e.g. mrpA/mrpD), merge each pair's fusion-candidate sequences (flagged by 01c, deduped by UniProt accession) into one searchable `<familyA>_<familyB>_fused` DIAMOND reference -- a real, reportable detection target for a single-ORF fused lineage, not excluded from output the way decoys are |
+| 8d | `08d_build_fusion_refs.py` | For families.yaml pairs marked `fusion_partner` (e.g. mrpA/mrpB), merge each pair's fusion-candidate sequences (flagged by 01c, deduped by UniProt accession) into one searchable `<familyA>_<familyB>_fused` DIAMOND reference -- a real, reportable detection target for a single-ORF fused lineage, not excluded from output the way decoys are |
 | 8 | `08_build_diamond_db.sh` | Build a DIAMOND db from TRAIN positives + any decoy refs from step 8a + any fused refs from step 8d |
 | 8b | `08b_calibrate_diamond_cutoffs.py` | Calibrate a per-family minimum DIAMOND bitscore, mirroring HMM's GA cutoff -- DIAMOND otherwise applies one flat `--min_identity` across every family, which can't separate a true gene from a genuinely close paralog (e.g. betL vs betT) whose identity to it happens to exceed that flat threshold |
 | 8c | `08c_write_scope_manifest.py` | Write `osmo_refdb.profile_excluded_families.txt` (families marked `scope: annotate_only`, e.g. murB, plus all decoy labels) and `osmo_refdb.annotate_excluded_families.txt` (decoy labels only), consumed by `osmotool profile`/`annotate --exclude_families` |

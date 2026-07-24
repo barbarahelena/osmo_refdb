@@ -413,9 +413,10 @@ families:
 #                         multi-substrate fold).
 #   fusion_partner: name  Declares this family's gene product occurs as a
 #                         single fused ORF with the named partner family in
-#                         some lineages (only mrpA/mrpD here). See
-#                         01_fetch_refs.py, 01c_check_length_outliers.py,
-#                         and 08d_build_fusion_refs.py for the mechanism.
+#                         some lineages (only mrpA/mrpB here -- see mrpA's
+#                         entry below for the taxonomic evidence). See
+#                         01_fetch_refs.py, 01c_check_length_outliers.py, and
+#                         08d_build_fusion_refs.py for the mechanism.
 #   fusion_marker_pfam: PFxxxxx  Paired with fusion_partner: a Pfam domain
 #                         that, when found in an over-length candidate from
 #                         EITHER partner's raw fetch, confirms a genuine
@@ -440,23 +441,29 @@ families:
       family's own GA cutoff would be gene-specific enough here; kept as a
       custom model built from the full four-domain architecture instead.
 
-      fusion_partner/fusion_marker_pfam (mrpD/PF13244): Task 1b notes mrpA
-      and mrpD can occur as a single fused ORF in some lineages, and asks
-      for the ref/HMM/DIAMOND set to allow matching either configuration
-      (see 01c_check_length_outliers.py, 08d_build_fusion_refs.py). Direct
-      UniProt search (gene:mrpA / gene:mnhA, all bacteria, length-filtered)
-      did NOT turn up a confirmed mrpA-mrpD fusion at time of writing --
-      what it did turn up is a DIFFERENT real fusion: mrpA/mnhA + mrpB/mnhB
-      in Actinomycetota (e.g. Corynebacterium jeikeium Q4JSN9, 1079aa,
+      fusion_partner/fusion_marker_pfam: mrpA and mrpB can occur as a
+      single fused ORF (e.g. Corynebacterium jeikeium Q4JSN9, 1079aa,
       PF13244+PF20501+PF04039+PF00361+PF00662 in one ORF under the gene
-      symbol "mnhB"). The mechanism below is built anyway, defensively, per
-      the spec's explicit instruction, and will correctly capture a true
-      mrpA-mrpD fusion if the full (non-sample-limited) fetch turns one up
-      in a lineage this quick search didn't sample.
+      symbol "mnhB"), confirmed via direct UniProt search -- 109 >900aa
+      PF13244-carrying hits within Bacillota alone (taxonomy_id:1239),
+      concentrated in Paenibacillaceae (Paenibacillus, Saccharibacillus,
+      Cohnella -- e.g. A0A919Y2M6, gene symbol literally "mrpA", 957aa,
+      Paenibacillus apis), plus further confirmed examples in
+      Actinomycetota and Alphaproteobacteria (Rhizobium/Sinorhizobium,
+      Sulfitobacter, Thioclava, Shimia). Genus Bacillus itself
+      (taxonomy_id:1386, B. subtilis's own genus) shows zero fused hits --
+      it always keeps mrpA/mrpB split. This fusion is taxonomically
+      dispersed and varies even WITHIN Bacillota at the family level
+      (Paenibacillaceae vs. Bacillaceae) -- it doesn't track any single
+      clean phylum boundary, which is why this mechanism detects it from
+      the ORF's own domain/length signature (see
+      01c_check_length_outliers.py, 08d_build_fusion_refs.py) rather than
+      from a taxonomic rule. mrpD has no fusion_partner set -- no evidence
+      of an mrpD fusion turned up in any search run.
     positive_query: "(gene:mrpA OR gene:mnhA) AND taxonomy_id:2"
     negative_query: "xref:pfam-PF00361 NOT (gene:mrpA OR gene:mnhA OR gene:mrpD OR gene:mnhD) AND taxonomy_id:2"
     negative_pfam: PF00361   # shared with mrpD's own architecture and with generic Complex I NuoL/M/N-type subunits
-    fusion_partner: mrpD
+    fusion_partner: mrpB
     fusion_marker_pfam: PF13244
 
   - name: mrpB
@@ -467,18 +474,25 @@ families:
       across 11107 proteins, name matches the gene one-to-one -- adopted
       via pfam_model, retiring custom empirical calibration for the HMM
       path (DIAMOND references still come from our own UniProt fetch as
-      normal). Caution: the Actinomycetota mrpA+mrpB fusion noted under
-      mrpA above will also surface in this family's raw positive fetch
-      (the same ~1000aa "mnhB"-labeled proteins) -- since no fusion_partner
-      is declared here, 01c's ordinary length-outlier filter correctly
-      drops them from mrpB's positive set. No special handling added for
-      that fusion pair specifically: mrpB itself is genuinely present
-      within them, this repo just isn't building a dedicated detection
-      target for the mrpA+mrpB fusion (only mrpA+mrpD, per Task 1b).
+      normal).
+
+      fusion_partner/fusion_marker_pfam: mrpA is this family's confirmed
+      fused-ORF partner -- see mrpA's entry above for the taxonomic
+      evidence (Bacillota/Paenibacillaceae, Actinomycetota, some
+      Alphaproteobacteria; not universal even within Bacillota -- Bacillus
+      itself keeps them split). A raw mrpB/mnhB positive fetch pulls in
+      these same fused ~950-1100aa sequences (many literally
+      gene-symbol-annotated "mrpA", since the fused ORF's dominant/
+      N-terminal domain is mrpA's); with fusion_partner declared here, 01c
+      routes them to fusion_candidates.faa instead of the ordinary
+      length-outlier pile, and 08d_build_fusion_refs.py merges them into a
+      searchable mrpA_mrpB_fused DIAMOND reference.
     positive_query: "(gene:mrpB OR gene:mnhB) AND taxonomy_id:2"
     negative_query: "xref:pfam-PF04039 NOT (gene:mrpB OR gene:mnhB) AND taxonomy_id:2"
     negative_pfam: PF04039
     pfam_model: PF04039
+    fusion_partner: mrpA
+    fusion_marker_pfam: PF13244
 
   - name: mrpC
     description: >
@@ -498,14 +512,13 @@ families:
       Single domain PF00361, but that domain is itself broad (shared with
       generic Complex I NuoL/M/N-type subunits, and with mrpA's own
       architecture -- hence excluding mrpA/mnhA symbols from this family's
-      negative pool too) -- kept custom, not pfam_model-adopted. See mrpA's
-      entry above for the fusion_partner mechanism and the honest note
-      about not finding a confirmed mrpA-mrpD fusion example directly.
+      negative pool too) -- kept custom, not pfam_model-adopted. No
+      fusion_partner set: the confirmed fused-ORF pair in this complex is
+      mrpA+mrpB (see those entries above); no evidence turned up of mrpD
+      participating in a fusion with anything.
     positive_query: "(gene:mrpD OR gene:mnhD) AND taxonomy_id:2"
     negative_query: "xref:pfam-PF00361 NOT (gene:mrpD OR gene:mnhD OR gene:mrpA OR gene:mnhA) AND taxonomy_id:2"
     negative_pfam: PF00361
-    fusion_partner: mrpA
-    fusion_marker_pfam: PF13244
 
   - name: mrpE
     description: >
@@ -590,7 +603,7 @@ families:
       (Streptococcus, Enterococcus, Listeria and relatives) use a single
       bifunctional gshF/gshAB fusion enzyme (PF18419+PF04262) instead of
       separate gshA+gshB genes -- a second real gene-fusion case beyond the
-      one Task 1b called out for mrpA/mrpD, but out of scope to build
+      one Task 1b called out for mrpA/mrpB, but out of scope to build
       dedicated fusion-handling for here since it wasn't requested; those
       organisms will simply show no gshA/gshB hit despite having functional
       glutathione biosynthesis. Worth revisiting (a fusion_partner-style

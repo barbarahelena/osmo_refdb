@@ -257,7 +257,7 @@ def main() -> None:
         neg_fasta, n_neg = fetch_set(neg_query, f"{name}_neg", "negative", max_seqs=args.max_negative)
         (args.out / f"{name}.negative.faa").write_text(neg_fasta)
 
-        # Fusion-partner families (e.g. mrpA/mrpD, see families.yaml) need
+        # Fusion-partner families (e.g. mrpA/mrpB, see families.yaml) need
         # real Pfam domain evidence, not just length, to tell a genuine
         # fused ORF apart from an unrelated length outlier in step 01c --
         # fetch it now while we have network access to UniProt.
