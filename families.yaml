@@ -389,6 +389,159 @@ families:
   # Adding a second, separate opuD family here would create two
   # conflicting reference/HMM targets for the same protein.
 
+# --- 2026-07-23: Bacillota gap-filling, part 2 -- Mrp/Mnh Na+/H+
+# antiporter complex (Task 1b) -------------------------------------------
+#
+# nhaA is functionally absent outside Pseudomonadota/some Actinomycetota --
+# Bacillota uses the unrelated, multi-subunit Mrp/Mnh complex instead, so
+# nhaA alone reports a false "antiporter absent" signal for most
+# Firmicutes. mrpA-mrpG fixes this specifically.
+#
+# Two new families.yaml fields introduced here:
+#
+#   pfam_model: PFxxxxx   Use that Pfam family's own curated HMM (built from
+#                         Pfam's hand-curated seed alignment, carrying its
+#                         own GA/TC/NC lines) directly, instead of
+#                         hmmbuild-ing a fresh model from our own fetched-
+#                         and-aligned UniProt sequences -- see
+#                         05_build_hmms.sh and 06_calibrate_cutoffs.py.
+#                         Checked per gene, not assumed for the whole panel
+#                         (per-gene InterPro API check: domain_architectures
+#                         count and Pfam's own family description/name --
+#                         low architecture count + a name that matches the
+#                         gene one-to-one is a real Pfam family, not a broad
+#                         multi-substrate fold).
+#   fusion_partner: name  Declares this family's gene product occurs as a
+#                         single fused ORF with the named partner family in
+#                         some lineages (only mrpA/mrpD here). See
+#                         01_fetch_refs.py, 01c_check_length_outliers.py,
+#                         and 08d_build_fusion_refs.py for the mechanism.
+#   fusion_marker_pfam: PFxxxxx  Paired with fusion_partner: a Pfam domain
+#                         that, when found in an over-length candidate from
+#                         EITHER partner's raw fetch, confirms a genuine
+#                         fusion rather than an unrelated length outlier.
+
+  - name: mrpA
+    description: >
+      Subunit A of the Firmicutes-type Mrp/Mnh Na+/H+ antiporter complex
+      (Task 1b; fills the nhaA false-negative gap for Bacillota -- see this
+      section's header). mrpA and mnhA are literal synonyms for the same
+      gene product (Mrp = "multiple resistance and pH adaptation"; Mnh =
+      the same complex under an alternate naming convention used in
+      different lineages) -- confirmed via matching Pfam domain
+      architecture (PF13244+PF20501+PF00361+PF00662) across both symbol
+      sets, so both are folded into one positive class, the same synonym
+      treatment betL/betP/opuD/betS already use elsewhere in this panel.
+      NOT pfam_model-adopted: none of the four component Pfam domains is
+      specific to Mrp/Mnh alone -- PF13244 in particular ("MBH, subunit D")
+      is shared with the structurally related but functionally distinct
+      membrane-bound-hydrogenase (MBH) complex, and PF00361 is shared with
+      ordinary Complex I NuoL/M/N-type subunits -- so no single Pfam
+      family's own GA cutoff would be gene-specific enough here; kept as a
+      custom model built from the full four-domain architecture instead.
+
+      fusion_partner/fusion_marker_pfam (mrpD/PF13244): Task 1b notes mrpA
+      and mrpD can occur as a single fused ORF in some lineages, and asks
+      for the ref/HMM/DIAMOND set to allow matching either configuration
+      (see 01c_check_length_outliers.py, 08d_build_fusion_refs.py). Direct
+      UniProt search (gene:mrpA / gene:mnhA, all bacteria, length-filtered)
+      did NOT turn up a confirmed mrpA-mrpD fusion at time of writing --
+      what it did turn up is a DIFFERENT real fusion: mrpA/mnhA + mrpB/mnhB
+      in Actinomycetota (e.g. Corynebacterium jeikeium Q4JSN9, 1079aa,
+      PF13244+PF20501+PF04039+PF00361+PF00662 in one ORF under the gene
+      symbol "mnhB"). The mechanism below is built anyway, defensively, per
+      the spec's explicit instruction, and will correctly capture a true
+      mrpA-mrpD fusion if the full (non-sample-limited) fetch turns one up
+      in a lineage this quick search didn't sample.
+    positive_query: "(gene:mrpA OR gene:mnhA) AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF00361 NOT (gene:mrpA OR gene:mnhA OR gene:mrpD OR gene:mnhD) AND taxonomy_id:2"
+    negative_pfam: PF00361   # shared with mrpD's own architecture and with generic Complex I NuoL/M/N-type subunits
+    fusion_partner: mrpD
+    fusion_marker_pfam: PF13244
+
+  - name: mrpB
+    description: >
+      Subunit B of the Mrp/Mnh complex (Task 1b). mrpB/mnhB synonym pair,
+      same reasoning as mrpA above. PF04039 ("MnhB" in Pfam's own naming)
+      checked individually via the InterPro API: 18 domain architectures
+      across 11107 proteins, name matches the gene one-to-one -- adopted
+      via pfam_model, retiring custom empirical calibration for the HMM
+      path (DIAMOND references still come from our own UniProt fetch as
+      normal). Caution: the Actinomycetota mrpA+mrpB fusion noted under
+      mrpA above will also surface in this family's raw positive fetch
+      (the same ~1000aa "mnhB"-labeled proteins) -- since no fusion_partner
+      is declared here, 01c's ordinary length-outlier filter correctly
+      drops them from mrpB's positive set. No special handling added for
+      that fusion pair specifically: mrpB itself is genuinely present
+      within them, this repo just isn't building a dedicated detection
+      target for the mrpA+mrpB fusion (only mrpA+mrpD, per Task 1b).
+    positive_query: "(gene:mrpB OR gene:mnhB) AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF04039 NOT (gene:mrpB OR gene:mnhB) AND taxonomy_id:2"
+    negative_pfam: PF04039
+    pfam_model: PF04039
+
+  - name: mrpC
+    description: >
+      Subunit C of the Mrp/Mnh complex (Task 1b). mrpC/mnhC synonym pair.
+      PF00420 ("Oxidored_q2") checked and rejected for pfam_model: broad
+      (66 domain architectures, 33257 proteins), shared with the unrelated
+      nuoK/ndhK Complex I subunit-4L family well beyond Mrp/Mnh -- kept as
+      a custom gene-symbol-anchored model, same caution tier as ectB/mscS/
+      galE elsewhere in this panel; check qc_scorecard.tsv before trusting.
+    positive_query: "(gene:mrpC OR gene:mnhC) AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF00420 NOT (gene:mrpC OR gene:mnhC) AND taxonomy_id:2"
+    negative_pfam: PF00420   # Oxidored_q2, broad Complex-I-type subunit 4L family, also covers nuoK/ndhK
+
+  - name: mrpD
+    description: >
+      Subunit D of the Mrp/Mnh complex (Task 1b). mrpD/mnhD synonym pair.
+      Single domain PF00361, but that domain is itself broad (shared with
+      generic Complex I NuoL/M/N-type subunits, and with mrpA's own
+      architecture -- hence excluding mrpA/mnhA symbols from this family's
+      negative pool too) -- kept custom, not pfam_model-adopted. See mrpA's
+      entry above for the fusion_partner mechanism and the honest note
+      about not finding a confirmed mrpA-mrpD fusion example directly.
+    positive_query: "(gene:mrpD OR gene:mnhD) AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF00361 NOT (gene:mrpD OR gene:mnhD OR gene:mrpA OR gene:mnhA) AND taxonomy_id:2"
+    negative_pfam: PF00361
+    fusion_partner: mrpA
+    fusion_marker_pfam: PF13244
+
+  - name: mrpE
+    description: >
+      Subunit E of the Mrp/Mnh complex (Task 1b). mrpE/mnhE synonym pair.
+      PF01899 ("MNHE" in Pfam's own naming) checked: 9 domain
+      architectures, 10745 proteins, name matches directly -- adopted via
+      pfam_model.
+    positive_query: "(gene:mrpE OR gene:mnhE) AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF01899 NOT (gene:mrpE OR gene:mnhE) AND taxonomy_id:2"
+    negative_pfam: PF01899
+    pfam_model: PF01899
+
+  - name: mrpF
+    description: >
+      Subunit F of the Mrp/Mnh complex (Task 1b). mrpF/mnhF synonym pair
+      (Pfam also documents a third alias, PhaF, from yet another organism's
+      nomenclature for this same protein). PF04066 ("MrpF_PhaF") checked: 9
+      domain architectures, name matches directly -- adopted via
+      pfam_model.
+    positive_query: "(gene:mrpF OR gene:mnhF) AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF04066 NOT (gene:mrpF OR gene:mnhF) AND taxonomy_id:2"
+    negative_pfam: PF04066
+    pfam_model: PF04066
+
+  - name: mrpG
+    description: >
+      Subunit G of the Mrp/Mnh complex (Task 1b). mrpG/mnhG synonym pair
+      (Pfam also documents yufB, B. subtilis's own locus-tag-derived alias
+      for this gene, as a third name for the same family). PF03334
+      ("PhaG_MnhG_YufB") checked: 12 domain architectures, name matches --
+      adopted via pfam_model.
+    positive_query: "(gene:mrpG OR gene:mnhG) AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF03334 NOT (gene:mrpG OR gene:mnhG) AND taxonomy_id:2"
+    negative_pfam: PF03334
+    pfam_model: PF03334
+
 # Considered and deferred (2026-07-16): proV, proW, gbsA, gbsB
 #
 # Requested alongside proX/proP/gbsAB, but skipped for now because their

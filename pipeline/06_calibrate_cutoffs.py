@@ -34,8 +34,22 @@ Strategy (mirrors how Pfam sets GA cutoffs):
     manual review — the benchmark (ROC/PR) remains the final word on
     whether the family is usable with an HMM.
 
+families.yaml `pfam_model: PFxxxxx` families (see 05_build_hmms.sh) are
+handled differently here: their .hmm file already carries a real GA cutoff
+-- Pfam's own, curated for that Pfam family, not computed by this script --
+so it's read and left as-is rather than overwritten. Our own held-out
+positive/negative sets are still scored against it (already done by
+05_build_hmms.sh) purely to confirm Pfam's cutoff actually separates OUR
+curated true positives from OUR hard negatives; a bad result there
+(status="pfam_ga_review_needed" in the manifest) means the assumption that
+this Pfam family is gene-specific enough for our purposes was wrong, not
+that the number itself needs recalculating -- if that happens, remove
+pfam_model from that family in families.yaml and let it fall back to a
+normal custom-built, empirically-calibrated model instead.
+
 Usage: python 06_calibrate_cutoffs.py [--hmms hmms] [--families families.yaml]
-Output: updates hmms/<family>.hmm in place with a GA line
+Output: updates hmms/<family>.hmm in place with a GA line (skipped for
+        pfam_model families, whose GA line is Pfam's own)
         hmms/cutoff_manifest.tsv
 """
 
@@ -54,6 +68,17 @@ def load_family_names(path: Path) -> list[str]:
     with open(path) as fh:
         data = yaml.safe_load(fh)
     return [fam["name"] for fam in data["families"]]
+
+
+def load_pfam_model_families(path: Path) -> dict[str, str]:
+    with open(path) as fh:
+        data = yaml.safe_load(fh)
+    return {fam["name"]: fam["pfam_model"] for fam in data["families"] if fam.get("pfam_model")}
+
+
+def get_ga_line(hmm_path: Path) -> float | None:
+    match = re.search(r"^GA\s+([\d.]+)", hmm_path.read_text(), flags=re.MULTILINE)
+    return float(match.group(1)) if match else None
 
 
 def parse_tblout_scores(path: Path) -> np.ndarray:
@@ -171,6 +196,7 @@ def main() -> None:
     hmm_dir = args.hmms
     score_dir = hmm_dir / "scores"
     families = load_family_names(args.families)
+    pfam_model_families = load_pfam_model_families(args.families)
 
     manifest_rows = []
 
@@ -189,9 +215,32 @@ def main() -> None:
         # actually run against a non-empty negative FASTA; distinguishing
         # "ran but found nothing" from "never ran" changes the interpretation.
         neg_file_exists = neg_path.exists() and neg_path.stat().st_size > 0
-        cutoff, status, f1_at_cutoff = choose_cutoff(pos_scores, neg_scores, neg_file_exists)
 
-        set_ga_line(hmm_path, cutoff)
+        if family in pfam_model_families:
+            cutoff = get_ga_line(hmm_path)
+            if cutoff is None:
+                print(f"[{family}] WARNING: pfam_model={pfam_model_families[family]} but no GA line "
+                      f"found in {hmm_path} -- falling back to empirical calibration")
+                cutoff, status, f1_at_cutoff = choose_cutoff(pos_scores, neg_scores, neg_file_exists)
+                set_ga_line(hmm_path, cutoff)
+            else:
+                # Don't overwrite -- this IS Pfam's own GA line already.
+                # Just check how well it separates OUR curated sets, for
+                # the manifest (see module docstring).
+                n_pos_below = int((pos_scores < cutoff).sum()) if len(pos_scores) else 0
+                n_neg_above = int((neg_scores >= cutoff).sum()) if len(neg_scores) else 0
+                status = ("pfam_ga_clean" if n_pos_below == 0 and n_neg_above == 0
+                          else "pfam_ga_review_needed")
+                tp = len(pos_scores) - n_pos_below
+                fp = n_neg_above
+                fn = n_pos_below
+                precision = tp / (tp + fp) if (tp + fp) else 0.0
+                recall = tp / (tp + fn) if (tp + fn) else 0.0
+                f1_at_cutoff = (2 * precision * recall / (precision + recall)
+                                 if (precision + recall) else None)
+        else:
+            cutoff, status, f1_at_cutoff = choose_cutoff(pos_scores, neg_scores, neg_file_exists)
+            set_ga_line(hmm_path, cutoff)
 
         f1_str = f"{f1_at_cutoff:.3f}" if f1_at_cutoff is not None else "n/a"
         print(f"[{family}] cutoff={cutoff:.2f} status={status} f1={f1_str} "
@@ -217,7 +266,8 @@ def main() -> None:
         writer.writeheader()
         writer.writerows(manifest_rows)
 
-    n_review = sum(1 for r in manifest_rows if r["status"] != "clean_separation")
+    CLEAN_STATUSES = {"clean_separation", "pfam_ga_clean"}
+    n_review = sum(1 for r in manifest_rows if r["status"] not in CLEAN_STATUSES)
     print(f"\nDone. {len(manifest_rows)} families calibrated, {n_review} flagged for review.")
     print(f"Manifest: {manifest_path}")
 

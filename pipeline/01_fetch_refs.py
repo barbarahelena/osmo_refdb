@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import re
 import time
 from datetime import date
 from pathlib import Path
@@ -32,6 +33,21 @@ UNIPROT_API = "https://rest.uniprot.org/uniprotkb/search"
 UNIPROT_INFO = "https://rest.uniprot.org/utils/release"
 BATCH_SIZE = 500
 SLEEP_BETWEEN_PAGES = 0.5
+
+
+def next_page_url(link_header: str) -> str | None:
+    """Extract the rel="next" URL from a UniProt Link header.
+
+    NOT a naive split(",") -- a request with multiple comma-separated
+    `fields` (e.g. "accession,xref_pfam", used by fetch_pfam_domains below)
+    produces a Link header whose URL itself contains a comma, which a plain
+    split(",") chops mid-URL. Match each "<url>; rel=..." segment instead,
+    since the only commas that matter are the ones separating whole link
+    entries, immediately after a closing '>'."""
+    for url, rel in re.findall(r'<([^>]+)>\s*;\s*rel="([^"]+)"', link_header):
+        if rel == "next":
+            return url
+    return None
 
 
 def load_families(path: Path) -> list[dict]:
@@ -72,14 +88,7 @@ def fetch_all_sequences(query: str, max_seqs: int | None = None) -> str:
         if max_seqs is not None and n_fetched >= max_seqs:
             break
 
-        link_header = r.headers.get("Link", "")
-        next_url = None
-        for part in link_header.split(","):
-            part = part.strip()
-            if 'rel="next"' in part:
-                next_url = part.split(";")[0].strip().strip("<>")
-                break
-        url = next_url
+        url = next_page_url(r.headers.get("Link", ""))
         page += 1
         if url:
             time.sleep(SLEEP_BETWEEN_PAGES)
@@ -131,6 +140,45 @@ def fetch_set(query: str, tag: str, label: str, max_seqs: int | None = None) -> 
         return "", 0
 
 
+def fetch_pfam_domains(query: str, max_seqs: int | None = None) -> dict[str, list[str]]:
+    """
+    Fetch each matching accession's Pfam domain-accession list (UniProt's
+    own curated annotation, not something we compute). Used only for
+    families that declare `fusion_partner` in families.yaml, to give
+    01c_check_length_outliers.py real domain evidence (not just length) for
+    telling a genuine fused ORF apart from an unrelated length outlier --
+    see that script's docstring.
+    """
+    params = {"query": query, "format": "tsv", "fields": "accession,xref_pfam", "size": BATCH_SIZE}
+    domains: dict[str, list[str]] = {}
+    url = UNIPROT_API
+    page = 1
+    n_fetched = 0
+
+    while url:
+        r = requests.get(url, params=params if page == 1 else None, timeout=60)
+        r.raise_for_status()
+        lines = r.text.strip().split("\n")[1:]  # skip header
+        for line in lines:
+            if not line:
+                continue
+            parts = line.split("\t")
+            accession = parts[0]
+            pfam = parts[1].strip(";").split(";") if len(parts) > 1 and parts[1] else []
+            domains[accession] = pfam
+        n_fetched += len(lines)
+
+        if max_seqs is not None and n_fetched >= max_seqs:
+            break
+
+        url = next_page_url(r.headers.get("Link", ""))
+        page += 1
+        if url:
+            time.sleep(SLEEP_BETWEEN_PAGES)
+
+    return domains
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--families", type=Path, default=Path("families.yaml"))
@@ -165,6 +213,20 @@ def main() -> None:
 
         neg_fasta, n_neg = fetch_set(neg_query, f"{name}_neg", "negative", max_seqs=args.max_negative)
         (args.out / f"{name}.negative.faa").write_text(neg_fasta)
+
+        # Fusion-partner families (e.g. mrpA/mrpD, see families.yaml) need
+        # real Pfam domain evidence, not just length, to tell a genuine
+        # fused ORF apart from an unrelated length outlier in step 01c --
+        # fetch it now while we have network access to UniProt.
+        if fam.get("fusion_partner"):
+            domains = fetch_pfam_domains(pos_query, max_seqs=args.max_positive)
+            domains_path = args.out / f"{name}.positive.domains.tsv"
+            with open(domains_path, "w", newline="") as fh:
+                writer = csv.writer(fh, delimiter="\t")
+                writer.writerow(["accession", "pfam_domains"])
+                for accession, pfam in domains.items():
+                    writer.writerow([accession, ";".join(pfam)])
+            print(f"  Pfam domain evidence for {len(domains)} accessions -> {domains_path}")
 
         manifest_rows.append({
             "family": name,
