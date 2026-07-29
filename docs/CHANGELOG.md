@@ -2,7 +2,7 @@
 
 Chronological summary of osmo_refdb's development, from the initial
 pipeline build through the current negative-pool quality follow-up work
-on branch `fix-numbered-paralog-gaps`. Full rationale and evidence for
+on branch `cluster-negatives-cdhit`. Full rationale and evidence for
 each item lives in `families.yaml`'s per-family `description` fields and
 `README.md`; this file is a summary, not the source of truth.
 
@@ -347,3 +347,187 @@ contamination, per the plan's original Phase 5 framing.
   pushed, PR #11 open against `fix-numbered-paralog-gaps`.
 - **Phase 6** (qc_scorecard-as-gate documentation for `pfam_model`): not
   yet started.
+
+## This branch (`cluster-negatives-cdhit`) — negative-pool contamination & length-filter calibration
+
+Branched off `main` after PR #13 merged. Two starting points: the branch's
+namesake fix (CD-HIT wasn't deduplicating negatives, only positives, before
+the train/test split) and a live question about whether the length-outlier
+filter's median — computed from a *capped, sampled* negative fetch — was
+itself part of why some families' negative pools perform poorly.
+
+### CD-HIT clustering extended to negatives (`0038d82`)
+
+`02_cluster_cdhit.sh` previously deduplicated only `*.positive.faa`.
+Near-duplicate negatives splitting randomly across train/test lets a
+`decoy_from_negatives` family's DIAMOND reference "see" a near-identical
+sequence to one of its own benchmark negatives, inflating apparent decoy
+performance — the same anti-leakage argument that already justified
+clustering positives. Now clusters both labels for every family.
+
+### Extra-positives merge step (`1e9c887`)
+
+Added `01d_add_extra_positives.py`, wired in as build step 1d (between
+length-outlier filtering and clustering): merges manually-curated hits from
+a study's own assemblies (e.g. Bakta calls this repo's own detector missed
+on mazG/mscS/trkA/trkH) into a family's positive set via
+`extra_sequences/<family>.faa` (gitignored, local study data). Tested via
+`families_bakta_test.yaml` against those four motivating families.
+
+### mrpA/mrpB: median instability disproven, real bug found instead (`5fd6e1f`)
+
+Tested the original hypothesis — recalibrate a family's length-filter
+median from a larger, uncapped fetch — on two documented bad performers.
+
+- **mrpC**: negative-set median identical (102aa) whether fetched capped
+  (n=1000) or fully uncapped (n=24,356). Not a length-filter problem — its
+  low precision is the same "real orthologs UniProt never assigned a
+  symbol to" structural contamination as Phase 3 documented for other
+  families; ruled out as a length-filter fix target.
+- **mrpB**: median *also* stable regardless of sample size (937–944aa) —
+  but that stable number was itself wrong. Found ~68% of its negative pool
+  was genuine mrpA+mrpB fused-ORF sequences under bare locus tags (same
+  PF13244+PF20501+PF04039+PF00361+PF00662 architecture as mrpA's
+  documented fusion cases, confirmed via direct UniProt lookup), invisible
+  to the negative_query's gene-symbol exclusion and to 01c's
+  positive-fetch-only fusion detection. Being the majority of the pool,
+  they set the "normal" median, causing the filter to discard the true
+  ~140aa hard negatives as outliers instead of the contamination.
+- **Fix**: 01_fetch_refs.py now fetches Pfam domain evidence for the
+  *negative* fetch too (previously positive-only) for `fusion_partner`
+  families; 01c strips domain-confirmed fused-ORF sequences out of the
+  negative pool *before* computing the median (length can't be used here
+  — it's exactly what the contamination corrupts). 08d_build_fusion_refs.py
+  picks these up as a bonus addition to the shared `mrpA_mrpB_fused`
+  DIAMOND reference (they're genuine detection targets, not just
+  decontaminated negatives). Confirmed: mrpB's negative median drops
+  937aa→161aa; mrpA sees the same effect at smaller scale (~5%, since its
+  negative anchor domain PF00361 is broader/more diluted). Regression
+  -tested against all 84 other family/label combinations in the existing
+  `v7` build — byte-identical.
+
+### otsA/otsB: same bug found a second time (`fa6f229`)
+
+Tested three more candidates (ktrA, otsB, opuCA) for median instability —
+all three stable, ruling that out — but investigating *why* their medians
+sat far from their own positive medians surfaced a second instance of the
+mrpA/mrpB bug:
+
+- **otsA/otsB**: ~41–59% of both families' negative pools are genuine
+  bifunctional trehalose-phosphate synthase+phosphatase proteins
+  (PF00982+PF02358 in one ORF, bare locus tags, some annotated
+  "glucosylglycerol-phosphate synthase" — a closely related bifunctional
+  enzyme with the same two-domain shape) — an undeclared analog of the
+  mrpA/mrpB fusion, confirmed via direct UniProt lookup. Declared
+  `fusion_partner`/`fusion_marker_pfam` for both, reusing the mrpA/mrpB
+  mechanism with no code changes needed. Confirmed: otsA's negative median
+  drops 724aa→487aa, otsB's drops 725aa→263aa (now matching its own
+  positive median almost exactly).
+- **ktrA**: dominant negative cluster is unrelated NhaP2/generic
+  RCK-domain proteins sharing the broad PF02080 domain — genuine
+  promiscuity, not a hidden fusion, no quick fix.
+- **opuCA**: dominant cluster is `guaB`/IMP dehydrogenase, unrelated,
+  sharing the broad CBS domain (PF00571) — same story, no quick fix.
+
+### Pushing the fix upstream to query time (`4d8ca08`)
+
+Negative queries for `fusion_partner` families now exclude the partner's
+marker domain at fetch time (`NOT xref:pfam-<marker>`), not just post-hoc
+— confirmed on mrpB: drops the raw population from 9,774 to 3,739, so the
+same n=1000 fetch budget lands entirely on genuine hard negatives instead
+of mostly-discarded contamination (previously only ~231/1000 survived).
+
+Added a dedicated, uncapped combined-domain query per declared fusion pair
+to comprehensively recover fusion candidates directly, replacing reliance
+on incidentally spotting them. Getting the query right took two false
+starts, both instructive:
+
+- A naive "AND the two declared marker domains" breaks when a pair shares
+  one marker value (mrpA/mrpB both declare PF13244) — substituting a
+  family's own `negative_pfam` isn't safe either, since that domain can
+  also be part of the *same* family's own standalone architecture
+  (confirmed: `PF00361 AND PF13244` just re-matched ~8k ordinary mrpA
+  orthologs, not fusions).
+- Fixed by verifying each candidate domain empirically against each
+  family's own already-fetched `positive.domains.tsv` (self-intrinsic to
+  one side, foreign to the other) before combining them. Even that can't
+  resolve every pair: mrpA is itself a large multi-domain protein (own
+  median ~800aa) whose size range overlaps the fused-with-mrpB range
+  (~940aa), so no domain pair can be verified safe for it — the dedicated
+  fetch correctly skips that pair in favor of the already-validated
+  incidental-discovery + post-hoc pre-filter. otsA/otsB's dedicated fetch
+  works cleanly (1,390 candidates via `PF00982 AND PF02358`).
+- Also fixed two stale-file bugs found while testing this (in both
+  `01_fetch_refs.py` and `08d_build_fusion_refs.py`): a re-run that
+  decides to skip a pair now deletes any dedicated-fetch/merged-fusion
+  output left over from a previous (or buggy) run, instead of silently
+  leaving it for the next step to trust.
+
+### Full-panel sweep: mazG is the only genuine median-instability case (`c752e7e`)
+
+Systematically checked every family whose negative fetch hits the default
+1000-sequence cap (38 of 43) for capped-vs-larger-fetch median instability
+— the original hypothesis this branch started from.
+
+- **Result: mazG is the only case in the entire panel.** Negative-set
+  median is 215aa at the default n=1000 cap vs. 116aa fetched at n=3000 —
+  a real, sample-size-driven effect. Every other family tested moved by
+  ~2% or less between those two fetch sizes (largest: cspA at 2.5%).
+- Two families hit a transient UniProt read-timeout during the sweep
+  (opuAB, opuBB) — re-fetched individually, both confirmed stable (~1%
+  change) once recovered.
+- **Fix, two parts** (fixing the median alone wasn't enough — see below):
+  new `max_negative_override` field (mirrors the existing
+  `max_positive_override` pattern) raises mazG's own fetch cap to 3000, so
+  a normal build actually pulls enough sequences near the true center;
+  confirmed that applying the correct 116aa median to the *old* capped
+  1000-sequence fetch left only 5 survivable negatives, since that small
+  sample barely contained anything near the true center in the first
+  place. New `negative_median_override` field pins the value itself (01c
+  reads it instead of recomputing), as protection against the value
+  drifting if UniProt's underlying data changes over time. Together: 689
+  well-calibrated negatives survive now, vs. 140 (wrong median) or 5
+  (right median, too-small sample) before.
+- Given only one family out of the whole panel needed this, it's
+  implemented as a documented one-off (two families.yaml fields on mazG's
+  entry), not a general mechanism.
+
+### Screened mrpF/mrpG/gshA/gshB/trkH/ktrB/ktrD for the same fusion bug — none found
+
+Checked whether any of the panel's other documented "structural
+negative-pool contamination" families were actually an undeclared fusion
+pair like otsA/otsB, using data already on hand (no new fetches needed):
+compared each family's own negative-set median against its positive-set
+median. The confirmed fusion cases showed the negative median dramatically
+larger than the positive one (mrpB ~6.6x, otsB ~2.7x); all seven candidates
+here sit within 0.92x–1.06x — mrpF 93/93aa, mrpG 119/121aa, gshA 481/521aa,
+gshB 334/317aa, trkH 462/483aa, ktrB 482/454aa, ktrD 482/453aa. None show
+the signature. Their documented contamination is most likely the plain
+"real orthologs UniProt never assigned a symbol to" pattern from Phase 3,
+with no quick fix available — consistent with mrpC's finding above.
+
+### Environment note
+
+Running a real build+benchmark (rather than just the fetch/filter steps)
+needed packages missing from the `osmotool` conda environment relative to
+`environment.yml`: `trimal`, `wgsim`, `biopython`, `scikit-learn`,
+`insilicoseq`. Installed via conda-forge/bioconda into that environment
+(all available there; no `pip`/PyPI access was needed). Separately, `mafft`
+needs real system temp-directory access that this session's sandboxed
+shell blocks by default — commands invoking it need the sandbox disabled
+for that step specifically.
+
+### Status at time of writing
+
+- CD-HIT negatives-clustering fix, extra-positives merge step,
+  mrpA/mrpB fix, otsA/otsB fix, query-time fusion filtering, and the mazG
+  fix are all **committed** on `cluster-negatives-cdhit`
+  (`5fd6e1f`/`1e9c887`/`fa6f229`/`0038d82`/`4d8ca08`/`c752e7e`), not yet
+  pushed or opened as a PR.
+- Full build+benchmark validation of the mrpA/mrpB/otsA/otsB fixes
+  (confirming the negative-pool fixes actually move DIAMOND F1/precision,
+  not just the calibration median) was started, hit the sandbox/mafft
+  issue above, restarted, then stopped by request before completing —
+  **not done**. Everything confirmed so far is at the median/data level.
+- `docs/FAMILIES_SUMMARY.md` is untracked in the working tree, predates
+  this session's work, no action taken.
