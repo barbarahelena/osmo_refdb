@@ -185,7 +185,7 @@ do_benchmark() {
     echo "--- 10. Run DIAMOND (train-only db) vs HMM (train-only, calibrated) ---"
     THREADS="${THREADS}" bash pipeline/10_run_benchmark.sh \
         "${RESULTS_DIR}/reads" "${RESULTS_DIR}" \
-        "${RELEASE_DIR}/osmo_refdb.dmnd" "${HMM_DIR}/osmo_refdb.hmm"
+        "${RELEASE_DIR}" "${HMM_DIR}/osmo_refdb.hmm"
 
     echo ""
     echo "--- 11. Compute precision/recall/F1 + ROC/PR curves ---"
