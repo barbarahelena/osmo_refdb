@@ -17,6 +17,15 @@ Steps:
   4. Write reads + a truth table (read_id -> family/negative/background,
      source UniProt ID) for later scoring by 11_compute_metrics.py.
 
+Reproducibility: wgsim (-S) and InSilicoSeq (--seed) both need an explicit
+seed passed at the CLI to be deterministic -- neither seeds itself by
+default, so two runs against identical held-out input sequences previously
+produced slightly different actual reads (different read counts, sequencing
+errors, sampled positions) purely from the simulator's own unseeded
+internal RNG. Each family/label's simulator invocation now gets a
+deterministic seed drawn from this script's own RANDOM_SEED-seeded rng, so
+a re-run against unchanged upstream data reproduces byte-identical reads.
+
 Usage:
   python 09_simulate_reads.py --refs refs --families families.yaml \\
       --reads-per-sequence 20 --out results/reads
@@ -101,17 +110,18 @@ def which_simulator() -> str:
     sys.exit(1)
 
 
-def simulate_with_iss(genome_fasta: Path, out_prefix: Path, n_reads: int) -> None:
+def simulate_with_iss(genome_fasta: Path, out_prefix: Path, n_reads: int, seed: int) -> None:
     subprocess.run(
         ["iss", "generate", "--genomes", str(genome_fasta),
          "--n_reads", str(n_reads), "--model", "hiseq",
+         "--seed", str(seed),
          "--output", str(out_prefix)],
         check=True,
     )
 
 
 def simulate_with_wgsim(genome_fasta: Path, out_prefix: Path, n_reads: int,
-                         read_length: int = 150) -> None:
+                         seed: int, read_length: int = 150) -> None:
     # wgsim needs per-sequence coverage; simplest robust approach is to
     # concatenate all contigs and let wgsim sample reads genome-wide.
     r1 = f"{out_prefix}_R1.fastq"
@@ -119,6 +129,7 @@ def simulate_with_wgsim(genome_fasta: Path, out_prefix: Path, n_reads: int,
     n_pairs = max(1, n_reads // 2)
     subprocess.run(
         ["wgsim", "-N", str(n_pairs), "-1", str(read_length), "-2", str(read_length),
+         "-S", str(seed),
          str(genome_fasta), r1, r2],
         check=True,
     )
@@ -200,20 +211,31 @@ def main() -> None:
             if read_lengths:
                 # Exact length control needed for stratification -- wgsim
                 # respects -1/-2 exactly, iss's named models don't let you
-                # dial in an arbitrary bp length.
+                # dial in an arbitrary bp length. Fresh seed per length (not
+                # just per family/label) so multiple lengths of the same
+                # sample don't draw identical read starting positions.
                 for length in read_lengths:
                     out_prefix = args.out / f"{family}.{label}.rl{length}"
+                    sim_seed = rng.randint(0, 2**31 - 1)
                     print(f"[{family}/{label}] {len(held_out)} sequences -> "
-                          f"~{n_reads} simulated read pairs (wgsim, {length}bp)")
-                    simulate_with_wgsim(genome_fasta, out_prefix, n_reads, read_length=length)
+                          f"~{n_reads} simulated read pairs (wgsim, {length}bp, seed={sim_seed})")
+                    simulate_with_wgsim(genome_fasta, out_prefix, n_reads, sim_seed, read_length=length)
             else:
                 out_prefix = args.out / f"{family}.{label}"
+                # Deterministic per-(family, label) seed, drawn from the
+                # module's own seeded rng -- reproducible given the same
+                # RANDOM_SEED and families.yaml iteration order, without
+                # wgsim/iss's own internal RNGs (which neither tool seeds
+                # by default) silently making every run's actual simulated
+                # reads different even when the held-out input sequences
+                # are identical.
+                sim_seed = rng.randint(0, 2**31 - 1)
                 print(f"[{family}/{label}] {len(held_out)} sequences -> "
-                      f"~{n_reads} simulated read pairs ({simulator})")
+                      f"~{n_reads} simulated read pairs ({simulator}, seed={sim_seed})")
                 if simulator == "iss":
-                    simulate_with_iss(genome_fasta, out_prefix, n_reads)
+                    simulate_with_iss(genome_fasta, out_prefix, n_reads, sim_seed)
                 else:
-                    simulate_with_wgsim(genome_fasta, out_prefix, n_reads)
+                    simulate_with_wgsim(genome_fasta, out_prefix, n_reads, sim_seed)
 
     if args.background:
         bg_r1, bg_r2 = args.background
