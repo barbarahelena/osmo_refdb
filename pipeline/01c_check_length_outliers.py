@@ -26,6 +26,21 @@ Idempotent: the first run snapshots each as-is FASTA (refs/<family>.
 <positive|negative>.faa) to a "pre_length_filter" copy and always re-filters
 from that snapshot, so re-running with a different --max-ratio is safe.
 
+families.yaml: `negative_median_override: <aa>` -- for a family whose own
+negative-set median is confirmed UNSTABLE under the default capped fetch
+(01_fetch_refs.py's --max-negative, 1000 by default): use this fixed value
+instead of recomputing the median from whatever the capped fetch happens
+to contain this run. Confirmed via a systematic sweep of every capped
+family in the panel (2026-07-29): only mazG showed this (negative median
+215aa at the default n=1000 cap vs. 116aa fetched at n=3000 -- a real,
+sample-size-driven effect, not noise), every other family's median was
+stable within ~2% regardless of fetch size. Establishing this value means
+a one-off larger fetch, done once, rather than needing to re-fetch a bigger
+population on every normal build -- see that family's own families.yaml
+entry for the derivation. Positive-label medians are never overridden this
+way, since the instability was only ever observed on the negative side,
+where max-negative actually caps the fetch.
+
 Fusion-partner families (families.yaml: `fusion_partner: <other family>`,
 e.g. mrpA/mrpB, whose gene product is a single fused ORF in some lineages
 -- see families.yaml): a sequence roughly double the family's own median
@@ -177,6 +192,9 @@ def main() -> None:
     families = [fam["name"] for fam in fam_defs]
     fusion_partner = {fam["name"]: fam["fusion_partner"] for fam in fam_defs if fam.get("fusion_partner")}
     fusion_marker = {fam["name"]: fam["fusion_marker_pfam"] for fam in fam_defs if fam.get("fusion_marker_pfam")}
+    negative_median_override = {
+        fam["name"]: fam["negative_median_override"] for fam in fam_defs if fam.get("negative_median_override")
+    }
     manifest_rows = []
     # Written fresh, unconditionally, whenever upstream actually reran (01
     # for the fetch itself, 01b for purity-filtered negatives) -- unlike
@@ -244,7 +262,21 @@ def main() -> None:
             if len(records) < args.min_sequences:
                 continue
             all_records[(family, label)] = records
-            medians[(family, label)] = statistics.median(len(seq) for _, seq in records)
+
+            # families.yaml override: for a family whose negative-set median
+            # is confirmed unstable under the default capped fetch (only
+            # mazG so far, confirmed via a systematic sweep of every capped
+            # family in the panel -- 2026-07-29: median swings 215aa at
+            # n=1000 to 116aa at n=3000, the only such case found), use the
+            # value established from that larger one-off fetch instead of
+            # recomputing from whatever the capped fetch happens to contain
+            # this run. Positive-label medians are never overridden this
+            # way -- the instability was only ever observed on the negative
+            # side, where max-negative actually caps the fetch.
+            if label == "negative" and family in negative_median_override:
+                medians[(family, label)] = negative_median_override[family]
+            else:
+                medians[(family, label)] = statistics.median(len(seq) for _, seq in records)
 
     # Pass 2: filter, with fusion-length accommodation for declared pairs.
     for family in families:
@@ -306,8 +338,10 @@ def main() -> None:
                 write_fasta(fusion_path, all_fusion_hits)
 
             n_neg_contamination = len(fusion_hits_by_family.get(family, [])) if label == "negative" else 0
-            print(f"[{family}/{label}] median={median_len:.0f}aa, "
-                  f"allowed=[{lower_bound:.0f}, {upper_bound:.0f}]aa -> "
+            is_override = label == "negative" and family in negative_median_override
+            print(f"[{family}/{label}] median={median_len:.0f}aa"
+                  + (" (families.yaml override, not computed from this fetch)" if is_override else "")
+                  + f", allowed=[{lower_bound:.0f}, {upper_bound:.0f}]aa -> "
                   f"{len(kept)} kept, {len(flagged)} flagged"
                   + (f", {len(fusion_hits)} fusion candidates -> {fusion_path}" if partner else "")
                   + (f" ({n_neg_contamination} fused-ORF negatives already pulled out pre-median)"
@@ -326,6 +360,7 @@ def main() -> None:
                 "n_fusion_candidates": len(fusion_hits) if partner else "",
                 "n_fusion_contamination_removed_pre_median": n_neg_contamination or "",
                 "median_length_aa": round(median_len, 1),
+                "median_source": "families.yaml override" if is_override else "computed",
                 "max_ratio": args.max_ratio,
             })
 

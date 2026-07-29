@@ -589,6 +589,16 @@ def main() -> None:
         # cspA-family: xref:pfam-PF00313 alone matches ~80k UniProt proteins)
         # -- overrides --max-positive for that family only.
         max_pos = fam.get("max_positive_override", args.max_positive)
+        # Same idea for negatives: a family whose negative-set median is
+        # confirmed unstable at the default --max-negative cap (so far only
+        # mazG, see families.yaml and 01c_check_length_outliers.py's
+        # negative_median_override) needs a bigger draw to actually contain
+        # enough sequences near its own true center -- fixing the median
+        # alone doesn't help if the small capped sample barely has anything
+        # near it (confirmed: applying the correct median to mazG's default
+        # n=1000 fetch left only 5 negatives survivable, down from 140 under
+        # the wrong-but-permissive one).
+        max_neg = fam.get("max_negative_override", args.max_negative)
 
         print(f"[{name}]")
 
@@ -604,7 +614,7 @@ def main() -> None:
         print(f"  Diversity: {n_pos_orgs} organisms / {n_pos_genera} genera")
 
         neg_fasta, n_neg, neg_accessions = fetch_set(
-            neg_query, f"{name}_neg", "negative", max_seqs=args.max_negative,
+            neg_query, f"{name}_neg", "negative", max_seqs=max_neg,
             rng=random.Random(f"{FETCH_RANDOM_SEED}:{name}:negative"))
         (args.out / f"{name}.negative.faa").write_text(neg_fasta)
         n_neg_orgs, n_neg_genera = diversity_stats(neg_fasta)

@@ -40,6 +40,22 @@
 #                     columns -- useful to test for families whose true
 #                     discriminating signal might sit outside the most
 #                     conserved core (see ectA/ectB below).
+#   max_negative_override  optional int; per-family override for
+#                     01_fetch_refs.py's --max-negative cap (default 1000),
+#                     same mechanism as max_positive_override but for the
+#                     negative fetch. Only meaningful paired with
+#                     negative_median_override below -- fixing the median
+#                     alone doesn't help if the small capped sample barely
+#                     contains anything near the true center.
+#   negative_median_override  optional int (aa); use this fixed value as
+#                     the negative set's median length in
+#                     01c_check_length_outliers.py instead of computing it
+#                     from whatever the (capped) negative fetch contains
+#                     this run. Only for a family whose median is confirmed
+#                     UNSTABLE under the default cap -- established via a
+#                     one-off larger fetch, not derived automatically.
+#                     Confirmed via a full-panel sweep (2026-07-29) to be
+#                     needed only for mazG so far -- see that entry.
 
 families:
   - name: ectA
@@ -375,9 +391,32 @@ families:
       biological-confidence caveat above -- a second, structural caveat on
       top would be redundant. See README's "Structural negative-pool
       contamination" section.
+
+      Also, unlike every other family in this panel (confirmed via a
+      systematic sweep, 2026-07-29, of all 38 families whose negative
+      fetch hits the default 1000-sequence cap): mazG's own negative-set
+      length median is genuinely UNSTABLE under that cap, not just
+      contaminated. At the default n=1000 cap, the post-purity negative
+      pool's median is 215aa; fetched uncapped at n=3000, it drops to
+      116aa -- a real, sample-size-driven effect (every other family's
+      median moved by ~2% or less between those two fetch sizes).
+
+      Fixing the median alone isn't enough, though: applying 116aa's window
+      directly to the default n=1000 fetch's own (post-purity) 357-sequence
+      negative pool left only 5 sequences survivable -- that capped sample
+      itself barely contains anything near the true center, since the
+      accession-sorted oversample it drew from skewed toward the higher
+      end. max_negative_override: 3000 below fixes the actual cause (too
+      few samples near the true center, not just the wrong center) by
+      pulling the same larger population every build, deterministically
+      (01_fetch_refs.py's per-family/per-label RNG seed is fixed) --
+      negative_median_override: 116 stays as a pin against that value
+      drifting if the underlying UniProt data changes over time.
     positive_query: "(gene:mazG OR gene:mazG1 OR gene:mazG2) AND taxonomy_id:2"
     negative_query: "xref:pfam-PF03819 NOT (gene:mazG OR gene:mazG1 OR gene:mazG2) AND taxonomy_id:2"
     negative_pfam: PF03819   # MazG family (Pfam name is gene-specific, likely narrower than galE's)
+    max_negative_override: 3000
+    negative_median_override: 116
 
   - name: murB
     description: >
