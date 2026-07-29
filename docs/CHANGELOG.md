@@ -374,6 +374,52 @@ on mazG/mscS/trkA/trkH) into a family's positive set via
 `extra_sequences/<family>.faa` (gitignored, local study data). Tested via
 `families_bakta_test.yaml` against those four motivating families.
 
+### Extra-positives merge + negatives-clustering: verified end-to-end (mazG/mscS/trkA/trkH)
+
+Ran steps 1→1b→1c→1d→2 (fetch → purity filter → length filter → merge →
+cluster) against `families_bakta_test.yaml`'s four motivating families in a
+throwaway release dir, to confirm the merge step and the negatives-clustering
+fix both behave as intended on real data before trusting them in a full
+rebuild.
+
+- Bakta-derived positives survive CD-HIT dedup at roughly a third to a half
+  per family: mazG 162/455 (36%), mscS 111/254 (44%), trkA 279/821 (34%),
+  trkH 119/253 (47%) — genuinely novel sequences at 90% identity, not just
+  redundant restatements of what UniProt already had.
+- Negative-set CD-HIT redundancy is much lower than positives' (1-9% vs.
+  30-65%), consistent with a broad, taxonomically diverse hard-negative pool
+  rather than one gene's own orthologs: mazG 140→138, mscS 615→590,
+  trkA 551→499, trkH 694→667.
+
+### cspA's 19% positive-length-outlier rate: real biology, not a fixable bug (diagnosis only)
+
+Investigated why cspA's positive set (`pos_length=19%` in `qc_scorecard.tsv`)
+flags far more than typical, since the panel-wide median-instability sweep
+below doesn't cover the *positive* side or non-capped, `max_positive_override`
+-sampled fetches like cspA's (5,000 of ~80,000 PF00313 members).
+
+- 959/961 flagged sequences are too *long*, not fragments (flagged median
+  154aa vs. kept median 68aa, up to 1,335aa). 86% (830/959) have no second
+  Pfam domain annotated at all — not a fusion-partner case like mrpA/mrpB or
+  otsA/otsB below — and the 129 that do have one show no common partner
+  (DUF1294, ribosomal S30EA modulation, Excalibur Ca-binding, NYN, RNase,
+  AhpC/TSA — a grab-bag). No dominant taxonomic skew either (Actinobacteria
+  genera are ~20% of the no-second-domain group, spread thin otherwise).
+- Conclusion: genuine, broadly-distributed long-form CSD-paralog biology
+  that cspA's own `families.yaml` entry already says to capture ("expect
+  multiple paralogs per genome... capture all matches") — the generic
+  median-based length filter's default `max_ratio=1.5` is simply too tight
+  for this family's real length heterogeneity, unlike the fusion
+  contamination cases below, which are genuine data-quality problems.
+- Calibrated what a fix would need: `max_ratio≈5.0` keeps 99.8% of cspA's
+  positives (vs. 80.8% today), leaving only the 4 genuinely isolated extreme
+  outliers (408-1,335aa) flagged. But `01c_check_length_outliers.py`'s
+  `--max-ratio` is currently one global CLI flag applied to all 43 families,
+  not a per-family override — acting on this would need a new
+  `families.yaml` field (e.g. `length_max_ratio_override`), mirroring the
+  `max_negative_override`/`max_positive_override` pattern already used
+  elsewhere in this panel. **Not implemented** — diagnosis only.
+
 ### mrpA/mrpB: median instability disproven, real bug found instead (`5fd6e1f`)
 
 Tested the original hypothesis — recalibrate a family's length-filter
@@ -517,17 +563,74 @@ needs real system temp-directory access that this session's sandboxed
 shell blocks by default — commands invoking it need the sandbox disabled
 for that step specifically.
 
+### Full v8 rebuild — benchmark validation, a real bug, and a partial revert (`16bf1d5`, `0151ed6`)
+
+Built and benchmarked all 43 families (`releases/v8`) to confirm the
+mrpA/mrpB/otsA/otsB/mazG fixes actually move DIAMOND F1/precision, not
+just the calibration median as confirmed up to this point.
+
+- **Found and fixed a real, pre-existing bug along the way, unrelated to
+  this branch's own work**: the build itself completed cleanly through
+  all 43 families, but the benchmark step failed — `osmotool profile`'s
+  `DATABASE` argument is an unpacked release *directory* (it finds
+  `osmo_refdb.dmnd`, `hmms/osmo_refdb.hmm`, etc. inside it by fixed
+  names), while `run_pipeline.sh`/`10_run_benchmark.sh` were passing the
+  `.dmnd` *file* path directly — an interface drift between this repo and
+  `osmotool` that would have broken every future benchmark run. Fixed by
+  passing the release directory itself; confirmed with a single-sample
+  test before resuming the full benchmark.
+- **Panel-wide (read-volume-weighted)**: essentially flat, as expected
+  since only 5 of 43 families changed — DIAMOND F1 0.821→0.820, HMM
+  0.684→0.690.
+- **Per family**, the picture was mixed, not a clean win:
+  - **mazG**: clear win, exactly as targeted — DIAMOND F1 0.855→0.883
+    (precision 0.873→0.992, FP 1019→56), HMM F1 0.822→0.854.
+  - **otsA**: real improvement — DIAMOND F1 0.655→0.700 (precision
+    0.518→0.576), HMM F1 0.579→0.612.
+  - **mrpA**: essentially flat — DIAMOND F1 0.714→0.701.
+  - **otsB**: regressed — DIAMOND F1 0.829→0.773 (precision
+    0.902→0.761), HMM precision 0.839→0.711.
+  - **mrpB**: collapsed — DIAMOND F1 0.587→0.272 (precision
+    0.888→**0.187**), recall actually rose slightly (0.438→0.498).
+- **Root-caused the two regressions, not just reverted them**:
+  `08b_calibrate_diamond_cutoffs.py` sets its cutoff from the negative
+  set's own score distribution. The fusion-contamination sequences
+  removed by this branch's fix, despite being conceptually wrong as
+  ground truth, were genuinely domain-similar to these families'
+  positives (real shared domain content, just fused to the partner's),
+  so they forced a strict calibration threshold. Stripping them out left
+  only very dissimilar "easy" negatives that don't constrain the cutoff
+  enough — it drifted permissive and let through more false positives
+  from elsewhere in the 43-family DIAMOND db (recall rising alongside a
+  precision collapse is the signature of a loosened threshold, not a
+  worse reference set). Same mechanism confirmed independently on both
+  otsB and mrpB, at proportional severity to each one's contamination
+  fraction (otsB ~59%, milder regression; mrpB ~68%, the collapse).
+- **Partial revert**: removed `fusion_partner`/`fusion_marker_pfam` from
+  mrpB and otsB specifically — back to their original `negative_query`,
+  no negative-side pre-filter or query-time exclusion. mrpA/otsA's fixes
+  are kept (confirmed via live fetch that each family's own
+  decontamination runs independently of its partner's declaration, so
+  reverting mrpB/otsB doesn't touch mrpA/otsA and vice versa). Accepted
+  side effect on mrpB: this also disables its own positive-side
+  oversized-candidate check (the code ties both to the same
+  declaration) — mrpA's own positive-side check and taxonomic evidence
+  are unaffected and still catch most such candidates.
+
 ### Status at time of writing
 
-- CD-HIT negatives-clustering fix, extra-positives merge step,
-  mrpA/mrpB fix, otsA/otsB fix, query-time fusion filtering, and the mazG
-  fix are all **committed** on `cluster-negatives-cdhit`
-  (`5fd6e1f`/`1e9c887`/`fa6f229`/`0038d82`/`4d8ca08`/`c752e7e`), not yet
-  pushed or opened as a PR.
-- Full build+benchmark validation of the mrpA/mrpB/otsA/otsB fixes
-  (confirming the negative-pool fixes actually move DIAMOND F1/precision,
-  not just the calibration median) was started, hit the sandbox/mafft
-  issue above, restarted, then stopped by request before completing —
-  **not done**. Everything confirmed so far is at the median/data level.
+- CD-HIT negatives-clustering fix, extra-positives merge step, the
+  mazG fix, the benchmark-path bug fix, and the mrpA/otsA fixes (kept)
+  are **committed** on `cluster-negatives-cdhit`, not yet pushed or
+  opened as a PR. mrpB/otsB's own fixes were tried, benchmarked, and
+  **reverted** — see above.
+- Extra-positives merge + negatives-clustering verified end-to-end against
+  the four motivating families in a throwaway subset build (see above) —
+  confirms the mechanism works on real data, not yet folded into a full
+  43-family rebuild.
+- cspA's positive-length-outlier mismatch is diagnosed and a fix calibrated
+  (`max_ratio≈5.0`), but **not implemented** — needs a new per-family
+  override field in `01c_check_length_outliers.py`/`families.yaml` that
+  doesn't exist yet.
 - `docs/FAMILIES_SUMMARY.md` is untracked in the working tree, predates
   this session's work, no action taken.
