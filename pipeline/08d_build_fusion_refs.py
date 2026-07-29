@@ -54,12 +54,15 @@ Usage:
 Output:
   refs/<familyA>_<familyB>_fused.faa   (one per declared, non-empty pair)
 
-KNOWN LIMITATION: only reads refs/<family>.fusion_candidates.faa for each
-family, produced during a fresh 01c run (both label passes need to have run
-against a fetch that included refs/<family>.negative.domains.tsv -- see
-01_fetch_refs.py -- for the negative-side contamination pull-out to have
-happened; if that file wasn't present, negative-side fused ORFs stay
-(mislabeled) in <family>.negative.faa instead of ending up here).
+Sources merged (deduped by UniProt accession), in order of how
+comprehensive they are: refs/<famA>_<famB>.dedicated_fusion_fetch.faa
+(01_fetch_refs.py's direct, uncapped combined-domain query -- see
+fetch_fusion_pair_candidates there -- the primary source when available),
+plus refs/<family>.fusion_candidates.faa for each family (incidental finds
+from that family's own positive/negative fetch -- a safety net for
+whatever the dedicated fetch can't cover, e.g. a degenerate marker pair
+with no narrow substitute domain, or a stale/pre-existing refs/ dir from
+before the dedicated fetch existed).
 """
 
 from __future__ import annotations
@@ -144,14 +147,28 @@ def main() -> None:
             for header, seq in parse_fasta(candidates_path):
                 by_accession.setdefault(header_accession(header), (header, seq))
 
+        # 01_fetch_refs.py's dedicated fusion-pair fetch (comprehensive,
+        # uncapped combined-domain query) -- the primary source once it's
+        # available; the per-family fusion_candidates.faa files above are
+        # kept as a safety net for whatever it can't cover (e.g. a
+        # degenerate marker pair with no narrow substitute domain, see
+        # fetch_fusion_pair_candidates's docstring).
+        dedicated_path = args.refs / f"{fam_a}_{fam_b}.dedicated_fusion_fetch.faa"
+        for header, seq in parse_fasta(dedicated_path):
+            by_accession.setdefault(header_accession(header), (header, seq))
+
+        out_path = args.refs / f"{label}.faa"
         if not by_accession:
+            note = ""
+            if out_path.exists():
+                out_path.unlink()
+                note = f" (removed stale {out_path.name} from a previous run)"
             print(f"[{fam_a}/{fam_b}] no fusion candidates found -- skipping "
                   f"(expected if this lineage/pair has no fused-ORF representatives "
-                  f"in the fetched data)")
+                  f"in the fetched data){note}")
             continue
 
         retagged = [(retag_as_fused(header, label), seq) for header, seq in by_accession.values()]
-        out_path = args.refs / f"{label}.faa"
         write_fasta(out_path, retagged)
         print(f"[{fam_a}/{fam_b}] {len(retagged)} fused-ORF references -> {out_path}")
 
