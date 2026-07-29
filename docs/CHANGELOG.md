@@ -658,23 +658,58 @@ change between runs done at different times).
 
 ### Status at time of writing
 
+### Full `v8` rebuild redone with the partial revert + seed fix in place — final confirmation
+
+The first `v8` rebuild (above) predated the mrpB/otsB partial revert and
+the read-simulation seeding fix. Re-ran the complete 43-family build+
+benchmark from scratch with both in place, to get one clean, final,
+reproducible number for the whole branch's work rather than reasoning
+from a subset test and a stale full-panel run.
+
+- **Panel-wide (read-volume-weighted)**: genuine net improvement now,
+  not the earlier flat/mixed result — DIAMOND F1 0.821→0.825, HMM
+  0.684→0.693.
+- **mazG, otsA**: unchanged clean wins (DIAMOND F1 0.855→0.879,
+  0.655→0.699).
+- **otsB**: fully recovered *and* edges past its v7 baseline in the full
+  panel too (DIAMOND F1 0.829→**0.840**) — confirms the revert isn't a
+  subset-only effect.
+- **mrpA**: actually improved here (DIAMOND F1 0.714→**0.748**, better
+  than even the original buggy-fix `v8`'s 0.701) — confirms the
+  subset-test regression really was the subset-composition artifact
+  diagnosed above (mrpB's contamination dominating a tiny 4-family read
+  pool), not a real problem with mrpA's own kept fix at full-panel scale.
+- **mrpB**: essentially back to its v7 baseline (DIAMOND F1 0.587→0.569,
+  a 0.018 difference) — within normal fetch-to-fetch noise from live
+  UniProt data drifting slightly between runs, not a residual issue. The
+  revert did what it was supposed to.
+
+This is the number to cite for this branch's net effect: five families
+touched, three genuine wins (mazG, otsA, otsB), one improvement that only
+showed up at full-panel scale (mrpA), one full recovery to baseline
+(mrpB), and a real panel-wide improvement rather than the flat trade-off
+the first attempt suggested.
+
+### Status at time of writing
+
 - CD-HIT negatives-clustering fix, extra-positives merge step, the
   mazG fix, the benchmark-path bug fix, the mrpA/otsA fixes (kept), the
   mrpB/otsB partial revert, and the read-simulation seeding fix are all
   **committed** on `cluster-negatives-cdhit`, not yet pushed or opened as
   a PR.
+- **Full-panel benchmark validation is done** — the final `v8` rebuild
+  (immediately above) confirms every fix and the revert on real 43-family
+  numbers, not just the subset test or the pre-revert build. Nothing
+  outstanding on the negative-pool contamination work itself.
 - Extra-positives merge + negatives-clustering verified end-to-end against
   the four motivating families in a throwaway subset build (see above) —
   confirms the mechanism works on real data, not yet folded into a full
-  43-family rebuild.
+  43-family rebuild (the final `v8` rebuild used `families.yaml` directly,
+  without an `extra_sequences/` directory present).
 - cspA's positive-length-outlier mismatch is diagnosed and a fix calibrated
   (`max_ratio≈5.0`), but **not implemented** — needs a new per-family
   override field in `01c_check_length_outliers.py`/`families.yaml` that
   doesn't exist yet.
-- The full `v8` rebuild and the `revert-confirm` subset rebuild both
-  predate the read-simulation seeding fix, so neither is byte-reproducible
-  if re-run today — their *findings* (the regressions, the recovery, the
-  mrpA mechanism) are driven by real sequence-content differences, not
-  simulation noise, so this doesn't call any of them into question.
 - `docs/FAMILIES_SUMMARY.md` is untracked in the working tree, predates
   this session's work, no action taken.
+- Not yet done: pushing `cluster-negatives-cdhit` and opening a PR.
