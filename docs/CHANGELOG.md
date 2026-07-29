@@ -617,13 +617,52 @@ just the calibration median as confirmed up to this point.
   declaration) — mrpA's own positive-side check and taxonomic evidence
   are unaffected and still catch most such candidates.
 
+### Revert confirmed on a 4-family subset rebuild; a real mrpA puzzle explained (`a6da7c6`)
+
+Re-ran build+benchmark for just mrpA/mrpB/otsA/otsB (`releases/revert-confirm`)
+to confirm the partial revert actually recovers mrpB/otsB rather than
+trusting the code-level revert alone.
+
+- **mrpB and otsB fully recovered, both edging past their original v7
+  baseline**: mrpB DIAMOND precision 0.187→0.857 (F1 0.272→0.618, vs. v7's
+  0.587), otsB precision 0.761→0.936 (F1 0.773→0.843, vs. v7's 0.829).
+- **mrpA looked worse in this subset (DIAMOND F1 0.701→0.639) despite its
+  own fix being unchanged — root-caused, not left as a mystery**: 3,330 of
+  mrpB's 8,600 reverted-negative-set reads (38.7%) score as genuine `mrpA`
+  hits, confirmed directly from `mrpB.negative.gene_counts.tsv`. This is
+  mechanically correct, not a DIAMOND error: reverting mrpB restored the
+  same mrpA+mrpB fusion contamination found earlier in this branch, and
+  those sequences really do contain mrpA's own domain content. The
+  benchmark's ground truth labels them "mrpB negative" (so a `mrpA` call
+  counts as a false positive there), even though the call is sequence-
+  content-correct. A side effect of reverting mrpB, not a flaw in mrpA's
+  own kept fix.
+- Otherwise a clean, apples-to-apples confirmation that each family's own
+  decontamination runs independently of its partner's declaration, exactly
+  as designed.
+
+### Read-simulation reproducibility fix (`a6da7c6`)
+
+While comparing runs, noticed the same family's total simulated-read count
+wasn't even identical between two supposedly-comparable builds. Root
+cause: neither `wgsim` (`-S`) nor InSilicoSeq (`--seed`) were ever passed
+an explicit seed, so — unlike every other random draw in this pipeline —
+the actual simulated reads (counts, sequencing errors, sampled positions)
+differed between runs even against byte-identical held-out input
+sequences. Fixed: each family/label's simulator call now gets a
+deterministic seed drawn from `09_simulate_reads.py`'s own seeded rng.
+Confirmed via a clean two-run comparison: byte-identical FASTQ output.
+Live UniProt fetches remain a separate, unaddressed source of run-to-run
+variation (accession sampling is seeded, but the underlying database can
+change between runs done at different times).
+
 ### Status at time of writing
 
 - CD-HIT negatives-clustering fix, extra-positives merge step, the
-  mazG fix, the benchmark-path bug fix, and the mrpA/otsA fixes (kept)
-  are **committed** on `cluster-negatives-cdhit`, not yet pushed or
-  opened as a PR. mrpB/otsB's own fixes were tried, benchmarked, and
-  **reverted** — see above.
+  mazG fix, the benchmark-path bug fix, the mrpA/otsA fixes (kept), the
+  mrpB/otsB partial revert, and the read-simulation seeding fix are all
+  **committed** on `cluster-negatives-cdhit`, not yet pushed or opened as
+  a PR.
 - Extra-positives merge + negatives-clustering verified end-to-end against
   the four motivating families in a throwaway subset build (see above) —
   confirms the mechanism works on real data, not yet folded into a full
@@ -632,5 +671,10 @@ just the calibration median as confirmed up to this point.
   (`max_ratio≈5.0`), but **not implemented** — needs a new per-family
   override field in `01c_check_length_outliers.py`/`families.yaml` that
   doesn't exist yet.
+- The full `v8` rebuild and the `revert-confirm` subset rebuild both
+  predate the read-simulation seeding fix, so neither is byte-reproducible
+  if re-run today — their *findings* (the regressions, the recovery, the
+  mrpA mechanism) are driven by real sequence-content differences, not
+  simulation noise, so this doesn't call any of them into question.
 - `docs/FAMILIES_SUMMARY.md` is untracked in the working tree, predates
   this session's work, no action taken.
