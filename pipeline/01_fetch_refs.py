@@ -386,7 +386,7 @@ def main() -> None:
         n_pos_orgs, n_pos_genera = diversity_stats(pos_fasta)
         print(f"  Diversity: {n_pos_orgs} organisms / {n_pos_genera} genera")
 
-        neg_fasta, n_neg, _ = fetch_set(
+        neg_fasta, n_neg, neg_accessions = fetch_set(
             neg_query, f"{name}_neg", "negative", max_seqs=args.max_negative,
             rng=random.Random(f"{FETCH_RANDOM_SEED}:{name}:negative"))
         (args.out / f"{name}.negative.faa").write_text(neg_fasta)
@@ -398,6 +398,19 @@ def main() -> None:
         # fused ORF apart from an unrelated length outlier in step 01c --
         # fetch it now while we have network access to UniProt, for the
         # exact same accessions that ended up in positive.faa above.
+        #
+        # The NEGATIVE fetch needs the same domain evidence too, not just
+        # the positive one: a fused ORF under a bare locus tag (no
+        # recognizable gene symbol) matches this family's own negative_query
+        # (it carries the Pfam domain the query is anchored on) but not the
+        # query's gene-symbol exclusion, so it silently lands in the
+        # "negative" pool instead of being caught by the positive-side
+        # length+marker check below. Confirmed in production: mrpB's
+        # negative pool was ~68% genuine mrpA+mrpB fused-ORF sequences
+        # (same PF13244+PF20501+PF04039+PF00361+PF00662 architecture as
+        # mrpA's documented fusion cases, under locus tags like
+        # "Lokhon_03054") -- see 01c_check_length_outliers.py for what this
+        # evidence is used for.
         if fam.get("fusion_partner"):
             domains = fetch_pfam_domains(pos_accessions)
             domains_path = args.out / f"{name}.positive.domains.tsv"
@@ -407,6 +420,15 @@ def main() -> None:
                 for accession, pfam in domains.items():
                     writer.writerow([accession, ";".join(pfam)])
             print(f"  Pfam domain evidence for {len(domains)} accessions -> {domains_path}")
+
+            neg_domains = fetch_pfam_domains(neg_accessions)
+            neg_domains_path = args.out / f"{name}.negative.domains.tsv"
+            with open(neg_domains_path, "w", newline="") as fh:
+                writer = csv.writer(fh, delimiter="\t")
+                writer.writerow(["accession", "pfam_domains"])
+                for accession, pfam in neg_domains.items():
+                    writer.writerow([accession, ";".join(pfam)])
+            print(f"  Pfam domain evidence for {len(neg_domains)} negative accessions -> {neg_domains_path}")
 
         manifest_rows.append({
             "family": name,

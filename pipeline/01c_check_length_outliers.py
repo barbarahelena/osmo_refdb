@@ -34,20 +34,47 @@ is exactly wrong for these two -- the fused ORF is a real, valid detection
 target (Task 1b), just one the standard single-family MSA/HMM can't
 represent (aligning a ~1000aa fused sequence alongside ~800aa standalone
 mrpA sequences would badly gap the alignment for everyone). So for these
-families specifically, an over-length candidate is checked against a SECOND
-window centered on (own_median + partner_median) instead of being flagged
-as an outlier outright; if it also carries `fusion_marker_pfam` (Pfam
-domain evidence fetched by 01_fetch_refs.py, in
+families specifically, an over-length POSITIVE candidate is checked against
+a SECOND window centered on (own_median + partner_median) instead of being
+flagged as an outlier outright; if it also carries `fusion_marker_pfam`
+(Pfam domain evidence fetched by 01_fetch_refs.py, in
 refs/<family>.positive.domains.tsv, when available) it's routed to
-refs/<family>.positive.fusion_candidates.faa instead of length_outliers.faa
--- excluded from the normal alignment/HMM path (like a true outlier) but
+refs/<family>.fusion_candidates.faa instead of length_outliers.faa --
+excluded from the normal alignment/HMM path (like a true outlier) but
 picked up separately by 08d_build_fusion_refs.py as a real, reportable
-DIAMOND-only reference. Domain evidence is confirmatory, not required: if
-domains.tsv isn't present (e.g. after re-running 01c alone without rerunning
-01), the length-window match alone is enough to classify a candidate as a
-fusion instead of discarding it -- a false positive here just means a
-handful of oversized sequences reach 08d instead of the outlier pile, not a
-lost detection target.
+DIAMOND-only reference. Domain evidence is confirmatory, not required for
+the positive side: if domains.tsv isn't present (e.g. after re-running 01c
+alone without rerunning 01), the length-window match alone is enough to
+classify a candidate as a fusion instead of discarding it -- a false
+positive here just means a handful of oversized sequences reach 08d instead
+of the outlier pile, not a lost detection target.
+
+NEGATIVE-side fusion contamination is a different, more damaging failure
+mode than a handful of oversized outliers, and needs a different fix:
+mrpB's own negative_query (xref:pfam-<its own domain> NOT gene:mrpB/mnhB)
+matches a genuine mrpA+mrpB fused ORF that happens to carry no recognizable
+gene symbol (a bare locus tag) just as easily as it matches a true hard
+negative -- the query's gene-symbol exclusion can't catch what was never
+tagged with that gene symbol in the first place. Confirmed in production:
+mrpB's negative pool was ~68% such sequences (same PF13244+PF20501+
+PF04039+PF00361+PF00662 architecture as mrpA's documented fusion cases,
+under locus tags like "Lokhon_03054"), clustered tightly around 900-1100aa
+-- and because that's the *majority* of the pool, it silently became this
+family's own "normal" median (937-944aa, confirmed stable whether the
+negative fetch was capped at 1000 or pulled uncapped at ~9800 -- not a
+small-sample noise problem), which then made the filter discard the true
+~140aa hard negatives as outliers instead of the other way around. Length
+can't be used to detect this (length is exactly what the contamination
+breaks), so for a family with fusion_partner declared, its NEGATIVE
+snapshot is screened by domain evidence alone (refs/<family>.negative.
+domains.tsv, fetched by 01_fetch_refs.py) BEFORE the median is computed:
+anything carrying `fusion_marker_pfam` is pulled out to refs/<family>.
+fusion_candidates.faa (merged with any positive-side fusion hits) so the
+remaining negative population's own median reflects the true hard-negative
+set, not the contamination. Unlike the positive side, this check requires
+domain evidence -- there's no safe length-based fallback -- so it's a
+no-op (with a printed note) if refs/<family>.negative.domains.tsv isn't
+present.
 
 Usage:
   python 01c_check_length_outliers.py --refs refs --families families.yaml \\
@@ -56,7 +83,9 @@ Output:
   refs/<family>.<label>.faa                      (filtered in place)
   refs/<family>.<label>.pre_length_filter.faa    (untouched snapshot)
   refs/<family>.<label>.length_outliers.faa      (excluded, for manual review)
-  refs/<family>.positive.fusion_candidates.faa   (fusion-partner families only)
+  refs/<family>.fusion_candidates.faa            (fusion-partner families only;
+                                                  positive- and negative-side
+                                                  fusion hits combined)
   refs/length_outlier_manifest.tsv
 """
 
@@ -81,11 +110,14 @@ def load_family_names(path: Path) -> list[str]:
     return [fam["name"] for fam in load_families(path)]
 
 
-def load_domain_evidence(refs_dir: Path, family: str) -> dict[str, list[str]]:
+def load_domain_evidence(refs_dir: Path, family: str, label: str) -> dict[str, list[str]]:
     """accession -> Pfam domain list, from 01_fetch_refs.py's fusion-partner
-    domain fetch. Returns {} if not present (fusion detection then falls
-    back to length evidence alone -- see module docstring)."""
-    path = refs_dir / f"{family}.positive.domains.tsv"
+    domain fetch (label is "positive" or "negative"). Returns {} if not
+    present -- on the positive side, fusion detection then falls back to
+    length evidence alone; on the negative side, there's no safe fallback
+    and the contamination pre-filter is skipped entirely (see module
+    docstring)."""
+    path = refs_dir / f"{family}.{label}.domains.tsv"
     if not path.exists():
         return {}
     domains = {}
@@ -163,6 +195,7 @@ def main() -> None:
     # below, and the partner may sort later in families.yaml.
     all_records: dict[tuple[str, str], list[tuple[str, str]]] = {}
     medians: dict[tuple[str, str], float] = {}
+    fusion_hits_by_family: dict[str, list[tuple[str, str]]] = {}
     for family in families:
         for label in ("positive", "negative"):
             faa_path = args.refs / f"{family}.{label}.faa"
@@ -182,6 +215,32 @@ def main() -> None:
             if not snapshot_path.exists() or stale:
                 shutil.copy(faa_path, snapshot_path)
             records = parse_fasta(snapshot_path)
+
+            # Fused-ORF contamination pre-filter (negative side only) --
+            # must run BEFORE the median below, since the contamination is
+            # exactly what skews that median. See module docstring for the
+            # confirmed mrpB case. No length-based fallback here: domain
+            # evidence is the only safe signal, so this is a no-op if
+            # refs/<family>.negative.domains.tsv wasn't fetched (only
+            # produced for fusion_partner families).
+            if label == "negative" and family in fusion_partner:
+                marker = fusion_marker.get(family)
+                neg_domain_evidence = load_domain_evidence(args.refs, family, "negative")
+                if marker and neg_domain_evidence:
+                    genuine, contaminated = [], []
+                    for header, seq in records:
+                        accession = header_accession(header)
+                        is_fusion = marker in neg_domain_evidence.get(accession, [])
+                        (contaminated if is_fusion else genuine).append((header, seq))
+                    if contaminated:
+                        print(f"[{family}/negative] {len(contaminated)}/{len(records)} negatives "
+                              f"carry {marker} (fusion_partner={fusion_partner[family]}'s marker "
+                              f"domain) -- these are genuine fused-ORF sequences under a gene "
+                              f"symbol the negative_query's exclusion couldn't catch; routing to "
+                              f"fusion_candidates instead of treating as hard negatives")
+                        fusion_hits_by_family.setdefault(family, []).extend(contaminated)
+                    records = genuine
+
             if len(records) < args.min_sequences:
                 continue
             all_records[(family, label)] = records
@@ -192,7 +251,7 @@ def main() -> None:
         for label in ("positive", "negative"):
             faa_path = args.refs / f"{family}.{label}.faa"
             outliers_path = args.refs / f"{family}.{label}.length_outliers.faa"
-            fusion_path = args.refs / f"{family}.positive.fusion_candidates.faa"
+            fusion_path = args.refs / f"{family}.fusion_candidates.faa"
 
             if (family, label) not in all_records:
                 if faa_path.exists() and faa_path.stat().st_size > 0:
@@ -218,7 +277,7 @@ def main() -> None:
                 fusion_lower = fusion_center / args.max_ratio
                 fusion_upper = fusion_center * args.max_ratio
             marker_pfam = fusion_marker.get(family)
-            domain_evidence = load_domain_evidence(args.refs, family) if partner else {}
+            domain_evidence = load_domain_evidence(args.refs, family, "positive") if partner else {}
 
             kept, flagged, fusion_hits = [], [], []
             for header, seq in records:
@@ -237,13 +296,22 @@ def main() -> None:
 
             write_fasta(faa_path, kept)
             write_fasta(outliers_path, flagged)
+            # fusion_path is written once per family, on the positive-label
+            # pass (partner is only set then) -- combine with any negative-
+            # side fused-ORF contamination pulled out in Pass 1 above, so
+            # both sources end up in the one file 08d_build_fusion_refs.py
+            # reads.
+            all_fusion_hits = fusion_hits_by_family.get(family, []) + fusion_hits
             if partner:
-                write_fasta(fusion_path, fusion_hits)
+                write_fasta(fusion_path, all_fusion_hits)
 
+            n_neg_contamination = len(fusion_hits_by_family.get(family, [])) if label == "negative" else 0
             print(f"[{family}/{label}] median={median_len:.0f}aa, "
                   f"allowed=[{lower_bound:.0f}, {upper_bound:.0f}]aa -> "
                   f"{len(kept)} kept, {len(flagged)} flagged"
-                  + (f", {len(fusion_hits)} fusion candidates -> {fusion_path}" if partner else ""))
+                  + (f", {len(fusion_hits)} fusion candidates -> {fusion_path}" if partner else "")
+                  + (f" ({n_neg_contamination} fused-ORF negatives already pulled out pre-median)"
+                     if n_neg_contamination else ""))
             if flagged:
                 worst = max(flagged, key=lambda r: abs(len(r[1]) - median_len))
                 print(f"    e.g. {worst[0]} at {len(worst[1])}aa (median {median_len:.0f}aa) "
@@ -256,6 +324,7 @@ def main() -> None:
                 "n_kept": len(kept),
                 "n_flagged": len(flagged),
                 "n_fusion_candidates": len(fusion_hits) if partner else "",
+                "n_fusion_contamination_removed_pre_median": n_neg_contamination or "",
                 "median_length_aa": round(median_len, 1),
                 "max_ratio": args.max_ratio,
             })

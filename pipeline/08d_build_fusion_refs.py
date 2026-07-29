@@ -11,14 +11,18 @@ Bacillota (specifically Paenibacillaceae), and some Alphaproteobacteria --
 see families.yaml's mrpA/mrpB entries for the taxonomic evidence. 01c
 already keeps these out of the standard positive.faa (a ~1000aa fused
 sequence would badly gap the MAFFT alignment of ~800aa standalone mrpA
-sequences) and routes them to refs/<family>.positive.fusion_candidates.faa
-instead of the length-outliers pile. This script is what actually makes
-them searchable: it merges a pair's fusion candidates (deduped by UniProt
-accession, since the same fused protein can turn up in both mrpA's and
-mrpB's raw fetch depending which gene symbol it happened to be annotated
-under), retags them under one shared "<familyA>_<familyB>_fused" label, and
-writes a combined FASTA that 08_build_diamond_db.sh folds into the DIAMOND
-db like any other family.
+sequences) and routes them to refs/<family>.fusion_candidates.faa instead
+of the length-outliers pile -- that file also carries fused ORFs pulled out
+of <family>'s own NEGATIVE fetch (a fused ORF under a bare locus tag
+matches a family's own negative_query just as easily as a true hard
+negative does; see 01c_check_length_outliers.py's module docstring for the
+confirmed mrpB case). This script is what actually makes them searchable:
+it merges a pair's fusion candidates (deduped by UniProt accession, since
+the same fused protein can turn up in both mrpA's and mrpB's raw fetch --
+positive or negative side -- depending which gene symbol, if any, it
+happened to be annotated under), retags them under one shared
+"<familyA>_<familyB>_fused" label, and writes a combined FASTA that
+08_build_diamond_db.sh folds into the DIAMOND db like any other family.
 
 Unlike 08a's decoy references, a fused-ORF hit is a REAL, reportable
 detection target (it genuinely carries both subunits), not a sink for
@@ -49,6 +53,13 @@ Usage:
   python 08d_build_fusion_refs.py --refs refs --families families.yaml
 Output:
   refs/<familyA>_<familyB>_fused.faa   (one per declared, non-empty pair)
+
+KNOWN LIMITATION: only reads refs/<family>.fusion_candidates.faa for each
+family, produced during a fresh 01c run (both label passes need to have run
+against a fetch that included refs/<family>.negative.domains.tsv -- see
+01_fetch_refs.py -- for the negative-side contamination pull-out to have
+happened; if that file wasn't present, negative-side fused ORFs stay
+(mislabeled) in <family>.negative.faa instead of ending up here).
 """
 
 from __future__ import annotations
@@ -129,7 +140,7 @@ def main() -> None:
         label = f"{fam_a}_{fam_b}_fused"
         by_accession: dict[str, tuple[str, str]] = {}
         for fam in (fam_a, fam_b):
-            candidates_path = args.refs / f"{fam}.positive.fusion_candidates.faa"
+            candidates_path = args.refs / f"{fam}.fusion_candidates.faa"
             for header, seq in parse_fasta(candidates_path):
                 by_accession.setdefault(header_accession(header), (header, seq))
 

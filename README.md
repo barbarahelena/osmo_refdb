@@ -215,12 +215,22 @@ annotation, fetched by `01_fetch_refs.py` for `fusion_partner` families
 specifically) confirms it's a true fusion rather than an unrelated length
 outlier when domain evidence is available, and is advisory (not required)
 otherwise. Confirmed fusion candidates are routed to
-`refs/<family>.positive.fusion_candidates.faa` — excluded from this
-family's own MAFFT alignment/HMM (a ~1000aa fused sequence would badly gap
-the alignment of ~800aa standalone sequences) but picked up by
+`refs/<family>.fusion_candidates.faa` — excluded from this family's own
+MAFFT alignment/HMM (a ~1000aa fused sequence would badly gap the
+alignment of ~800aa standalone sequences) but picked up by
 `pipeline/08d_build_fusion_refs.py`, which merges a pair's fusion
 candidates (deduped by UniProt accession) into one `<familyA>_<familyB>_fused`
-DIAMOND-only reference set. Unlike a decoy reference, a fused-ORF hit is a
+DIAMOND-only reference set. The same file also carries fused ORFs pulled
+out of a family's own NEGATIVE fetch under a bare locus tag — a fused ORF
+matches a family's negative_query just as easily as a true hard negative
+does, and can dominate that pool badly enough to distort
+`01c_check_length_outliers.py`'s own median-based length filter (confirmed
+in production for mrpB: ~68% of its negative pool was genuine mrpA+mrpB
+fusion sequences, which became the filter's own "normal" length center and
+caused it to discard the true hard negatives instead) — see that script's
+docstring for the confirmed case and the domain-evidence-based fix (no
+length-based fallback exists for this side, unlike the positive side).
+Unlike a decoy reference, a fused-ORF hit is a
 **real, reportable** detection target, not a sink for mislabeled calls — it
 is not added to `osmotool profile`/`annotate`'s exclusion lists. What a
 `_fused` hit should imply for the two individual family calls is
@@ -352,7 +362,8 @@ everything together.
 | 1 | `01_fetch_refs.py` | Fetch positive + hard-negative sequences per family from UniProt |
 | 1b | `01b_check_negative_purity.py` | Flag/drop hard negatives that are actually true positives under a different gene symbol (DIAMOND identity check against the positive set; see `refs/negative_purity_manifest.tsv`) |
 | 1c | `01c_check_length_outliers.py` | Flag/drop sequences (positive or negative) whose length is way off their family's median -- likely a multi-domain fusion protein or a partial fragment, not a clean single-domain family member (see `refs/length_outlier_manifest.tsv`) |
-| 2 | `02_cluster_cdhit.sh` | CD-HIT cluster positives at 90% identity (remove redundancy) |
+| 1d | `01d_add_extra_positives.py` | Merge manually-curated extra positives (e.g. Bakta hits from a local study that this repo's own tool missed) from `extra_sequences/<family>.faa` into the fetched positive set, before clustering dedupes the combined pool (see `refs/extra_positives_manifest.tsv`) |
+| 2 | `02_cluster_cdhit.sh` | CD-HIT cluster positives and negatives at 90% identity (remove redundancy, avoid train/test leakage from near-duplicates) |
 | 3 | `03_split_train_test.py` | Split positives into train (build) / test (held-out benchmark). For families marked `decoy_from_negatives: true`, also splits their negative set the same way (see step 8a) |
 | 4 | `04_align_trim.sh` | MAFFT align + trimAl trim the TRAIN positives. trimAl's gap threshold defaults to 0.8 but can be overridden per family via `families.yaml`'s `trim_gt` |
 | 5 | `05_build_hmms.sh` | hmmbuild per family (or, for a family marked `pfam_model`, fetch that curated Pfam-A HMM directly instead); score positive-test/negative sets |

@@ -618,6 +618,15 @@ families:
       of an mrpD fusion turned up in any search run. Also includes
       mrpA1/mrpA2/mnhA1/mnhA2 (real, reviewed numbered-paralog gene
       symbols, same class of gap as murB1/murB2 -- see issue #8).
+
+      Same bare-locus-tag fused-ORF contamination confirmed on mrpB's
+      negative pool (see mrpB's entry below, 2026-07-29) also affects this
+      family's own negative pool, though far more mildly (48/936, ~5%, vs.
+      mrpB's ~68%) -- expected, since PF00361 (this family's negative
+      anchor) is a broad domain diluted across many unrelated proteins,
+      unlike PF04039 which mrpB's negative pool is anchored on directly.
+      Same fix applies (01c_check_length_outliers.py's negative-side
+      domain-evidence pre-filter).
     positive_query: "(gene:mrpA OR gene:mrpA1 OR gene:mrpA2 OR gene:mnhA OR gene:mnhA1 OR gene:mnhA2) AND taxonomy_id:2"
     negative_query: "xref:pfam-PF00361 NOT (gene:mrpA OR gene:mrpA1 OR gene:mrpA2 OR gene:mnhA OR gene:mnhA1 OR gene:mnhA2 OR gene:mrpD OR gene:mrpD1 OR gene:mrpD2 OR gene:mnhD OR gene:mnhD1 OR gene:mnhD2) AND taxonomy_id:2"
     negative_pfam: PF00361   # shared with mrpD's own architecture and with generic Complex I NuoL/M/N-type subunits
@@ -668,9 +677,34 @@ families:
       this repo's own calibration, so it isn't exposed to whatever shifted
       in the full-panel DIAMOND db's composition. Same full-panel
       db-composition effect as ectA/ktrA/ktrD above, just larger in
-      magnitude here; not investigated further given the pattern is
-      consistent with the other unexplained regressions in this rebuild
-      rather than something specific to mrpB.
+      magnitude here.
+
+      Root cause since found (2026-07-29): mrpB's negative pool was ~68%
+      contaminated with genuine mrpA+mrpB fused-ORF sequences under bare
+      locus tags (e.g. "Lokhon_03054" in Thioclava/Sulfitobacter/
+      Rubellimicrobium -- the same genera mrpA's own fusion evidence names
+      above), confirmed via direct UniProt lookup (same PF13244+PF20501+
+      PF04039+PF00361+PF00662 architecture as the confirmed fusion cases).
+      These match this family's own negative_query (they carry PF04039,
+      the domain the query is anchored on) but not its gene-symbol
+      exclusion (no mrpB/mnhB/mrpA/mnhA symbol at all), so they were never
+      caught -- not by the query, not by 01b's purity check (apparently
+      below its 70% identity threshold), and not by 01c's positive-side
+      fusion detection (which only ever looked at the positive fetch).
+      Being the majority of the pool, they became this family's own
+      "normal" negative-set median (937-944aa -- confirmed stable whether
+      the negative fetch was capped at 1000 or pulled uncapped at ~9800,
+      i.e. not a small-sample sampling artifact), which caused
+      01c_check_length_outliers.py's median-based length filter to discard
+      the true ~140aa hard negatives as outliers instead of the
+      contamination. Fixed by extending fusion-candidate detection to the
+      negative fetch too, using domain evidence alone (pre-median, since
+      length is exactly what the contamination breaks) -- see that
+      script's module docstring and 01_fetch_refs.py's negative-side
+      domain-evidence fetch. Confirmed fix: mrpB's negative-set median
+      drops from 937aa to 161aa (close to its own positive median, 141aa)
+      once the 543/774 contaminating sequences are pulled out. Full
+      DIAMOND F1 impact not yet re-benchmarked.
     positive_query: "(gene:mrpB OR gene:mrpB1 OR gene:mrpB2 OR gene:mnhB OR gene:mnhB1 OR gene:mnhB2) AND taxonomy_id:2"
     negative_query: "xref:pfam-PF04039 NOT (gene:mrpB OR gene:mrpB1 OR gene:mrpB2 OR gene:mnhB OR gene:mnhB1 OR gene:mnhB2) AND taxonomy_id:2"
     negative_pfam: PF04039
