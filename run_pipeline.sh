@@ -84,7 +84,7 @@ do_build() {
         --refs "${REFS_DIR}" --families "${FAMILIES_FILE}"
 
     echo ""
-    echo "--- 2. CD-HIT cluster positives (remove redundancy) ---"
+    echo "--- 2. CD-HIT cluster positives + negatives (remove redundancy) ---"
     bash pipeline/02_cluster_cdhit.sh "${REFS_DIR}"
 
     echo ""
