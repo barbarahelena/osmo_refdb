@@ -14,6 +14,12 @@ Fetches, per gene family defined in families.yaml:
 Usage:  python 01_fetch_refs.py [--families families.yaml] [--out refs]
 Output: refs/<family>.positive.faa
         refs/<family>.negative.faa
+        refs/<family>.positive.domains.tsv, refs/<family>.negative.domains.tsv
+                                            (fusion_partner families only)
+        refs/<famA>_<famB>.dedicated_fusion_fetch.faa
+                                            (declared fusion_partner pairs
+                                            only -- see fetch_fusion_pair_
+                                            candidates)
         refs/manifest.tsv
 """
 
@@ -21,6 +27,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import statistics
 import random
 import re
 import time
@@ -340,6 +347,196 @@ def check_no_duplicate_pfam_models(families: list[dict]) -> None:
         )
 
 
+def fusion_pairs(families: list[dict]) -> list[tuple[str, str]]:
+    """Unique, sorted fusion_partner pairs declared in families.yaml -- same
+    dedup logic as 08d_build_fusion_refs.py's load_fusion_pairs (kept
+    independent rather than shared, since the two scripts have no import
+    relationship)."""
+    fam_by_name = {fam["name"]: fam for fam in families}
+    seen = set()
+    pairs = []
+    for fam in families:
+        partner = fam.get("fusion_partner")
+        if not partner or partner not in fam_by_name:
+            continue
+        key = frozenset((fam["name"], partner))
+        if key in seen:
+            continue
+        seen.add(key)
+        pairs.append(tuple(sorted((fam["name"], partner))))
+    return pairs
+
+
+def load_positive_domain_fractions(out_dir: Path, family: str) -> dict[str, float]:
+    """pfam_accession -> fraction of `family`'s own gene-symbol-matched
+    positive fetch that carries it, from the domains.tsv this same run just
+    wrote (fetch_pfam_domains on pos_accessions, see main()). Used to tell
+    a domain that's genuinely PART OF a family's own standalone
+    architecture (fraction near 1.0) apart from one that's foreign to it
+    (fraction near 0) -- see fetch_fusion_pair_candidates.
+
+    Restricted to the "typical-length" subset of the raw positive fetch
+    (within [median/1.5, median*1.5], the same window 01c_check_length_
+    outliers.py itself uses) before computing fractions -- NOT the whole
+    raw fetch. A fusion_partner family's own gene-symbol query can already
+    include a real, non-trivial fraction of already-tagged fused ORFs
+    (confirmed: mrpA's raw positive fetch is ~35% oversized, already-tagged
+    fusion entries, e.g. "gene:mrpA" on a 957aa Paenibacillus apis ORF --
+    see families.yaml's mrpA entry). Computing fractions over the raw fetch
+    directly is circular for exactly this reason: it would count the
+    partner's own domain as "not foreign" simply because the raw fetch is
+    already partly contaminated with fusions, defeating the point of this
+    check. Restricting to typical-length entries first removes that
+    circularity."""
+    domains_path = out_dir / f"{family}.positive.domains.tsv"
+    fasta_path = out_dir / f"{family}.positive.faa"
+    if not domains_path.exists() or not fasta_path.exists():
+        return {}
+
+    lengths = dict(_parse_fasta_lengths(fasta_path))
+    if not lengths:
+        return {}
+    median_len = statistics.median(lengths.values())
+    lower, upper = median_len / 1.5, median_len * 1.5
+    typical_accessions = {acc for acc, length in lengths.items() if lower <= length <= upper}
+
+    counts: dict[str, int] = {}
+    total = 0
+    with open(domains_path) as fh:
+        reader = csv.DictReader(fh, delimiter="\t")
+        for row in reader:
+            if row["accession"] not in typical_accessions:
+                continue
+            total += 1
+            for pfam in (row["pfam_domains"].split(";") if row["pfam_domains"] else []):
+                counts[pfam] = counts.get(pfam, 0) + 1
+    return {pfam: n / total for pfam, n in counts.items()} if total else {}
+
+
+def _parse_fasta_lengths(path: Path) -> list[tuple[str, int]]:
+    """[(accession, sequence_length), ...] from a retagged '>tag|accession|
+    organism' FASTA -- accession only (not the full header), to match
+    domains.tsv's own accession-keyed rows."""
+    records = []
+    accession, length = None, 0
+    for line in path.read_text().splitlines():
+        if line.startswith(">"):
+            if accession is not None:
+                records.append((accession, length))
+            parts = line[1:].split("|")
+            accession = parts[1] if len(parts) >= 2 else parts[0].strip()
+            length = 0
+        elif line.strip():
+            length += len(line.strip())
+    if accession is not None:
+        records.append((accession, length))
+    return records
+
+
+def fetch_fusion_pair_candidates(families: list[dict], out_dir: Path) -> None:
+    """For each declared fusion_partner pair, fetch a comprehensive
+    (uncapped) population of genuine fused-ORF candidates directly, via a
+    combined-domain query -- rather than relying only on incidentally
+    spotting them in each family's own (capped, gene-symbol-exclusion-based)
+    positive/negative fetch, which is what mrpA/mrpB/otsA/otsB relied on
+    before this existed. See 01c_check_length_outliers.py's module
+    docstring for why incidental discovery alone isn't reliable (it's still
+    kept as a safety net -- this is additive, not a replacement).
+
+    Query construction: for pair (A, B), we need one domain that's part of
+    A's own standalone architecture but NOT B's, and one that's part of
+    B's own standalone architecture but NOT A's -- ANDing those two
+    isolates genuine fusions without also matching an ordinary standalone
+    member of either family. Candidate domains are each family's own
+    fusion_marker_pfam and negative_pfam; which candidate actually has this
+    "self-intrinsic to A, foreign to B" property is NOT something families
+    .yaml declares directly and can't be assumed from field names alone --
+    confirmed the hard way: mrpA and mrpB both declare fusion_marker_pfam
+    PF13244, and a naive substitution picked mrpA's own negative_pfam
+    (PF00361) as the second domain, but PF00361 is ALSO part of mrpA's own
+    standalone architecture (same as PF13244), so "PF13244 AND PF00361"
+    just re-matched ~8k ordinary standalone mrpA orthologs instead of
+    fusions specifically.
+
+    So this is verified empirically instead, using data already fetched
+    this same run: each family's own positive.domains.tsv (gene-symbol-
+    matched, i.e. confirmed genuine members), restricted to that family's
+    own typical-length subset (see load_positive_domain_fractions) tells us
+    what fraction of A's own ordinary members carry a given domain.
+    Self-intrinsic to A = that fraction is high; foreign to B = the same
+    domain's fraction in B's own typical-length positives is low. Only a
+    domain pair passing both checks on both sides is used.
+
+    This still can't be resolved for every declared pair, and that's
+    expected, not a bug to chase: mrpA/mrpB fails this check even after
+    restricting to typical-length positives, because mrpA is ITSELF
+    already a large, multi-domain protein (own median ~800aa) whose own
+    size range overlaps substantially with the fused-with-mrpB range
+    (~940aa) -- unlike otsA/otsB, where standalone (267aa) and fused
+    (900aa+) are night-and-day different. There's no length-based way to
+    cleanly separate "ordinary mrpA" from "mrpA already fused" for
+    computing this check in the first place, so no domain pair can be
+    verified safe. In that case the pair is skipped for the dedicated
+    fetch (a printed note, not an error) -- incidental discovery via each
+    family's own positive/negative fetch, plus 01c's post-hoc domain-
+    evidence pre-filter, remains the (already-validated) mechanism for
+    that pair, same as before this dedicated fetch existed.
+    """
+    SELF_INTRINSIC_MIN = 0.5
+    FOREIGN_MAX = 0.1
+
+    fam_by_name = {fam["name"]: fam for fam in families}
+
+    for fam_a, fam_b in fusion_pairs(families):
+        a, b = fam_by_name[fam_a], fam_by_name[fam_b]
+        out_path = out_dir / f"{fam_a}_{fam_b}.dedicated_fusion_fetch.faa"
+
+        def skip(reason: str) -> None:
+            # A previous run may have written this file (e.g. before a
+            # families.yaml edit, or before a bug fix here) -- removing it
+            # on skip stops 08d_build_fusion_refs.py from silently trusting
+            # stale data that this run couldn't actually verify.
+            if out_path.exists():
+                out_path.unlink()
+                reason += f" (removed stale {out_path.name} from a previous run)"
+            print(f"[{fam_a}/{fam_b}] SKIP dedicated fusion fetch: {reason}")
+
+        frac_a = load_positive_domain_fractions(out_dir, fam_a)
+        frac_b = load_positive_domain_fractions(out_dir, fam_b)
+        if not frac_a or not frac_b:
+            skip(f"no positive domain evidence for one or both families "
+                 f"(need {fam_a}.positive.domains.tsv / {fam_b}.positive.domains.tsv, "
+                 f"only written when fusion_partner is declared)")
+            continue
+
+        candidates_a = {d for d in (a.get("fusion_marker_pfam"), a.get("negative_pfam")) if d}
+        candidates_b = {d for d in (b.get("fusion_marker_pfam"), b.get("negative_pfam")) if d}
+
+        domain_for_a = next((d for d in candidates_a
+                              if frac_a.get(d, 0) >= SELF_INTRINSIC_MIN and frac_b.get(d, 0) <= FOREIGN_MAX), None)
+        domain_for_b = next((d for d in candidates_b
+                              if d != domain_for_a
+                              and frac_b.get(d, 0) >= SELF_INTRINSIC_MIN and frac_a.get(d, 0) <= FOREIGN_MAX), None)
+
+        if not domain_for_a or not domain_for_b:
+            skip(f"no verified domain pair found where each side is self-intrinsic to one "
+                 f"family and foreign to the other (candidates checked: "
+                 f"{fam_a}={sorted(candidates_a)}, {fam_b}={sorted(candidates_b)}) -- relying "
+                 f"on incidental discovery via each family's own fetch instead")
+            continue
+
+        query = f"xref:pfam-{domain_for_a} AND xref:pfam-{domain_for_b} AND taxonomy_id:2"
+        print(f"[{fam_a}/{fam_b}] dedicated fusion-candidate query: {query}")
+        fasta_raw = fetch_all_sequences(query)
+        if not fasta_raw.strip():
+            skip(f"no sequences returned for {domain_for_a}/{domain_for_b}")
+            continue
+        fasta_retagged = retag_fasta(fasta_raw, f"{fam_a}_{fam_b}_dedicated")
+        n = count_seqs(fasta_retagged)
+        out_path.write_text(fasta_retagged)
+        print(f"  {n} candidates -> {out_path}")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--families", type=Path, default=Path("families.yaml"))
@@ -366,12 +563,42 @@ def main() -> None:
         name = fam["name"]
         pos_query = fam["positive_query"]
         neg_query = fam["negative_query"]
+        # Fusion-partner families: exclude the partner's marker domain from
+        # the negative fetch itself, not just after the fact. A genuine
+        # fused ORF (bare locus tag, no gene:X symbol) matches this
+        # family's own negative_query just as easily as a true hard
+        # negative -- confirmed in production for mrpB (~68% of its
+        # negative pool) and otsA/otsB (~41-59%), corrupting the
+        # median-based length filter in 01c_check_length_outliers.py.
+        # Excluding it here means the fetch's own accession-sorted
+        # oversample (see resolve_accessions) is no longer wasted on
+        # contamination we'd throw away anyway -- the same n=1000 budget
+        # now lands entirely on genuine hard negatives. 01c's own
+        # domain-evidence pre-filter stays in place as a safety net (e.g.
+        # for a fused ORF whose Pfam annotation is stale/lagging at fetch
+        # time); see 01c_check_length_outliers.py's module docstring and
+        # the dedicated fusion-pair fetch below, which recovers what this
+        # exclusion removes as a real detection target rather than just
+        # discarding it.
+        marker = fam.get("fusion_marker_pfam")
+        if fam.get("fusion_partner") and marker:
+            neg_query = f"{neg_query} NOT xref:pfam-{marker}"
         description = fam.get("description", "").strip()
         # Per-family cap, for a family whose positive_query is deliberately
         # anchored on a broad Pfam accession rather than a gene symbol (e.g.
         # cspA-family: xref:pfam-PF00313 alone matches ~80k UniProt proteins)
         # -- overrides --max-positive for that family only.
         max_pos = fam.get("max_positive_override", args.max_positive)
+        # Same idea for negatives: a family whose negative-set median is
+        # confirmed unstable at the default --max-negative cap (so far only
+        # mazG, see families.yaml and 01c_check_length_outliers.py's
+        # negative_median_override) needs a bigger draw to actually contain
+        # enough sequences near its own true center -- fixing the median
+        # alone doesn't help if the small capped sample barely has anything
+        # near it (confirmed: applying the correct median to mazG's default
+        # n=1000 fetch left only 5 negatives survivable, down from 140 under
+        # the wrong-but-permissive one).
+        max_neg = fam.get("max_negative_override", args.max_negative)
 
         print(f"[{name}]")
 
@@ -386,8 +613,8 @@ def main() -> None:
         n_pos_orgs, n_pos_genera = diversity_stats(pos_fasta)
         print(f"  Diversity: {n_pos_orgs} organisms / {n_pos_genera} genera")
 
-        neg_fasta, n_neg, _ = fetch_set(
-            neg_query, f"{name}_neg", "negative", max_seqs=args.max_negative,
+        neg_fasta, n_neg, neg_accessions = fetch_set(
+            neg_query, f"{name}_neg", "negative", max_seqs=max_neg,
             rng=random.Random(f"{FETCH_RANDOM_SEED}:{name}:negative"))
         (args.out / f"{name}.negative.faa").write_text(neg_fasta)
         n_neg_orgs, n_neg_genera = diversity_stats(neg_fasta)
@@ -398,6 +625,19 @@ def main() -> None:
         # fused ORF apart from an unrelated length outlier in step 01c --
         # fetch it now while we have network access to UniProt, for the
         # exact same accessions that ended up in positive.faa above.
+        #
+        # The NEGATIVE fetch needs the same domain evidence too, not just
+        # the positive one: a fused ORF under a bare locus tag (no
+        # recognizable gene symbol) matches this family's own negative_query
+        # (it carries the Pfam domain the query is anchored on) but not the
+        # query's gene-symbol exclusion, so it silently lands in the
+        # "negative" pool instead of being caught by the positive-side
+        # length+marker check below. Confirmed in production: mrpB's
+        # negative pool was ~68% genuine mrpA+mrpB fused-ORF sequences
+        # (same PF13244+PF20501+PF04039+PF00361+PF00662 architecture as
+        # mrpA's documented fusion cases, under locus tags like
+        # "Lokhon_03054") -- see 01c_check_length_outliers.py for what this
+        # evidence is used for.
         if fam.get("fusion_partner"):
             domains = fetch_pfam_domains(pos_accessions)
             domains_path = args.out / f"{name}.positive.domains.tsv"
@@ -407,6 +647,15 @@ def main() -> None:
                 for accession, pfam in domains.items():
                     writer.writerow([accession, ";".join(pfam)])
             print(f"  Pfam domain evidence for {len(domains)} accessions -> {domains_path}")
+
+            neg_domains = fetch_pfam_domains(neg_accessions)
+            neg_domains_path = args.out / f"{name}.negative.domains.tsv"
+            with open(neg_domains_path, "w", newline="") as fh:
+                writer = csv.writer(fh, delimiter="\t")
+                writer.writerow(["accession", "pfam_domains"])
+                for accession, pfam in neg_domains.items():
+                    writer.writerow([accession, ";".join(pfam)])
+            print(f"  Pfam domain evidence for {len(neg_domains)} negative accessions -> {neg_domains_path}")
 
         manifest_rows.append({
             "family": name,
@@ -423,6 +672,10 @@ def main() -> None:
             "description": description,
         })
         print()
+
+    print("Fetching dedicated fusion-pair candidates (comprehensive, uncapped)...")
+    fetch_fusion_pair_candidates(families, args.out)
+    print()
 
     manifest_path = args.out / "manifest.tsv"
     with open(manifest_path, "w", newline="") as fh:

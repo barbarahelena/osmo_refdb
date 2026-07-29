@@ -5,14 +5,19 @@
 # hmmscan, train-only calibrated HMMs) on the simulated reads, for later
 # scoring by 11_compute_metrics.py.
 #
-# Usage: bash 10_run_benchmark.sh [reads_dir] [results_dir] [diamond_db] [hmm_db]
+# Usage: bash 10_run_benchmark.sh [reads_dir] [results_dir] [release_dir] [hmm_db]
+#
+# release_dir is an unpacked osmo_refdb release directory (e.g. releases/v8),
+# NOT the .dmnd file path directly -- `osmotool profile` finds osmo_refdb.dmnd,
+# hmms/osmo_refdb.hmm, osmo_refdb.profile_cascade.tsv, and
+# osmo_refdb.profile_excluded_families.txt inside it by their fixed names.
 # ---------------------------------------------------------------------------
 
 set -euo pipefail
 
 READS_DIR="${1:-results/reads}"
 OUT_DIR="${2:-results}"
-DIAMOND_DB="${3:-releases/dev/osmo_refdb.dmnd}"
+RELEASE_DIR="${3:-releases/dev}"
 HMM_DB="${4:-hmms/osmo_refdb.hmm}"
 THREADS="${THREADS:-4}"
 # The benchmark's positive test set is deliberately broad/phylogenetically
@@ -46,7 +51,7 @@ for R1 in "${READS_DIR}"/*_R1.fastq*; do
 
     echo "  sample: ${SAMPLE}"
     osmotool profile \
-        "${DIAMOND_DB}" \
+        "${RELEASE_DIR}" \
         -1 "${R1}" -2 "${R2}" \
         --out_prefix "${OUT_DIR}/diamond/${SAMPLE}" \
         --threads "${THREADS}" \

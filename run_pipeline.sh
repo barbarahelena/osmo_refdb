@@ -79,7 +79,12 @@ do_build() {
         --refs "${REFS_DIR}" --families "${FAMILIES_FILE}"
 
     echo ""
-    echo "--- 2. CD-HIT cluster positives (remove redundancy) ---"
+    echo "--- 1d. Merge extra positives from local studies (if any) ---"
+    python pipeline/01d_add_extra_positives.py \
+        --refs "${REFS_DIR}" --families "${FAMILIES_FILE}"
+
+    echo ""
+    echo "--- 2. CD-HIT cluster positives + negatives (remove redundancy) ---"
     bash pipeline/02_cluster_cdhit.sh "${REFS_DIR}"
 
     echo ""
@@ -180,7 +185,7 @@ do_benchmark() {
     echo "--- 10. Run DIAMOND (train-only db) vs HMM (train-only, calibrated) ---"
     THREADS="${THREADS}" bash pipeline/10_run_benchmark.sh \
         "${RESULTS_DIR}/reads" "${RESULTS_DIR}" \
-        "${RELEASE_DIR}/osmo_refdb.dmnd" "${HMM_DIR}/osmo_refdb.hmm"
+        "${RELEASE_DIR}" "${HMM_DIR}/osmo_refdb.hmm"
 
     echo ""
     echo "--- 11. Compute precision/recall/F1 + ROC/PR curves ---"
