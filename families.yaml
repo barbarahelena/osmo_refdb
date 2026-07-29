@@ -272,13 +272,22 @@ families:
       are identical (724aa both) precisely because they're contaminated by
       the same population, matching mrpB's confirmed contamination shape
       (majority of the pool, corrupting the median-based length filter's
-      own calibration). fusion_partner/fusion_marker_pfam declared below to
+      own calibration). fusion_partner/fusion_marker_pfam declared below
       route these through the same negative-side domain-evidence pre-filter
       built for mrpA/mrpB (see 01c_check_length_outliers.py) instead of
-      treating them as ordinary hard negatives. Confirmed fix: 180/437
-      (41%) of otsA's negative pool pulled out pre-median, dropping its
-      negative-set median from 724aa to 487aa (close to its own positive
-      median, 473aa).
+      treating them as ordinary hard negatives: 180/437 (41%) of otsA's
+      negative pool pulled out pre-median, dropping its negative-set
+      median from 724aa to 487aa (close to its own positive median,
+      473aa).
+
+      Full v8 rebuild confirms this was a genuine win for otsA specifically
+      (2026-07-29): DIAMOND F1 0.655->0.700 (precision 0.518->0.576, recall
+      essentially unchanged), HMM F1 0.579->0.612. Kept. otsB's own side of
+      the same fix was tried too but regressed DIAMOND precision there
+      (0.902->0.761) -- reverted for otsB specifically; see that entry.
+      Independent per-family result: otsA's own negative pool is unaffected
+      by otsB's revert (each family's decontamination runs on its own
+      negative_query/fusion_marker_pfam, not the partner's).
     positive_query: "(gene:otsA OR gene:otsA1 OR gene:otsA2) AND taxonomy_id:2"
     negative_query: "xref:pfam-PF00982 NOT (gene:otsA OR gene:otsA1 OR gene:otsA2) AND taxonomy_id:2"
     scope: annotate_only
@@ -297,16 +306,33 @@ families:
       at a similar scale (~59% of the post-purity pool at n=3000, tight
       700-900aa cluster vs. this family's own ~267aa positive median) --
       see otsA's entry for the confirmed mechanism and evidence.
-      fusion_partner/fusion_marker_pfam declared to route these through the
-      same fix built for mrpA/mrpB. Confirmed fix: 282/474 (59%) of otsB's
-      negative pool (at n=1000) pulled out pre-median, dropping its
+      fusion_partner/fusion_marker_pfam were declared here too, routing
+      these through the same fix built for mrpA/mrpB: 282/474 (59%) of
+      otsB's negative pool (at n=1000) pulled out pre-median, dropping its
       negative-set median from 725aa to 263aa -- essentially identical to
-      its own positive median (267aa).
+      its own positive median (267aa). Median-level fix confirmed working.
+
+      TRIED AND REVERTED for this family specifically (2026-07-29): the
+      full v8 rebuild showed the fix made DIAMOND precision meaningfully
+      *worse* here, not better (0.902->0.761, F1 0.829->0.773; HMM also
+      regressed, 0.839->0.711 precision). Root cause, not just observed:
+      08b_calibrate_diamond_cutoffs.py sets its cutoff from the negative
+      set's own score distribution -- the removed contamination, despite
+      being conceptually wrong as ground truth, was genuinely domain-
+      similar to otsB's positives (it IS otsB's own catalytic domain, just
+      fused to otsA's), so it forced a strict calibration threshold.
+      Stripping it out left only very dissimilar "easy" negatives, which
+      don't constrain the cutoff enough -- it drifted permissive and let
+      through more false positives from elsewhere in the 43-family DIAMOND
+      db (recall actually rose slightly, 0.766->0.785, alongside the
+      precision collapse -- the signature of a loosened threshold, not a
+      worse reference set). fusion_partner/fusion_marker_pfam removed
+      below; back to the original negative_query with no fusion-side
+      pre-filter. otsA's own side of this fix (see that entry) is kept --
+      it improved there and runs independently of otsB's declaration.
     positive_query: "(gene:otsB OR gene:otsB1 OR gene:otsB2) AND taxonomy_id:2"
     negative_query: "xref:pfam-PF02358 NOT (gene:otsB OR gene:otsB1 OR gene:otsB2) AND taxonomy_id:2"
     negative_pfam: PF02358   # Trehalose_PPase
-    fusion_partner: otsA
-    fusion_marker_pfam: PF00982
 
   - name: mscL
     description: >
@@ -699,7 +725,15 @@ families:
       anchor) is a broad domain diluted across many unrelated proteins,
       unlike PF04039 which mrpB's negative pool is anchored on directly.
       Same fix applies (01c_check_length_outliers.py's negative-side
-      domain-evidence pre-filter).
+      domain-evidence pre-filter) and, unlike mrpB's own case, is KEPT
+      here: full v8 rebuild shows this family's own numbers are essentially
+      flat (DIAMOND F1 0.714->0.701, precision 0.625->0.634, a small recall
+      trade-off) rather than the sharp regression seen on mrpB -- consistent
+      with mrpA's much smaller (~5%) contamination fraction giving the
+      DIAMOND calibration less to lose. mrpB's own side of this fix was
+      reverted (see that entry) for regressing precision there; mrpA's own
+      negative-side decontamination is independent of mrpB's declaration
+      and unaffected by that revert.
     positive_query: "(gene:mrpA OR gene:mrpA1 OR gene:mrpA2 OR gene:mnhA OR gene:mnhA1 OR gene:mnhA2) AND taxonomy_id:2"
     negative_query: "xref:pfam-PF00361 NOT (gene:mrpA OR gene:mrpA1 OR gene:mrpA2 OR gene:mnhA OR gene:mnhA1 OR gene:mnhA2 OR gene:mrpD OR gene:mrpD1 OR gene:mrpD2 OR gene:mnhD OR gene:mnhD1 OR gene:mnhD2) AND taxonomy_id:2"
     negative_pfam: PF00361   # shared with mrpD's own architecture and with generic Complex I NuoL/M/N-type subunits
@@ -774,16 +808,45 @@ families:
       negative fetch too, using domain evidence alone (pre-median, since
       length is exactly what the contamination breaks) -- see that
       script's module docstring and 01_fetch_refs.py's negative-side
-      domain-evidence fetch. Confirmed fix: mrpB's negative-set median
-      drops from 937aa to 161aa (close to its own positive median, 141aa)
-      once the 543/774 contaminating sequences are pulled out. Full
-      DIAMOND F1 impact not yet re-benchmarked.
+      domain-evidence fetch. Median-level fix confirmed working: mrpB's
+      negative-set median dropped from 937aa to 161aa (close to its own
+      positive median, 141aa) once the 543/774 contaminating sequences were
+      pulled out.
+
+      TRIED AND REVERTED for this family specifically (2026-07-29): the
+      full v8 rebuild showed the fix made DIAMOND precision collapse, not
+      recover -- 0.888->0.187, F1 0.587->0.272 (recall actually rose
+      slightly, 0.438->0.498, the signature of a threshold that got more
+      permissive, not a worse reference set). Root cause, not just
+      observed: 08b_calibrate_diamond_cutoffs.py sets its cutoff from the
+      negative set's own score distribution. The removed contamination,
+      despite being conceptually wrong as ground truth, was genuinely
+      domain-similar to mrpB's positives (real PF04039 content, just fused
+      to mrpA's), so it forced a strict calibration threshold; stripping it
+      out left only very dissimilar "easy" negatives that don't constrain
+      the cutoff enough, letting it drift permissive and admit more false
+      positives from elsewhere in the 43-family DIAMOND db. Same mechanism
+      independently confirmed on otsB (see that entry) with a milder
+      version of the same regression.
+
+      fusion_partner/fusion_marker_pfam removed below -- back to the
+      original negative_query with no negative-side pre-filter or query-
+      time exclusion. Side effect, accepted: this also disables mrpB's own
+      positive-side oversized-candidate check (the code ties both to the
+      same declaration), so a fusion candidate ONLY discoverable via
+      mrpB/mnhB's own gene-tagged positive fetch (not also tagged mrpA/
+      mnhA) would no longer be routed to mrpA_mrpB_fused.faa from this
+      side -- mrpA's own positive-side check (unaffected, see that entry)
+      still catches candidates found via its own fetch, and many fused
+      entries carry both gene-symbol tags on the same UniProt record
+      anyway per the documented examples above, so the practical coverage
+      loss is expected to be small. mrpA's own negative-side decontamination
+      is unaffected by this revert -- it runs off mrpA's own declaration,
+      not mrpB's, and is kept (see mrpA's entry).
     positive_query: "(gene:mrpB OR gene:mrpB1 OR gene:mrpB2 OR gene:mnhB OR gene:mnhB1 OR gene:mnhB2) AND taxonomy_id:2"
     negative_query: "xref:pfam-PF04039 NOT (gene:mrpB OR gene:mrpB1 OR gene:mrpB2 OR gene:mnhB OR gene:mnhB1 OR gene:mnhB2) AND taxonomy_id:2"
     negative_pfam: PF04039
     pfam_model: PF04039
-    fusion_partner: mrpA
-    fusion_marker_pfam: PF13244
 
   - name: mrpC
     description: >
