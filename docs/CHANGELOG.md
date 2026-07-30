@@ -713,3 +713,92 @@ the first attempt suggested.
 - `docs/FAMILIES_SUMMARY.md` is untracked in the working tree, predates
   this session's work, no action taken.
 - Not yet done: pushing `cluster-negatives-cdhit` and opening a PR.
+
+## This branch (`add-refseq-positives`) — RefSeq as a second positive source
+
+Follow-up to the extra-positives merge above. Benchmarking the merged `v8`
+build showed the Bakta-study merge alone doesn't close the recall gap it
+targeted: reads simulated from the held-out (test-split) study-derived
+sequences recall far worse than reads from ordinary UniProt sequences (e.g.
+mazG DIAMOND 23.2% vs. 80.7%, trkH DIAMOND 6.5% vs. 66.2%) -- the merged
+sequences are genuinely divergent from what the reference already had (the
+same reason they survived CD-HIT clustering as non-redundant in the first
+place), and divergence is exactly what a single calibrated score threshold
+struggles to generalize to.
+
+Researched how Bakta itself annotates these families successfully, for
+comparison: its DIAMOND search runs at a much more permissive 80%
+coverage/50% identity bar (vs. one calibrated per-family cutoff here), and
+its reference corpus (UniRef90/UniRef50/IPS, built from clustering all of
+UniProt+RefSeq) is far broader than any single gene-symbol-anchored UniProt
+query. That pointed at RefSeq as a way to broaden the *positive* corpus --
+a different lever than the already-disproven "fetch more negatives"
+(`max_negative_override` on mrpF/mrpG, Phase 1) -- worth testing directly
+rather than assuming.
+
+### Feasibility check across 15 families
+
+Confirmed mazG/mscS/trkA/trkH's UniProt positive populations are already
+fully exhausted (fetched count == UniProt's live total for all four --
+no fetch cap left to raise), so growing them further needs a source outside
+UniProt's own gene-symbol curation. Ran a CD-HIT-2D novelty check (RefSeq
+sample vs. the existing UniProt+study-merged pool, 90% identity) plus a
+manual product-description spot-check, across those four and 11 more
+families flagged earlier in this branch's negative-survival ranking:
+
+- **9 families confirmed clean and worth adding**: mazG (41.0% novel, RefSeq
+  population 45,441 vs. UniProt's 5,340), mscS (26.4%), trkA (25.2%), murB
+  (32.8%, 74,987 vs. 12,332), mscL (42.8%), otsB (65.6%, largest novelty
+  rate in the panel), otsA (29.8%), gshB (18.4%), mrpG (76.6%). All showed
+  ~94-100% correct product-description annotation on the novel subset --
+  no cross-contamination.
+- **Skipped for low marginal value (clean but not worth it)**: trkH (4.4%
+  novel), ktrB (12.8%, tiny 415-member RefSeq population to begin with),
+  ktrD (0% novel -- RefSeq offers nothing this pool doesn't already have).
+- **Skipped for gene-symbol collision (real contamination found, not
+  hypothetical)**: mrpC -- only 32% of its "novel" RefSeq hits are
+  genuinely mrpC (Na+/H+ antiporter subunit C); 45% are "MR/P fimbria
+  usher protein MrpC" (a *Proteus* fimbrial gene) and 23% are "Crp/Fnr
+  family transcriptional regulator MrpC" (a *Myxococcus* transcription
+  factor) -- the bare symbol "MrpC" is shared by three unrelated gene
+  families. mrpF -- a smaller-scale version via its own documented PhaF
+  alias (PR #7), which also names an unrelated polyhydroxyalkanoate-granule
+  protein in RefSeq. mrpB -- "DUF1883 domain-containing protein MrpB"
+  confirmed (direct lookup) to be an unrelated small protein (DUF1883 +
+  PPC + bacterial SH3-like domains, found in e.g. *C. difficile*), not a
+  real mrpB variant. None of the three siblings extended past mrpG.
+
+### Implementation (`pipeline/01e_add_refseq_positives.py`)
+
+New opt-in `families.yaml` field, `refseq_gene_symbols`, set only on the 9
+confirmed-clean families -- deliberately not a general mechanism, given the
+collision risk found above. New build step 1e (between the extra-positives
+merge and CD-HIT clustering) fetches NCBI RefSeq bacterial proteins tagged
+with those gene symbols and merges them into the fetched positive set:
+
+- Fetches the full matching UID list first (lightweight -- UIDs only) and
+  draws a reproducible random sample from it, rather than trusting
+  esearch's own non-randomized default order -- the same class of bias
+  01_fetch_refs.py already had to fix for UniProt (issue #4).
+- Skips RefSeq entries explicitly marked ", partial" at fetch time (a free
+  fragment signal); everything else still goes through the normal
+  length-outlier filter downstream.
+- Retry-with-backoff on NCBI's eutils calls -- confirmed necessary, not
+  speculative: hit a real transient 502 and two "response ended
+  prematurely" errors during testing, all recovered cleanly on retry.
+- Idempotent re-run (dedup by RefSeq accession), matching 01d's pattern.
+- Verified end-to-end in a throwaway subset (`releases/refseq-test`,
+  removed after): 7,350 RefSeq sequences merged across all 9 families
+  (1,435-1,492 sampled per family from each family's ~1,500-target cap),
+  clean sequence content (standard 20-aa alphabet, sane length ranges), no
+  errors after the retry fix.
+
+### Status at time of writing
+
+- Implemented and verified at the sequence-merge level (see above). **Not
+  yet validated via a full build+benchmark** -- same gap the extra-positives
+  merge had before its own v8 validation: growing the positive pool is
+  necessary but not sufficient to confirm a recall improvement, since
+  DIAMOND/HMM still have to actually score these correctly against the
+  calibrated cutoff. That test is the next step, not done here.
+- Not yet committed, pushed, or opened as a PR.
