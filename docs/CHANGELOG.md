@@ -793,12 +793,76 @@ with those gene symbols and merges them into the fetched positive set:
   clean sequence content (standard 20-aa alphabet, sane length ranges), no
   errors after the retry fix.
 
+### Full build+benchmark validation, one family at a time (mrpG, otsA, mscS, otsB)
+
+Ran single-family build+benchmark subsets (`make_family_subset.py`) with the
+RefSeq merge active, each compared directly against its own `v8` baseline
+(same code otherwise, since `v8` predates `01e` entirely) -- the actual test
+the sequence-merge-level validation above couldn't answer on its own.
+
+- **mrpG** (chosen as the worst v8 performer, F1 0.541/0.442, and the
+  highest RefSeq novelty rate of the 9 at 76.6%): DIAMOND F1 0.541->0.465
+  (worse), HMM F1 0.442->0.472 (barely better). Splitting recall by origin
+  showed why this one didn't move much either way: RefSeq-origin recall
+  wasn't dramatically worse than the rest for either method (DIAMOND 32.7%
+  vs 39.3%, HMM 38.2% vs 42.0%) -- mrpG's badly-performing status turned out
+  to be its already-documented `pfam_ga_review_needed` negative-pool
+  calibration problem (Phase 3), not a positive-pool-narrowness problem, so
+  growing the positive pool was the wrong lever for this specific family.
+- **otsA** (next-worst cap-limited family without mrpG's calibration flag):
+  DIAMOND F1 0.699->0.631 (worse), HMM F1 0.607->0.657 (genuinely better --
+  both precision and recall improved). RefSeq-origin recall: DIAMOND 54.2%
+  vs 77.8% (real gap), HMM 87.3% vs 86.5% (no gap, explains the clean HMM
+  win).
+- **mscS**: the one exception -- DIAMOND F1 0.495->0.512 (slightly better),
+  HMM F1 0.455->0.505 (clearly better). Even here, HMM's gain came from a
+  real recall edge on RefSeq-origin reads (77.8% vs 64.1%) that DIAMOND
+  didn't share (57.9% vs 65.9%, still a deficit) -- DIAMOND's improvement
+  came despite the dilution, not because RefSeq-origin sequences were
+  suddenly easy for it too.
+- **otsB** (highest RefSeq novelty rate, 65.6%): DIAMOND F1 0.840->0.717
+  (worst regression yet, -0.123), HMM F1 0.662->0.668 (flat/noise).
+
+**Consistent pattern across all 4**: HMM's F1 improved in every case (3
+meaningfully, 1 negligibly); DIAMOND's F1 got worse in 3 of 4, including the
+largest single regression seen anywhere in this branch's testing (otsB,
+-0.123). The mechanism matches the Bakta-merge finding and the earlier
+Bakta-methodology research: profile-based matching (HMM) tolerates the
+added divergent sequences; identity-based best-hit search (DIAMOND) mostly
+doesn't.
+
+### Per-method reference split: full merge for HMM, UniProt-only for DIAMOND (`08_build_diamond_db.sh`)
+
+Direct response to the pattern above, proposed and confirmed rather than
+assumed: since HMM and DIAMOND consistently "need different things," build
+each from a different input instead of forcing one merged pool to serve
+both.
+
+- `08_build_diamond_db.sh` now excludes `_study`/`_refseq`-tagged sequences
+  from the DIAMOND reference specifically -- `positive.train.faa` itself is
+  untouched (04_align_trim.sh already consumed the full file for HMM's
+  alignment before this step runs), so nothing upstream needs to change.
+  Extended to also exclude `01d`'s `_study` tag, not just `01e`'s `_refseq`
+  one -- the same mechanism applies there (confirmed earlier: Bakta-origin
+  recall for DIAMOND was even worse than RefSeq-origin's, e.g. mazG 23.2%
+  vs 80.7%), even though the request that prompted this was RefSeq-specific.
+- Negatives are untouched: there's no RefSeq/study-equivalent negative
+  source (`01d`/`01e` only ever touch positives), so both methods still
+  share the same UniProt-only negative pool -- nothing to split there yet.
+- Implemented as a small `awk` filter (drop whole records by tag, keep
+  everything else) rather than a new pipeline step, since `03`/`04` already
+  read the unfiltered file correctly and only DIAMOND's own db-building
+  step needed to diverge. Verified directly against real `v8` data
+  (mazG's 2,629-sequence train set, 134 `_study`-tagged): filtered output
+  is exactly the 2,495 non-`_study` records, byte-identical to the
+  originals, nothing else disturbed.
+
 ### Status at time of writing
 
-- Implemented and verified at the sequence-merge level (see above). **Not
-  yet validated via a full build+benchmark** -- same gap the extra-positives
-  merge had before its own v8 validation: growing the positive pool is
-  necessary but not sufficient to confirm a recall improvement, since
-  DIAMOND/HMM still have to actually score these correctly against the
-  calibrated cutoff. That test is the next step, not done here.
-- Not yet committed, pushed, or opened as a PR.
+- RefSeq merge (`01e`) and the per-method reference split
+  (`08_build_diamond_db.sh`) are both implemented and validated -- the
+  merge via 4 single-family build+benchmark tests (above), the split via a
+  direct filter-correctness check against real data. A full-panel rebuild
+  incorporating both, across all 9 RefSeq-enabled families, has not been
+  done yet -- everything so far is single-family subset testing.
+- Committed and pushed to `add-refseq-positives` (PR #15, still open).

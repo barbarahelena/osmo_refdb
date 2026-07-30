@@ -73,7 +73,11 @@
 #                     confirmed for mrpB/mrpC/mrpF during evaluation (e.g.
 #                     "MrpC" is also a Proteus fimbrial usher gene and a
 #                     Myxococcus CRP/FNR transcription factor) -- so this is
-#                     opt-in per family, not a general mechanism.
+#                     opt-in per family, not a general mechanism. Note:
+#                     08_build_diamond_db.sh excludes these merged sequences
+#                     (and 01d's _study ones) from the DIAMOND reference
+#                     specifically, even though HMM's alignment keeps them --
+#                     see that script's header comment.
 
 families:
   - name: ectA
