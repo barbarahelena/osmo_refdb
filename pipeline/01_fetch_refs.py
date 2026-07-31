@@ -38,7 +38,6 @@ import requests
 import yaml
 
 UNIPROT_API = "https://rest.uniprot.org/uniprotkb/search"
-UNIPROT_INFO = "https://rest.uniprot.org/utils/release"
 BATCH_SIZE = 500
 ACCESSION_BATCH_SIZE = 100   # UniProt REST hard-caps OR queries at 100 conditions (confirmed: "Too many OR
                               # conditions in query. Maximum allowed is 100." for 200) -- not a URL-length limit
@@ -68,10 +67,17 @@ def load_families(path: Path) -> list[dict]:
 
 
 def get_uniprot_release() -> str:
+    """UniProt has no dedicated release-info endpoint reachable from
+    rest.uniprot.org (the previous UNIPROT_INFO -- /utils/release -- 404s;
+    confirmed directly, not just timing out, so every manifest.tsv row this
+    produced silently recorded "unknown" instead of failing loudly). The
+    release is available for free on the X-UniProt-Release response header
+    of any ordinary search request -- confirmed present even on the
+    cheapest possible query (size=0)."""
     try:
-        r = requests.get(UNIPROT_INFO, timeout=10)
+        r = requests.get(UNIPROT_API, params={"query": "reviewed:true", "size": 0}, timeout=10)
         r.raise_for_status()
-        return r.json().get("releaseNumber", "unknown")
+        return r.headers.get("X-UniProt-Release", "unknown")
     except Exception:
         return "unknown"
 

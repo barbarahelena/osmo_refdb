@@ -56,6 +56,28 @@
 #                     one-off larger fetch, not derived automatically.
 #                     Confirmed via a full-panel sweep (2026-07-29) to be
 #                     needed only for mazG so far -- see that entry.
+#   refseq_gene_symbols  optional list of gene symbols; when set,
+#                     01e_add_refseq_positives.py additionally pulls NCBI
+#                     RefSeq bacterial proteins tagged with any of these gene
+#                     names and merges them into the positive pool, for
+#                     families whose UniProt population is already fully
+#                     exhausted (fetched count == UniProt's own total, no
+#                     cap left to raise) but where RefSeq's independently-
+#                     annotated population turned out to add real,
+#                     non-redundant, correctly-annotated sequences --
+#                     confirmed per-family via a CD-HIT-2D novelty check
+#                     plus a manual product-description spot-check before
+#                     enabling (see docs/CHANGELOG.md). NOT safe to enable
+#                     blindly: a bare gene symbol can collide with a
+#                     completely unrelated gene in a different organism --
+#                     confirmed for mrpB/mrpC/mrpF during evaluation (e.g.
+#                     "MrpC" is also a Proteus fimbrial usher gene and a
+#                     Myxococcus CRP/FNR transcription factor) -- so this is
+#                     opt-in per family, not a general mechanism. Note:
+#                     08_build_diamond_db.sh excludes these merged sequences
+#                     (and 01d's _study ones) from the DIAMOND reference
+#                     specifically, even though HMM's alignment keeps them --
+#                     see that script's header comment.
 
 families:
   - name: ectA
@@ -290,6 +312,11 @@ families:
       negative_query/fusion_marker_pfam, not the partner's).
     positive_query: "(gene:otsA OR gene:otsA1 OR gene:otsA2) AND taxonomy_id:2"
     negative_query: "xref:pfam-PF00982 NOT (gene:otsA OR gene:otsA1 OR gene:otsA2) AND taxonomy_id:2"
+    # RefSeq novelty check: 11,356 RefSeq bacterial proteins vs. 905 in
+    # UniProt (fully exhausted). 500-sequence sample: 29.8% (149/500)
+    # genuinely novel at 90% identity, 94% correctly annotated
+    # "alpha,alpha-trehalose-phosphate synthase (UDP-forming)".
+    refseq_gene_symbols: [otsA, otsA1, otsA2]
     scope: annotate_only
     negative_pfam: PF00982   # Glyco_transf_20, GT20/trehalose synthase family
     fusion_partner: otsB
@@ -332,6 +359,11 @@ families:
       it improved there and runs independently of otsB's declaration.
     positive_query: "(gene:otsB OR gene:otsB1 OR gene:otsB2) AND taxonomy_id:2"
     negative_query: "xref:pfam-PF02358 NOT (gene:otsB OR gene:otsB1 OR gene:otsB2) AND taxonomy_id:2"
+    # RefSeq novelty check: 38,927 RefSeq bacterial proteins vs. 2,732 in
+    # UniProt (fully exhausted). 500-sequence sample: 65.6% (328/500)
+    # genuinely novel at 90% identity, 100% correctly annotated
+    # "trehalose-phosphatase". Largest novelty rate in the panel.
+    refseq_gene_symbols: [otsB, otsB1, otsB2]
     negative_pfam: PF02358   # Trehalose_PPase
 
   - name: mscL
@@ -352,6 +384,11 @@ families:
       section.
     positive_query: "(gene:mscL OR gene:mscL1 OR gene:mscL2) AND taxonomy_id:2"
     negative_query: "xref:pfam-PF01741 NOT (gene:mscL OR gene:mscL1 OR gene:mscL2) AND taxonomy_id:2"
+    # RefSeq novelty check: 56,506 RefSeq bacterial proteins vs. 8,910 in
+    # UniProt (fully exhausted). 500-sequence sample: 42.8% (214/500)
+    # genuinely novel at 90% identity, 100% correctly annotated
+    # "large-conductance mechanosensitive channel protein MscL".
+    refseq_gene_symbols: [mscL, mscL1, mscL2]
     negative_pfam: PF01741
 
   - name: mscS
@@ -366,6 +403,13 @@ families:
       symbols, same class of gap as murB1/murB2 -- see issue #8).
     positive_query: "(gene:mscS OR gene:mscS1 OR gene:mscS2) AND taxonomy_id:2"
     negative_query: "xref:pfam-PF00924 NOT (gene:mscS OR gene:mscS1 OR gene:mscS2) AND taxonomy_id:2"
+    # RefSeq novelty check: 4,535 RefSeq bacterial proteins vs. 1,569 in
+    # UniProt (fully exhausted). 500-sequence sample: 26.4% (132/500)
+    # genuinely novel at 90% identity, 100% correctly annotated
+    # "small-conductance mechanosensitive channel MscS" -- no kefA/mscK/
+    # ynaI cross-contamination despite this family's own documented
+    # promiscuous-Pfam caution above.
+    refseq_gene_symbols: [mscS, mscS1, mscS2]
     negative_pfam: PF00924   # MS_channel, broad MscS-like channel family
 
   - name: galE
@@ -440,6 +484,13 @@ families:
       drifting if the underlying UniProt data changes over time.
     positive_query: "(gene:mazG OR gene:mazG1 OR gene:mazG2) AND taxonomy_id:2"
     negative_query: "xref:pfam-PF03819 NOT (gene:mazG OR gene:mazG1 OR gene:mazG2) AND taxonomy_id:2"
+    # RefSeq novelty check: 45,441 RefSeq bacterial proteins vs. 5,340 in
+    # UniProt (UniProt's own gene-symbol population already fully
+    # exhausted -- fetched count == total). 500-sequence sample: 41.0%
+    # (205/500) genuinely novel at 90% identity against the existing
+    # UniProt+study-merged pool, 100% correctly annotated "nucleoside
+    # triphosphate pyrophosphohydrolase". Strongest case in the panel.
+    refseq_gene_symbols: [mazG, mazG1, mazG2]
     negative_pfam: PF03819   # MazG family (Pfam name is gene-specific, likely narrower than galE's)
     max_negative_override: 3000
     negative_median_override: 116
@@ -464,8 +515,22 @@ families:
       positive gap, not a negative-pool issue, found while investigating
       the same class of bug as mrpF/mrpG's PhaF/yufB gap.
     positive_query: "(gene:murB OR gene:murB1 OR gene:murB2) AND taxonomy_id:2"
-    negative_query: "xref:pfam-PF02873 NOT (gene:murB OR gene:murB1 OR gene:murB2) AND taxonomy_id:2"
-    negative_pfam: PF02873   # MurB C-terminal domain (murB-specific; skips the broader shared PF01565 FAD-binding domain)
+    negative_query: "xref:pfam-PF01565 NOT (gene:murB OR gene:murB1 OR gene:murB2) AND taxonomy_id:2"
+    # RefSeq novelty check: 74,987 RefSeq bacterial proteins vs. 12,332 in
+    # UniProt (fully exhausted). 500-sequence sample: 32.8% (164/500)
+    # genuinely novel at 90% identity, 100% correctly annotated
+    # "UDP-N-acetylmuramate dehydrogenase".
+    refseq_gene_symbols: [murB, murB1, murB2]
+    # Anchored on PF01565 (FAD_binding_4), the N-terminal domain MurB shares
+    # with a broad class of FAD-linked oxidoreductases, not PF02873 (MurB_C,
+    # the C-terminal domain) -- PF02873 is close to diagnostic for MurB
+    # itself, which starved the negative pool (53 UniProt candidates total,
+    # 75% of those flagged by 01b as likely mislabeled true positives).
+    # PF01565 has 76,989 bacterial candidates excluding murB/murB1/murB2
+    # (confirmed live via UniProt REST, 2026-07-31); every real MurB still
+    # carries PF02873 too, so 01b's purity filter still catches true
+    # orthologs pulled in under the broader anchor.
+    negative_pfam: PF01565   # FAD-binding domain shared with related oxidoreductases (broadened from PF02873 -- see comment above)
     scope: annotate_only
 
 
@@ -967,6 +1032,13 @@ families:
       yufB1/yufB2 checked with zero UniProt hits, not added).
     positive_query: "(gene:mrpG OR gene:mrpG1 OR gene:mrpG2 OR gene:mnhG OR gene:mnhG1 OR gene:mnhG2 OR gene:yufB) AND taxonomy_id:2"
     negative_query: "xref:pfam-PF03334 NOT (gene:mrpG OR gene:mrpG1 OR gene:mrpG2 OR gene:mnhG OR gene:mnhG1 OR gene:mnhG2 OR gene:yufB) AND taxonomy_id:2"
+    # RefSeq novelty check: 21,148 RefSeq bacterial proteins vs. 1,672 in
+    # UniProt (fully exhausted). 500-sequence sample: 76.6% (383/500)
+    # genuinely novel at 90% identity, 99.5% correctly annotated
+    # "monovalent cation/H(+) antiporter subunit G". NOT extended to
+    # mrpB/mrpC/mrpF siblings -- their equivalent gene symbols collide
+    # with unrelated genes in other organisms (see field doc above).
+    refseq_gene_symbols: [mrpG, mrpG1, mrpG2, mnhG, mnhG1, mnhG2, yufB]
     negative_pfam: PF03334
     pfam_model: PF03334
 
@@ -1122,6 +1194,11 @@ families:
       section.
     positive_query: "(gene:gshB OR gene:gshB1 OR gene:gshB2) AND taxonomy_id:2"
     negative_query: "xref:pfam-PF02951 NOT (gene:gshB OR gene:gshB1 OR gene:gshB2) AND taxonomy_id:2"
+    # RefSeq novelty check: 34,172 RefSeq bacterial proteins vs. 3,579 in
+    # UniProt (fully exhausted). 500-sequence sample: 18.4% (92/500)
+    # genuinely novel at 90% identity, 100% correctly annotated
+    # "glutathione synthase".
+    refseq_gene_symbols: [gshB, gshB1, gshB2]
     negative_pfam: PF02951   # GSH-S_N, glutathione-synthetase-specific substrate-binding domain (not the generic PF02955 ATP-grasp fold)
     pfam_model: PF02951
 
@@ -1231,6 +1308,11 @@ families:
       chase further.
     positive_query: "(gene:trkA OR gene:trkA1 OR gene:trkA2) AND taxonomy_id:2"
     negative_query: "xref:pfam-PF02080 NOT (gene:trkA OR gene:trkA1 OR gene:trkA2 OR gene:ktrA OR gene:ktrA1 OR gene:ktrA2) AND taxonomy_id:2"
+    # RefSeq novelty check: 24,815 RefSeq bacterial proteins vs. 4,858 in
+    # UniProt (fully exhausted). 500-sequence sample: 25.2% (126/500)
+    # genuinely novel at 90% identity, 100% correctly annotated "Trk
+    # system potassium transporter TrkA".
+    refseq_gene_symbols: [trkA, trkA1, trkA2]
     negative_pfam: PF02080   # TrkA_N, broad RCK-domain regulatory-subunit family
 
   - name: trkH

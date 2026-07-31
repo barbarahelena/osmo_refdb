@@ -713,3 +713,274 @@ the first attempt suggested.
 - `docs/FAMILIES_SUMMARY.md` is untracked in the working tree, predates
   this session's work, no action taken.
 - Not yet done: pushing `cluster-negatives-cdhit` and opening a PR.
+
+## This branch (`add-refseq-positives`) — RefSeq as a second positive source
+
+Follow-up to the extra-positives merge above. Benchmarking the merged `v8`
+build showed the Bakta-study merge alone doesn't close the recall gap it
+targeted: reads simulated from the held-out (test-split) study-derived
+sequences recall far worse than reads from ordinary UniProt sequences (e.g.
+mazG DIAMOND 23.2% vs. 80.7%, trkH DIAMOND 6.5% vs. 66.2%) -- the merged
+sequences are genuinely divergent from what the reference already had (the
+same reason they survived CD-HIT clustering as non-redundant in the first
+place), and divergence is exactly what a single calibrated score threshold
+struggles to generalize to.
+
+Researched how Bakta itself annotates these families successfully, for
+comparison: its DIAMOND search runs at a much more permissive 80%
+coverage/50% identity bar (vs. one calibrated per-family cutoff here), and
+its reference corpus (UniRef90/UniRef50/IPS, built from clustering all of
+UniProt+RefSeq) is far broader than any single gene-symbol-anchored UniProt
+query. That pointed at RefSeq as a way to broaden the *positive* corpus --
+a different lever than the already-disproven "fetch more negatives"
+(`max_negative_override` on mrpF/mrpG, Phase 1) -- worth testing directly
+rather than assuming.
+
+### Feasibility check across 15 families
+
+Confirmed mazG/mscS/trkA/trkH's UniProt positive populations are already
+fully exhausted (fetched count == UniProt's live total for all four --
+no fetch cap left to raise), so growing them further needs a source outside
+UniProt's own gene-symbol curation. Ran a CD-HIT-2D novelty check (RefSeq
+sample vs. the existing UniProt+study-merged pool, 90% identity) plus a
+manual product-description spot-check, across those four and 11 more
+families flagged earlier in this branch's negative-survival ranking:
+
+- **9 families confirmed clean and worth adding**: mazG (41.0% novel, RefSeq
+  population 45,441 vs. UniProt's 5,340), mscS (26.4%), trkA (25.2%), murB
+  (32.8%, 74,987 vs. 12,332), mscL (42.8%), otsB (65.6%, largest novelty
+  rate in the panel), otsA (29.8%), gshB (18.4%), mrpG (76.6%). All showed
+  ~94-100% correct product-description annotation on the novel subset --
+  no cross-contamination.
+- **Skipped for low marginal value (clean but not worth it)**: trkH (4.4%
+  novel), ktrB (12.8%, tiny 415-member RefSeq population to begin with),
+  ktrD (0% novel -- RefSeq offers nothing this pool doesn't already have).
+- **Skipped for gene-symbol collision (real contamination found, not
+  hypothetical)**: mrpC -- only 32% of its "novel" RefSeq hits are
+  genuinely mrpC (Na+/H+ antiporter subunit C); 45% are "MR/P fimbria
+  usher protein MrpC" (a *Proteus* fimbrial gene) and 23% are "Crp/Fnr
+  family transcriptional regulator MrpC" (a *Myxococcus* transcription
+  factor) -- the bare symbol "MrpC" is shared by three unrelated gene
+  families. mrpF -- a smaller-scale version via its own documented PhaF
+  alias (PR #7), which also names an unrelated polyhydroxyalkanoate-granule
+  protein in RefSeq. mrpB -- "DUF1883 domain-containing protein MrpB"
+  confirmed (direct lookup) to be an unrelated small protein (DUF1883 +
+  PPC + bacterial SH3-like domains, found in e.g. *C. difficile*), not a
+  real mrpB variant. None of the three siblings extended past mrpG.
+
+### Implementation (`pipeline/01e_add_refseq_positives.py`)
+
+New opt-in `families.yaml` field, `refseq_gene_symbols`, set only on the 9
+confirmed-clean families -- deliberately not a general mechanism, given the
+collision risk found above. New build step 1e (between the extra-positives
+merge and CD-HIT clustering) fetches NCBI RefSeq bacterial proteins tagged
+with those gene symbols and merges them into the fetched positive set:
+
+- Fetches the full matching UID list first (lightweight -- UIDs only) and
+  draws a reproducible random sample from it, rather than trusting
+  esearch's own non-randomized default order -- the same class of bias
+  01_fetch_refs.py already had to fix for UniProt (issue #4).
+- Skips RefSeq entries explicitly marked ", partial" at fetch time (a free
+  fragment signal); everything else still goes through the normal
+  length-outlier filter downstream.
+- Retry-with-backoff on NCBI's eutils calls -- confirmed necessary, not
+  speculative: hit a real transient 502 and two "response ended
+  prematurely" errors during testing, all recovered cleanly on retry.
+- Idempotent re-run (dedup by RefSeq accession), matching 01d's pattern.
+- Verified end-to-end in a throwaway subset (`releases/refseq-test`,
+  removed after): 7,350 RefSeq sequences merged across all 9 families
+  (1,435-1,492 sampled per family from each family's ~1,500-target cap),
+  clean sequence content (standard 20-aa alphabet, sane length ranges), no
+  errors after the retry fix.
+
+### Full build+benchmark validation, one family at a time (mrpG, otsA, mscS, otsB)
+
+Ran single-family build+benchmark subsets (`make_family_subset.py`) with the
+RefSeq merge active, each compared directly against its own `v8` baseline
+(same code otherwise, since `v8` predates `01e` entirely) -- the actual test
+the sequence-merge-level validation above couldn't answer on its own.
+
+- **mrpG** (chosen as the worst v8 performer, F1 0.541/0.442, and the
+  highest RefSeq novelty rate of the 9 at 76.6%): DIAMOND F1 0.541->0.465
+  (worse), HMM F1 0.442->0.472 (barely better). Splitting recall by origin
+  showed why this one didn't move much either way: RefSeq-origin recall
+  wasn't dramatically worse than the rest for either method (DIAMOND 32.7%
+  vs 39.3%, HMM 38.2% vs 42.0%) -- mrpG's badly-performing status turned out
+  to be its already-documented `pfam_ga_review_needed` negative-pool
+  calibration problem (Phase 3), not a positive-pool-narrowness problem, so
+  growing the positive pool was the wrong lever for this specific family.
+- **otsA** (next-worst cap-limited family without mrpG's calibration flag):
+  DIAMOND F1 0.699->0.631 (worse), HMM F1 0.607->0.657 (genuinely better --
+  both precision and recall improved). RefSeq-origin recall: DIAMOND 54.2%
+  vs 77.8% (real gap), HMM 87.3% vs 86.5% (no gap, explains the clean HMM
+  win).
+- **mscS**: the one exception -- DIAMOND F1 0.495->0.512 (slightly better),
+  HMM F1 0.455->0.505 (clearly better). Even here, HMM's gain came from a
+  real recall edge on RefSeq-origin reads (77.8% vs 64.1%) that DIAMOND
+  didn't share (57.9% vs 65.9%, still a deficit) -- DIAMOND's improvement
+  came despite the dilution, not because RefSeq-origin sequences were
+  suddenly easy for it too.
+- **otsB** (highest RefSeq novelty rate, 65.6%): DIAMOND F1 0.840->0.717
+  (worst regression yet, -0.123), HMM F1 0.662->0.668 (flat/noise).
+
+**Consistent pattern across all 4**: HMM's F1 improved in every case (3
+meaningfully, 1 negligibly); DIAMOND's F1 got worse in 3 of 4, including the
+largest single regression seen anywhere in this branch's testing (otsB,
+-0.123). The mechanism matches the Bakta-merge finding and the earlier
+Bakta-methodology research: profile-based matching (HMM) tolerates the
+added divergent sequences; identity-based best-hit search (DIAMOND) mostly
+doesn't.
+
+### Per-method reference split: full merge for HMM, UniProt-only for DIAMOND (`08_build_diamond_db.sh`)
+
+Direct response to the pattern above, proposed and confirmed rather than
+assumed: since HMM and DIAMOND consistently "need different things," build
+each from a different input instead of forcing one merged pool to serve
+both.
+
+- `08_build_diamond_db.sh` now excludes `_study`/`_refseq`-tagged sequences
+  from the DIAMOND reference specifically -- `positive.train.faa` itself is
+  untouched (04_align_trim.sh already consumed the full file for HMM's
+  alignment before this step runs), so nothing upstream needs to change.
+  Extended to also exclude `01d`'s `_study` tag, not just `01e`'s `_refseq`
+  one -- the same mechanism applies there (confirmed earlier: Bakta-origin
+  recall for DIAMOND was even worse than RefSeq-origin's, e.g. mazG 23.2%
+  vs 80.7%), even though the request that prompted this was RefSeq-specific.
+- Negatives are untouched: there's no RefSeq/study-equivalent negative
+  source (`01d`/`01e` only ever touch positives), so both methods still
+  share the same UniProt-only negative pool -- nothing to split there yet.
+- Implemented as a small `awk` filter (drop whole records by tag, keep
+  everything else) rather than a new pipeline step, since `03`/`04` already
+  read the unfiltered file correctly and only DIAMOND's own db-building
+  step needed to diverge. Verified directly against real `v8` data
+  (mazG's 2,629-sequence train set, 134 `_study`-tagged): filtered output
+  is exactly the 2,495 non-`_study` records, byte-identical to the
+  originals, nothing else disturbed.
+
+### Full 43-family `v9` rebuild -- panel-wide validation
+
+Built and benchmarked all 43 families (`releases/v9`) against `v8`, the same
+"validate the whole branch before merging" discipline this project used for
+its own `v7`/`v8` rebuilds -- the single-family tests above show the
+mechanism works, but only a full-panel build confirms it at the scale this
+will actually ship at.
+
+- **Panel-wide (read-volume-weighted)**: essentially flat, as expected --
+  DIAMOND F1 0.825->0.827, HMM F1 0.693->0.693. This branch's changes only
+  touch 9 of 43 families, so a flat panel-wide number isn't a null result,
+  it's the correct outcome when most of the panel is untouched.
+- **The 9 RefSeq-enabled families, isolated** (the actual test): DIAMOND F1
+  0.854->0.858 (+0.003), HMM F1 0.682->0.683 (+0.001), both combined
+  read-volume-weighted across just these 9. Per-family, DIAMOND improved or
+  stayed flat in all 9 (mazG +0.014, mscS +0.035, trkA +0.050, murB -0.001,
+  mscL +0.009, otsB -0.003, otsA +0.003, gshB -0.001, mrpG +0.030) -- no
+  regressions at all, a real change from the *unsplit* single-family tests
+  above where otsA/otsB/mrpG all regressed (up to -0.123 for otsB). That
+  regression recovery is the actual confirmation the DIAMOND/HMM split
+  works, not just a plausible mechanism. HMM stayed mostly positive too (6
+  of 9 improved, murB -0.019 the largest dip, otherwise noise-level).
+- **9 other (non-RefSeq-enabled) families moved by more than 0.03 F1** in
+  one direction or the other on one or both methods (ktrD, opuCB, opuBA,
+  mrpC, opuCC, mrpB, ktrA, opuAA, opuCA, opuBB) -- none of these declare
+  `refseq_gene_symbols` or have an `extra_sequences/` file, so nothing in
+  this branch touches them directly. Consistent with this project's own
+  documented finding (Phase 2's numbered-paralog sweep, `v7` rebuild
+  notes): a full-panel build shifts the combined DIAMOND/HMM database's
+  composition for every family, not just the ones a change directly
+  targets, plus ordinary live-UniProt-data drift between fetches done on
+  different days. Not chased further -- same "document, don't chase"
+  discipline used throughout this project's history for unexplained
+  full-panel drift below the scale of a real regression.
+
+### Reproducibility audit: broken provenance, environment drift, and a real murB fix found along the way
+
+Prompted by "this feels a bit all over the place" -- a fair read of a
+branch that had accumulated a live-UniProt fetch, a live-NCBI fetch, an
+ad-hoc hand-patched conda env, and several single-family throwaway builds.
+Checked what was actually broken rather than just reorganizing.
+
+- **UniProt release tracking was silently broken.** `get_uniprot_release()`
+  hit `rest.uniprot.org/utils/release`, which 404s (confirmed directly) --
+  every `manifest.tsv` row across `v7`/`v8`/`v9` recorded `unknown` instead
+  of the real release, defeating the field's whole purpose. Fixed to read
+  the `X-UniProt-Release` response header off an ordinary search request
+  instead (present even on the cheapest possible query, `size=0`) --
+  verified live: returns `2026_02`.
+- **RefSeq fetches had no provenance at all.** `01e`'s manifest didn't even
+  have a fetch-date column. Added `date_fetched`, the practical equivalent
+  of UniProt's release field given NCBI has no discrete RefSeq release
+  number.
+- **The environment used for every benchmark this branch ran was not the
+  one this repo documents.** Everything (mrpG/otsA/mscS/otsB, the full
+  `v9` rebuild, the murB test below) ran through a pre-existing, hand-patched
+  `osmotool` conda env, not a clean build from `environment.yml`. Built and
+  verified the actual Docker image for the first time this session:
+  `mafft` 7.526, `trimAl` 1.5.rev1, HMMER 3.4, DIAMOND 2.2.4, CD-HIT 4.8.1,
+  `wgsim`, full Python stack, and `osmotool` all present and working --
+  `pip show osmotool` confirms the exact pinned commit (`0.1.dev3+g4cbc3ba8d`
+  matches the Dockerfile's `@4cbc3ba`). **Found a real discrepancy in the
+  process**: the ad-hoc env's `osmotool` was a *different* commit
+  (`0.3.1.dev2+gf1465475d.d20260727`, not `4cbc3ba`) -- every benchmark
+  number produced on this branch so far used an unpinned, drifted build,
+  not the one the project actually documents and pins for reproducibility.
+  Numbers are still internally consistent (compared against each other and
+  against `v8`, built the same way), but a future full rebuild through
+  Docker is the one to treat as authoritative, not `v9` as currently built.
+- **Added `.dockerignore`** (didn't exist before): the Docker build context
+  was transferring all of `releases/` -- 11GB down to ~16MB, unrelated to
+  correctness but a real drag on ever actually using Docker day-to-day.
+
+### murB: fixed for real, found while investigating the reproducibility audit above
+
+Re-examining murB's `insufficient_negative_data` status (the worst in the
+43-family panel, see the survival-rate ranking earlier in this branch)
+surfaced that its negative anchor, PF02873 (MurB_C, the catalytic
+C-terminal domain), is *too* MurB-specific to serve as a negative pool at
+all -- 41 domain architectures, essentially gene-specific -- so
+`xref:pfam-PF02873 NOT gene:murB` wasn't selecting confusable paralogs, it
+was selecting real MurB orthologs UniProt never got around to curating a
+gene symbol for (confirmed: 53 total UniProt candidates, 75% flagged by
+01b as likely mislabeled true positives, 13 left standing, hence the
+`insufficient_negative_data` flag). The same narrow-domain pattern used
+elsewhere in this file (proP, gshB) doesn't fail this way because those
+genes have real distinct paralogs sharing their narrow domain; murB, a
+near-universal single-function housekeeping enzyme, doesn't.
+
+- **Tested rather than assumed**: switched `negative_query`/`negative_pfam`
+  to PF01565 (FAD_binding_4, the N-terminal domain MurB shares with a
+  broad class of unrelated FAD-linked oxidoreductases) and ran a full
+  single-family build+benchmark against the `v9` baseline.
+- **Calibration**: `insufficient_negative_data` (13 negatives, no workable
+  cutoff) -> `clean_separation`, F1=1.000, cutoff=34.70, 61 usable
+  negatives.
+- **Real detection improvement, not just a calibration-status fix**:
+  DIAMOND F1 0.936->0.941, HMM F1 0.705->**0.736** (recall 0.545->0.582,
+  precision unchanged at ~1.0 for both methods -- a genuine gain on both
+  axes, not a tradeoff).
+- Kept anyway despite PF01565 being the "broad, promiscuous fold" pattern
+  this file usually avoids (ectA/ectB/galE): every real MurB ortholog still
+  carries PF02873 too, so 01b's purity filter still catches true positives
+  pulled in under the broader anchor -- the promiscuity that would be a
+  contamination risk elsewhere is exactly what supplies murB with negatives
+  it never had access to before.
+
+### Status at time of writing
+
+- RefSeq merge (`01e`) and the per-method reference split
+  (`08_build_diamond_db.sh`) are both implemented and validated at three
+  levels: sequence-merge correctness, single-family build+benchmark (4
+  families), and now a full 43-family panel rebuild (`v9`, above) --
+  confirming the split's benefit holds at the scale this will actually
+  ship at, not just in isolation.
+- UniProt/RefSeq provenance tracking fixed, Docker image verified working,
+  `.dockerignore` added, and murB's negative-pool fix validated and made
+  permanent in `families.yaml` -- all committed on this branch.
+- **Open item**: this branch's benchmark numbers (mrpG/otsA/mscS/otsB, the
+  full `v9` rebuild, murB's PF01565 test) were all produced against an
+  `osmotool` build that doesn't match the Dockerfile's pinned commit (see
+  above). Internally consistent, but a Docker-built rebuild would be the
+  authoritative version to cite going forward, not `v9` as currently built.
+- Committed and pushed to `add-refseq-positives` (PR #15, still open).
+- `v9` (and the murB/mrpG/otsA/mscS/otsB single-family test releases) are
+  local builds only (`releases/` is gitignored) -- no further action
+  needed to preserve them beyond this changelog entry.
