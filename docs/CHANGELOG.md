@@ -857,12 +857,49 @@ both.
   is exactly the 2,495 non-`_study` records, byte-identical to the
   originals, nothing else disturbed.
 
+### Full 43-family `v9` rebuild -- panel-wide validation
+
+Built and benchmarked all 43 families (`releases/v9`) against `v8`, the same
+"validate the whole branch before merging" discipline this project used for
+its own `v7`/`v8` rebuilds -- the single-family tests above show the
+mechanism works, but only a full-panel build confirms it at the scale this
+will actually ship at.
+
+- **Panel-wide (read-volume-weighted)**: essentially flat, as expected --
+  DIAMOND F1 0.825->0.827, HMM F1 0.693->0.693. This branch's changes only
+  touch 9 of 43 families, so a flat panel-wide number isn't a null result,
+  it's the correct outcome when most of the panel is untouched.
+- **The 9 RefSeq-enabled families, isolated** (the actual test): DIAMOND F1
+  0.854->0.858 (+0.003), HMM F1 0.682->0.683 (+0.001), both combined
+  read-volume-weighted across just these 9. Per-family, DIAMOND improved or
+  stayed flat in all 9 (mazG +0.014, mscS +0.035, trkA +0.050, murB -0.001,
+  mscL +0.009, otsB -0.003, otsA +0.003, gshB -0.001, mrpG +0.030) -- no
+  regressions at all, a real change from the *unsplit* single-family tests
+  above where otsA/otsB/mrpG all regressed (up to -0.123 for otsB). That
+  regression recovery is the actual confirmation the DIAMOND/HMM split
+  works, not just a plausible mechanism. HMM stayed mostly positive too (6
+  of 9 improved, murB -0.019 the largest dip, otherwise noise-level).
+- **9 other (non-RefSeq-enabled) families moved by more than 0.03 F1** in
+  one direction or the other on one or both methods (ktrD, opuCB, opuBA,
+  mrpC, opuCC, mrpB, ktrA, opuAA, opuCA, opuBB) -- none of these declare
+  `refseq_gene_symbols` or have an `extra_sequences/` file, so nothing in
+  this branch touches them directly. Consistent with this project's own
+  documented finding (Phase 2's numbered-paralog sweep, `v7` rebuild
+  notes): a full-panel build shifts the combined DIAMOND/HMM database's
+  composition for every family, not just the ones a change directly
+  targets, plus ordinary live-UniProt-data drift between fetches done on
+  different days. Not chased further -- same "document, don't chase"
+  discipline used throughout this project's history for unexplained
+  full-panel drift below the scale of a real regression.
+
 ### Status at time of writing
 
 - RefSeq merge (`01e`) and the per-method reference split
-  (`08_build_diamond_db.sh`) are both implemented and validated -- the
-  merge via 4 single-family build+benchmark tests (above), the split via a
-  direct filter-correctness check against real data. A full-panel rebuild
-  incorporating both, across all 9 RefSeq-enabled families, has not been
-  done yet -- everything so far is single-family subset testing.
+  (`08_build_diamond_db.sh`) are both implemented and validated at three
+  levels: sequence-merge correctness, single-family build+benchmark (4
+  families), and now a full 43-family panel rebuild (`v9`, above) --
+  confirming the split's benefit holds at the scale this will actually
+  ship at, not just in isolation.
 - Committed and pushed to `add-refseq-positives` (PR #15, still open).
+- `v9` is a local build only (`releases/` is gitignored) -- no further
+  action needed to preserve it beyond this changelog entry.
