@@ -964,6 +964,39 @@ near-universal single-function housekeeping enzyme, doesn't.
   contamination risk elsewhere is exactly what supplies murB with negatives
   it never had access to before.
 
+### osmotool Dockerfile pin was the stale side, not this branch's ad-hoc env
+
+Follow-up on the "open item" above: checked the actual osmotool git history
+(local checkout one directory up from this repo) instead of just flagging
+the discrepancy and moving on.
+
+- The Dockerfile's pin (`4cbc3ba`) was ~25 commits behind osmotool's
+  current `main`. The ad-hoc env used for every benchmark on this branch
+  (`f1465475d`) was only 2 commits behind current HEAD -- i.e. it was the
+  Dockerfile pin that had drifted stale, not this branch's testing
+  environment.
+- One of those 25 commits (`c097a43`) fixed `quantifier.KNOWN_FAMILIES`
+  from a hardcoded ~15-family list to the full v7 43-family panel --
+  **mrpG, gshB, and trkA (this branch's own RefSeq/split test subjects)
+  weren't in the old pin's known-family list at all.** A Docker build from
+  the pre-bump Dockerfile would not have handled several of the families
+  this branch actually validated.
+- Bumped the Dockerfile's pin to `2826ebc` (current osmotool `main`,
+  confirmed matching `origin/main`) and rebuilt. Verified: `osmotool
+  --version` now correctly reports `0.4.0` (previously fell back to "see
+  pyproject.toml" -- also fixed upstream in this commit range, not
+  something broken in this repo), and the CLI's own `--help` no longer
+  hardcodes the stale 15-family description. Rebuild was fast (~12s vs.
+  the initial ~500s) confirming `.dockerignore` works as intended on a
+  cache-hit build.
+
+Net correction to the earlier framing: this branch's benchmark numbers
+(mrpG/otsA/mscS/otsB, the full `v9` rebuild, murB's PF01565 test) were
+already run against an environment close to current osmotool, not a
+drifted/wrong one -- the Dockerfile just hadn't caught up yet. No need to
+re-run any of this branch's validation; the Docker image is now the one
+that matches what was actually tested, not the other way around.
+
 ### Status at time of writing
 
 - RefSeq merge (`01e`) and the per-method reference split
@@ -972,14 +1005,10 @@ near-universal single-function housekeeping enzyme, doesn't.
   families), and now a full 43-family panel rebuild (`v9`, above) --
   confirming the split's benefit holds at the scale this will actually
   ship at, not just in isolation.
-- UniProt/RefSeq provenance tracking fixed, Docker image verified working,
-  `.dockerignore` added, and murB's negative-pool fix validated and made
-  permanent in `families.yaml` -- all committed on this branch.
-- **Open item**: this branch's benchmark numbers (mrpG/otsA/mscS/otsB, the
-  full `v9` rebuild, murB's PF01565 test) were all produced against an
-  `osmotool` build that doesn't match the Dockerfile's pinned commit (see
-  above). Internally consistent, but a Docker-built rebuild would be the
-  authoritative version to cite going forward, not `v9` as currently built.
+- UniProt/RefSeq provenance tracking fixed, Docker image verified working
+  and its osmotool pin brought current, `.dockerignore` added, and murB's
+  negative-pool fix validated and made permanent in `families.yaml` -- all
+  committed on this branch.
 - Committed and pushed to `add-refseq-positives` (PR #15, still open).
 - `v9` (and the murB/mrpG/otsA/mscS/otsB single-family test releases) are
   local builds only (`releases/` is gitignored) -- no further action
