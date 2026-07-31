@@ -42,6 +42,7 @@ import csv
 import random
 import re
 import time
+from datetime import date
 from pathlib import Path
 
 import requests
@@ -191,6 +192,13 @@ def main() -> None:
         print("No family declares refseq_gene_symbols -- nothing to fetch.")
         return
 
+    # NCBI has no discrete, citable "release number" for RefSeq the way
+    # UniProt does (it's continuously updated) -- a fetch date is the
+    # practical provenance signal here, same role date_fetched already
+    # plays in 01_fetch_refs.py's own manifest.
+    date_fetched = date.today().isoformat()
+    print(f"Fetch date: {date_fetched}")
+
     manifest_rows = []
     for fam in fam_defs:
         name = fam["name"]
@@ -234,6 +242,7 @@ def main() -> None:
             "n_partial_skipped": n_partial_skipped,
             "n_appended": len(to_add),
             "n_already_present": n_dupe,
+            "date_fetched": date_fetched,
         })
         time.sleep(SLEEP_BETWEEN_REQUESTS)
 
