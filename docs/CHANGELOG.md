@@ -892,6 +892,78 @@ will actually ship at.
   discipline used throughout this project's history for unexplained
   full-panel drift below the scale of a real regression.
 
+### Reproducibility audit: broken provenance, environment drift, and a real murB fix found along the way
+
+Prompted by "this feels a bit all over the place" -- a fair read of a
+branch that had accumulated a live-UniProt fetch, a live-NCBI fetch, an
+ad-hoc hand-patched conda env, and several single-family throwaway builds.
+Checked what was actually broken rather than just reorganizing.
+
+- **UniProt release tracking was silently broken.** `get_uniprot_release()`
+  hit `rest.uniprot.org/utils/release`, which 404s (confirmed directly) --
+  every `manifest.tsv` row across `v7`/`v8`/`v9` recorded `unknown` instead
+  of the real release, defeating the field's whole purpose. Fixed to read
+  the `X-UniProt-Release` response header off an ordinary search request
+  instead (present even on the cheapest possible query, `size=0`) --
+  verified live: returns `2026_02`.
+- **RefSeq fetches had no provenance at all.** `01e`'s manifest didn't even
+  have a fetch-date column. Added `date_fetched`, the practical equivalent
+  of UniProt's release field given NCBI has no discrete RefSeq release
+  number.
+- **The environment used for every benchmark this branch ran was not the
+  one this repo documents.** Everything (mrpG/otsA/mscS/otsB, the full
+  `v9` rebuild, the murB test below) ran through a pre-existing, hand-patched
+  `osmotool` conda env, not a clean build from `environment.yml`. Built and
+  verified the actual Docker image for the first time this session:
+  `mafft` 7.526, `trimAl` 1.5.rev1, HMMER 3.4, DIAMOND 2.2.4, CD-HIT 4.8.1,
+  `wgsim`, full Python stack, and `osmotool` all present and working --
+  `pip show osmotool` confirms the exact pinned commit (`0.1.dev3+g4cbc3ba8d`
+  matches the Dockerfile's `@4cbc3ba`). **Found a real discrepancy in the
+  process**: the ad-hoc env's `osmotool` was a *different* commit
+  (`0.3.1.dev2+gf1465475d.d20260727`, not `4cbc3ba`) -- every benchmark
+  number produced on this branch so far used an unpinned, drifted build,
+  not the one the project actually documents and pins for reproducibility.
+  Numbers are still internally consistent (compared against each other and
+  against `v8`, built the same way), but a future full rebuild through
+  Docker is the one to treat as authoritative, not `v9` as currently built.
+- **Added `.dockerignore`** (didn't exist before): the Docker build context
+  was transferring all of `releases/` -- 11GB down to ~16MB, unrelated to
+  correctness but a real drag on ever actually using Docker day-to-day.
+
+### murB: fixed for real, found while investigating the reproducibility audit above
+
+Re-examining murB's `insufficient_negative_data` status (the worst in the
+43-family panel, see the survival-rate ranking earlier in this branch)
+surfaced that its negative anchor, PF02873 (MurB_C, the catalytic
+C-terminal domain), is *too* MurB-specific to serve as a negative pool at
+all -- 41 domain architectures, essentially gene-specific -- so
+`xref:pfam-PF02873 NOT gene:murB` wasn't selecting confusable paralogs, it
+was selecting real MurB orthologs UniProt never got around to curating a
+gene symbol for (confirmed: 53 total UniProt candidates, 75% flagged by
+01b as likely mislabeled true positives, 13 left standing, hence the
+`insufficient_negative_data` flag). The same narrow-domain pattern used
+elsewhere in this file (proP, gshB) doesn't fail this way because those
+genes have real distinct paralogs sharing their narrow domain; murB, a
+near-universal single-function housekeeping enzyme, doesn't.
+
+- **Tested rather than assumed**: switched `negative_query`/`negative_pfam`
+  to PF01565 (FAD_binding_4, the N-terminal domain MurB shares with a
+  broad class of unrelated FAD-linked oxidoreductases) and ran a full
+  single-family build+benchmark against the `v9` baseline.
+- **Calibration**: `insufficient_negative_data` (13 negatives, no workable
+  cutoff) -> `clean_separation`, F1=1.000, cutoff=34.70, 61 usable
+  negatives.
+- **Real detection improvement, not just a calibration-status fix**:
+  DIAMOND F1 0.936->0.941, HMM F1 0.705->**0.736** (recall 0.545->0.582,
+  precision unchanged at ~1.0 for both methods -- a genuine gain on both
+  axes, not a tradeoff).
+- Kept anyway despite PF01565 being the "broad, promiscuous fold" pattern
+  this file usually avoids (ectA/ectB/galE): every real MurB ortholog still
+  carries PF02873 too, so 01b's purity filter still catches true positives
+  pulled in under the broader anchor -- the promiscuity that would be a
+  contamination risk elsewhere is exactly what supplies murB with negatives
+  it never had access to before.
+
 ### Status at time of writing
 
 - RefSeq merge (`01e`) and the per-method reference split
@@ -900,6 +972,15 @@ will actually ship at.
   families), and now a full 43-family panel rebuild (`v9`, above) --
   confirming the split's benefit holds at the scale this will actually
   ship at, not just in isolation.
+- UniProt/RefSeq provenance tracking fixed, Docker image verified working,
+  `.dockerignore` added, and murB's negative-pool fix validated and made
+  permanent in `families.yaml` -- all committed on this branch.
+- **Open item**: this branch's benchmark numbers (mrpG/otsA/mscS/otsB, the
+  full `v9` rebuild, murB's PF01565 test) were all produced against an
+  `osmotool` build that doesn't match the Dockerfile's pinned commit (see
+  above). Internally consistent, but a Docker-built rebuild would be the
+  authoritative version to cite going forward, not `v9` as currently built.
 - Committed and pushed to `add-refseq-positives` (PR #15, still open).
-- `v9` is a local build only (`releases/` is gitignored) -- no further
-  action needed to preserve it beyond this changelog entry.
+- `v9` (and the murB/mrpG/otsA/mscS/otsB single-family test releases) are
+  local builds only (`releases/` is gitignored) -- no further action
+  needed to preserve them beyond this changelog entry.

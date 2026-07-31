@@ -515,13 +515,22 @@ families:
       positive gap, not a negative-pool issue, found while investigating
       the same class of bug as mrpF/mrpG's PhaF/yufB gap.
     positive_query: "(gene:murB OR gene:murB1 OR gene:murB2) AND taxonomy_id:2"
-    negative_query: "xref:pfam-PF02873 NOT (gene:murB OR gene:murB1 OR gene:murB2) AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF01565 NOT (gene:murB OR gene:murB1 OR gene:murB2) AND taxonomy_id:2"
     # RefSeq novelty check: 74,987 RefSeq bacterial proteins vs. 12,332 in
     # UniProt (fully exhausted). 500-sequence sample: 32.8% (164/500)
     # genuinely novel at 90% identity, 100% correctly annotated
     # "UDP-N-acetylmuramate dehydrogenase".
     refseq_gene_symbols: [murB, murB1, murB2]
-    negative_pfam: PF02873   # MurB C-terminal domain (murB-specific; skips the broader shared PF01565 FAD-binding domain)
+    # Anchored on PF01565 (FAD_binding_4), the N-terminal domain MurB shares
+    # with a broad class of FAD-linked oxidoreductases, not PF02873 (MurB_C,
+    # the C-terminal domain) -- PF02873 is close to diagnostic for MurB
+    # itself, which starved the negative pool (53 UniProt candidates total,
+    # 75% of those flagged by 01b as likely mislabeled true positives).
+    # PF01565 has 76,989 bacterial candidates excluding murB/murB1/murB2
+    # (confirmed live via UniProt REST, 2026-07-31); every real MurB still
+    # carries PF02873 too, so 01b's purity filter still catches true
+    # orthologs pulled in under the broader anchor.
+    negative_pfam: PF01565   # FAD-binding domain shared with related oxidoreductases (broadened from PF02873 -- see comment above)
     scope: annotate_only
 
 

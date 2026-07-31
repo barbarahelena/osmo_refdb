@@ -1,0 +1,7 @@
+.git/
+releases/
+__pycache__/
+*.pyc
+.DS_Store
+osmotool_src/
+extra_sequences/
