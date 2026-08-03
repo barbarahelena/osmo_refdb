@@ -1208,6 +1208,72 @@ mechanism and the gshB-style `pfam_model` mechanism (opuBA uses neither).
 - opuBA's real problem (paralog best-hit competition) remains unsolved,
   same open-question status as opuBC/opuAC.
 
+### cspA: last remaining pfam_model family, small confirmed win
+
+Audited the panel for any other family still using `pfam_model` after the
+mrpE/gshB fixes above -- only cspA. Checked rather than assumed it would
+behave the same way: precision already perfect (1.0/1.0 both methods),
+recall showing the same shape of gap (HMM 0.627 vs. DIAMOND 0.681) as
+mrpE/gshB had, and `qc_scorecard.tsv` showing the cleanest possible
+starting point for this fix (`n_negative_scored=0`, zero overlap between
+cspA's negative pool and its positives -- no redesign needed, just the
+cutoff source).
+
+- Isolated single-family build+benchmark (`make_family_subset.py`,
+  `pfam_model` removed, `negative_query` unchanged) confirmed a real but
+  modest gain: HMM F1 0.771->0.783 (recall 0.627->0.643), precision
+  unchanged. Adopted -- no downside found.
+- Notably smaller than mrpE's or especially gshB's version of the same
+  fix. Plausible reason: cspA's positive set is deliberately broad by
+  design (captures every csp paralog across all of Bacteria, not a single
+  ortholog group, per the family's own Task 1 spec), so the custom-built
+  HMM ends up close to Pfam's own long-established, well-curated CSD
+  model anyway -- there wasn't much slack between the two cutoff sources
+  to recover, unlike mrpE/gshB's single-ortholog-group models.
+- `pfam_model` is now unset for all 43 families -- this lever is fully
+  exploited across the panel, nothing left to audit here.
+
+### mrpA/mrpD: HMM underperformance root-caused, a genuine mixed problem (not yet fixed)
+
+Investigated why HMM trails DIAMOND by a wide margin for both families
+(mrpA: HMM F1 0.382 vs. DIAMOND 0.736; mrpD: HMM F1 0.428 vs. DIAMOND
+0.64) -- distinct from every fix above, confirmed by checking rather than
+assuming it was the same mechanism.
+
+- Best-hit competition is NOT the driver here (unlike opuBA): mrpA/mrpD
+  correctly win ~94% of their own true-positive reads' best-hit calls.
+- Traced the false positives directly (cross-referencing every other
+  family's own `hmmscan.tblout` for hits landing on mrpA's/mrpD's model):
+  they come overwhelmingly from **each other's own negative sets**
+  (mrpA's FPs: 5,078 from mrpD.negative, 4,780 from mrpB.negative;
+  mrpD's FPs: 6,593 from mrpA.negative, 1,965 from mrpB.negative), not
+  from unrelated families scattered across the panel. The mrpB
+  contribution is likely stale -- that `v9` data predates this branch's
+  own mrpB fix (mrpB's old negative pool was ~68% genuine mrpA+mrpB
+  fusion sequences, which would legitimately score well against mrpA's
+  model; not re-verified with a fresh build).
+- A 200-entry live UniProt sample of the shared PF00361 negative pool
+  (mrpA/mrpD's own domain) shows this is a genuine **mix**, unlike every
+  fix above: ~56% are real, different, legitimately-hard-negative
+  proteins (NADH-quinone oxidoreductase subunits L/M/N from Complex I,
+  and DabB, both structurally related via a shared broad fold but
+  functionally distinct -- exactly the "generic Complex I NuoL/M/N-type
+  subunits" caution already written into mrpA's own family description),
+  ~15% are genuinely mislabeled mrpA/mrpD orthologs under bare locus tags
+  (the same structural-contamination pattern already fixed elsewhere),
+  and the rest ambiguous from title alone.
+- **Not fixed yet, deliberately**: a full random-background swap (the
+  mrpB/E/F/G playbook) would work for the mislabeled-positive ~15% but
+  would also discard the legitimate ~56% Nuo/DabB hard-negative content
+  that mrpB/E/F/G's negative pools never had -- real risk of trading a
+  precision win for a specificity loss against genuinely confusable
+  Complex I subunits in real samples, unlike every prior fix on this
+  branch. A more surgical fix (exclude only the specific
+  mislabeled-positive product-description pattern from each other's
+  negative pools, keep the Nuo/DabB content) is the more promising
+  untried idea, but unverified -- flagged for a follow-up, not attempted
+  this session.
+
 ### Status at time of writing
 
 - RefSeq merge (`01e`) and the per-method reference split
@@ -1230,7 +1296,12 @@ mechanism and the gshB-style `pfam_model` mechanism (opuBA uses neither).
   tried and reverted after the real fetch turned out almost entirely
   redundant with UniProt (only the verification sample looked novel, from
   a query that didn't match production). opuBA's underlying problem
-  remains open, same status as opuBC/opuAC.
+  remains open, same status as opuBC/opuAC. cspA's `pfam_model` also
+  removed (small, real HMM recall gain, no downside) -- no family in the
+  panel uses `pfam_model` anymore. mrpA/mrpD root-caused to a genuine
+  mixed problem (real Complex-I-subunit hard negatives alongside
+  mislabeled-positive contamination in their shared PF00361 pool) --
+  diagnosed but not yet fixed, flagged for a more surgical follow-up.
 - Committed and pushed to `add-refseq-positives` (PR #15, still open).
 - `v9` (and the murB/mrpG/otsA/mscS/otsB single-family test releases) are
   local builds only (`releases/` is gitignored) -- no further action
