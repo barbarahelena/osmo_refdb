@@ -415,8 +415,64 @@ families:
       the benchmark and cutoff_manifest.tsv status before trusting it.
       Also includes mscS1/mscS2 (real, reviewed numbered-paralog gene
       symbols, same class of gap as murB1/murB2 -- see issue #8).
+
+      Root-caused (2026-08-04), not just flagged: traced HMM's false
+      positives directly (cross-checked every other family's own
+      hmmscan.tblout for stray hits on mscS's model) -- negligible
+      cross-panel contamination (single-digit noise), confirming the
+      false positives come from WITHIN mscS's own negative pool, not
+      elsewhere in the panel. A live UniProt sample of that pool (54,533
+      candidates) showed a genuine mix: real named paralogs (kefA, ybdG,
+      ykuT -- legitimate hard negatives, distinct proteins) alongside a
+      large population of bare-locus-tag entries whose product
+      description is literally "Mechanosensitive ion channel protein
+      MscS" -- mislabeled positives, not hard negatives.
+
+      hmm_negative_query added (2026-08-04): a surgical exclusion
+      (xref:pfam-PF00924 NOT gene:mscS* AND (protein_name:KefA OR
+      protein_name:YbdG OR protein_name:YkuT OR NOT protein_name:MscS))
+      keeps the named paralogs, drops the bare-tag MscS entries (54,533 ->
+      2,757 candidates). Tested as a full swap first (both DIAMOND and HMM
+      calibrated + benchmarked on the surgical pool): HMM improved (F1
+      0.481->0.546) but DIAMOND regressed (F1 0.546->0.5) -- the same
+      calibration-drift mechanism already documented on mrpB's fusion-fix
+      history: 08b_calibrate_diamond_cutoffs.py sets its cutoff from the
+      negative set's own distribution, and removing the (conceptually
+      wrong but score-similar) bare-tag entries loosened DIAMOND's
+      threshold. Rather than accept that trade, added `hmm_negative_query`
+      as a new opt-in field (01_fetch_refs.py/05_build_hmms.sh) so ONLY
+      HMM's calibration uses the surgical pool -- DIAMOND calibration
+      (08b), 01b/01c QC, and the benchmark's own ground truth all still
+      use the unfiltered negative_query below, matching
+      08_build_diamond_db.sh's existing DIAMOND-specific positive-side
+      split (_study/_refseq exclusion), just mirrored on the negative side
+      for the opposite method.
+
+      IMPORTANT caveat, found verifying the deployed mechanism (not
+      assumed): `hmm_negative_query` only feeds 06_calibrate_cutoffs.py's
+      whole-protein GA-cutoff calibration. `11_compute_metrics.py`'s
+      primary summary.tsv metric -- the one every F1 number in this file
+      is drawn from -- is pure best-hit-per-read competition on raw
+      hmmscan bit scores and never applies that cutoff at all (confirmed
+      by reading load_hmm_calls/best_hit_per_read/label_reads directly),
+      so this fix reproduces NONE of the full-swap HMM improvement above
+      in this repo's own short-read benchmark (re-tested after adding the
+      field: byte-identical to the unfixed baseline). It also does
+      nothing for osmotool's `profile` mode in production -- confirmed via
+      build_profile_cascade_config()'s own docstring, the DIAMOND+HMM
+      cascade uses HMM's short-read-swept best_threshold_summary.tsv
+      value, explicitly NOT the GA cutoff, for exactly this reason (short
+      reads, not full ORFs). What it DOES change is the GA cutoff
+      osmotool's `annotate` mode uses directly (full-length ORF calls,
+      the same data type this calibration actually scores) -- cutoff
+      shifted 221.9->214.1 bits, calibration-time whole-protein separation
+      f1_at_cutoff 0.697->0.815. Kept for that reason (a genuine,
+      correctly-targeted data-quality fix for annotate mode) despite this
+      repo having no whole-ORF-level benchmark to independently confirm
+      the real-world magnitude the way summary.tsv does for profile mode.
     positive_query: "(gene:mscS OR gene:mscS1 OR gene:mscS2) AND taxonomy_id:2"
     negative_query: "xref:pfam-PF00924 NOT (gene:mscS OR gene:mscS1 OR gene:mscS2) AND taxonomy_id:2"
+    hmm_negative_query: "xref:pfam-PF00924 NOT (gene:mscS OR gene:mscS1 OR gene:mscS2) AND (protein_name:KefA OR protein_name:YbdG OR protein_name:YkuT OR NOT protein_name:MscS) AND taxonomy_id:2"
     # RefSeq novelty check: 4,535 RefSeq bacterial proteins vs. 1,569 in
     # UniProt (fully exhausted). 500-sequence sample: 26.4% (132/500)
     # genuinely novel at 90% identity, 100% correctly annotated

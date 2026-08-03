@@ -1274,6 +1274,67 @@ assuming it was the same mechanism.
   untried idea, but unverified -- flagged for a follow-up, not attempted
   this session.
 
+### mscS: surgical negative-pool exclusion, and the per-method-cutoff mechanism it uncovered
+
+Investigated the same way as mrpA/mrpD above -- traced false positives
+(negligible cross-panel contamination, confirming they come from within
+mscS's own negative pool) and sampled it live: a genuine mix of real named
+paralogs (kefA, ybdG, ykuT) and a large bare-locus-tag population whose
+product description is literally "Mechanosensitive ion channel protein
+MscS" -- mislabeled positives.
+
+- **Surgical exclusion query** built and tested: `xref:pfam-PF00924 NOT
+  gene:mscS* AND (protein_name:KefA OR protein_name:YbdG OR
+  protein_name:YkuT OR NOT protein_name:MscS)` -- keeps the named
+  paralogs, drops the bare-tag entries (54,533 -> 2,757 candidates).
+- **Full swap first** (both DIAMOND and HMM calibrated + benchmarked on
+  the surgical pool): HMM improved (F1 0.481->0.546) but **DIAMOND
+  regressed** (F1 0.546->0.5) -- the same calibration-drift mechanism
+  already documented on mrpB's fusion-fix history recurring in a new
+  place: `08b_calibrate_diamond_cutoffs.py` sets its cutoff from the
+  negative set's own distribution, and removing the (conceptually wrong
+  but score-similar) bare-tag entries loosened it.
+- **New mechanism built to avoid that trade**: `hmm_negative_query`, an
+  opt-in families.yaml field (implemented in `01_fetch_refs.py` +
+  `05_build_hmms.sh`) that lets a family's HMM calibration draw from a
+  different negative pool than DIAMOND's -- the negative-side mirror of
+  `08_build_diamond_db.sh`'s existing DIAMOND-specific positive-side split
+  (`_study`/`_refseq` exclusion). Set on mscS to the surgical query above.
+- **Verified the deployed mechanism directly, not assumed** -- and found
+  it doesn't do what was expected: re-tested after wiring it in, result
+  was byte-identical to the unfixed baseline. Root cause: `11_compute_
+  metrics.py`'s summary.tsv (the metric every F1 number in this file
+  comes from) is pure best-hit-per-read competition on raw hmmscan bit
+  scores and never applies the calibrated GA cutoff at all (confirmed by
+  reading `load_hmm_calls`/`best_hit_per_read`/`label_reads` directly).
+  `hmm_negative_query` only feeds the GA-cutoff calibration, so it cannot
+  move this metric for a family whose model and benchmark reads are
+  otherwise unchanged.
+- **Checked what production actually consumes** before deciding whether
+  to keep it: `build_profile_cascade_config()`'s own docstring confirms
+  osmotool's `profile`-mode DIAMOND+HMM cascade uses HMM's short-read-
+  swept `best_threshold_summary.tsv` value, explicitly NOT the GA cutoff
+  ("these are short reads, not full-length ORFs") -- so `profile` mode is
+  provably unaffected by this fix either way. `annotate` mode, by
+  contrast, does use the GA cutoff directly, on full-length ORFs -- the
+  same data type this calibration actually scores. There, the fix is
+  real: calibration-time whole-protein separation (`f1_at_cutoff` in
+  `cutoff_manifest.tsv`) went from 0.697 to 0.815, cutoff shifted
+  221.9->214.1 bits.
+- **Decision: kept**, for `annotate` mode specifically -- a correctly-
+  targeted, low-risk data-quality fix (removes genuine mislabeling from
+  what HMM calibrates against) with no effect on `profile` mode either
+  way. Not independently benchmark-verified for `annotate` mode's real
+  accuracy, since this pipeline has no whole-ORF-level benchmark the way
+  it has one for short reads -- flagged honestly in mscS's own
+  `families.yaml` entry rather than overstating it as a measured win.
+- **Reusable takeaway for the rest of this panel**: `hmm_negative_query`
+  now exists as a real, tested mechanism for the next family that needs
+  DIAMOND and HMM to disagree on what a hard negative is -- but it should
+  only be reached for with a clear-eyed understanding that it changes
+  `annotate`-mode behavior, not this repo's own short-read benchmark
+  numbers or `profile`-mode production behavior.
+
 ### Status at time of writing
 
 - RefSeq merge (`01e`) and the per-method reference split
@@ -1302,6 +1363,15 @@ assuming it was the same mechanism.
   mixed problem (real Complex-I-subunit hard negatives alongside
   mislabeled-positive contamination in their shared PF00361 pool) --
   diagnosed but not yet fixed, flagged for a more surgical follow-up.
+  betB confirmed unfixable with current tools (promiscuous domain, no
+  narrower anchor, no single identifiable contamination pattern). mscS
+  fixed for `annotate` mode via a new `hmm_negative_query` mechanism
+  (per-family HMM-only negative pool, mirroring `08_build_diamond_db.sh`'s
+  DIAMOND-specific positive-side split on the negative side) -- verified
+  it does NOT affect `profile` mode or this repo's own short-read
+  benchmark numbers (both use best-hit/swept-threshold logic that bypasses
+  the GA cutoff this field feeds), kept anyway for its real, if
+  unbenchmarked, `annotate`-mode calibration improvement.
 - Committed and pushed to `add-refseq-positives` (PR #15, still open).
 - `v9` (and the murB/mrpG/otsA/mscS/otsB single-family test releases) are
   local builds only (`releases/` is gitignored) -- no further action
