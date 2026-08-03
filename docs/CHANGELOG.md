@@ -997,6 +997,158 @@ drifted/wrong one -- the Dockerfile just hadn't caught up yet. No need to
 re-run any of this branch's validation; the Docker image is now the one
 that matches what was actually tested, not the other way around.
 
+### mrpE: catastrophic F1 root-caused as a self-defeating benchmark, not a detection problem
+
+Investigated as the worst-performing family still in default `profile` scope
+(`v9` `results/metrics/summary.tsv`: DIAMOND F1 0.262, HMM F1 0.196,
+both driven by huge false-positive counts despite `qc_scorecard.tsv` showing
+`hmm_status=pfam_ga_review_needed`, the same "structural, deferred to
+Pfam's GA cutoff, considered fine" status already validated for mrpB/gshB).
+That framing turned out to only justify the calibration-status flag, not
+the real detection performance.
+
+- **Root cause, confirmed live against UniProt, not assumed**: PF01899
+  ("MNHE" in Pfam's own naming) has no Pfam clan or InterPro overlap
+  (`set_info`/`overlaps_with` both null via the InterPro API) -- unlike
+  murB's PF02873, there's no broader shared fold to re-anchor negatives on.
+  A 500-entry live sample of the old negative pool (PF01899 minus
+  gene:mrpE*, 9,839 total members vs. only 569 with a curated mrpE/mnhE
+  symbol) showed ~99% are genuine MrpE/MnhE orthologs under a bare locus
+  tag ("Na+/H+ antiporter subunit E", "Cation:proton antiporter", etc.) --
+  the domain is essentially diagnostic for the gene, so the standard
+  "same domain, no gene symbol" negative-pool recipe used everywhere else
+  in this panel selects mislabeled true positives here, not hard
+  negatives.
+- **Confirmed via isolated single-family build+benchmark**
+  (`make_family_subset.py`, same code both sides): swapping to a random,
+  domain-unrestricted bacterial background (`taxonomy_id:2 NOT
+  xref:pfam-PF01899`) dropped false positives to **zero** for both DIAMOND
+  and HMM (precision 1.0/1.0) -- mrpE was never hard to detect; the old
+  benchmark was measuring the negative pool's own label noise, not the
+  model.
+- **Recall gap addressed too**: removing `pfam_model: PF01899` (custom-
+  built HMM, locally F1-calibrated instead of trusting Pfam's raw
+  full-length-tuned GA cutoff) recovered real recall on top of the
+  precision fix -- mrpE is a short protein (~150-250aa), so short
+  simulated reads only cover a fragment of the domain and often legitimately
+  scored below Pfam's 27.0-bit GA line. Local calibration (157.2 bits on
+  whole-protein scoring) recovers more of them.
+- **Combined result**: DIAMOND F1 0.239->0.75, HMM F1 0.19->0.704 (both
+  isolated-build numbers, directly comparable pre/post since only
+  `negative_query`/`pfam_model` changed). Adopted in `families.yaml`; see
+  mrpE's entry for the full writeup, including the one known gap (PhaE,
+  the sole real close paralog, is itself Pfam-integrated into PF01899 so
+  it's excluded from the new negative pool same as everything else under
+  the domain -- untested against that one specific confusable case).
+- **Same mechanism confirmed present in mrpB and mrpF** via live UniProt
+  sampling of their own negative pools (PF04039, PF04066): ~9,000-9,800
+  candidates each, virtually all genuine MrpB/MrpF orthologs under a bare
+  locus tag ("Monovalent cation/H+ antiporter subunit A/B/F", etc.), no
+  real diversity. mrpG wasn't separately sampled but shares the same
+  `pfam_model` + `pfam_ga_review_needed` shape. gshB, by contrast, looks
+  genuinely different on inspection: its negative pool is small (246
+  candidates, matching `qc_scorecard.tsv`) but shows real minority
+  diversity (ATP-grasp domain proteins, a RimK-like ribosomal-protein-
+  modification enzyme) alongside the majority mislabeled-gshB
+  contamination -- not the same "domain is essentially the gene"
+  situation, not redesigned. See the mrpB/mrpF/mrpG section below for how
+  those three were actually fixed and validated.
+
+### mrpB, mrpF, mrpG: same redesign as mrpE, validated as a group instead of in isolation
+
+mrpE's isolated single-family test methodology (above) deliberately
+controls for the "cross-family competition changes the numbers" confound
+found earlier on ectB -- but it has its own blind spot, and mrpB's own
+history already proved it's not hypothetical: mrpB's `families.yaml` entry
+documents an earlier fix (removing fusion-contaminated sequences from its
+negative pool, a much smaller decontamination than the redesign here) that
+was tested via a full `v8` panel rebuild and caused DIAMOND precision to
+collapse (0.888->0.187) -- `08b_calibrate_diamond_cutoffs.py` sets its
+cutoff from the negative set's own score distribution, so "easier"
+negatives calibrated a more permissive threshold that then admitted false
+positives from *other* families in the full panel. An isolated
+single-family test cannot detect that mechanism at all, since there's no
+other family present for a false positive to come from -- which meant
+mrpE's own fix (already adopted above) was validated against the wrong
+kind of test for this specific risk.
+
+- **Test design**: a 7-family subset (`make_family_subset.py --only
+  mrpA,mrpB,mrpC,mrpD,mrpE,mrpF,mrpG`), built twice -- once with
+  everything as currently committed (mrpE already fixed, mrpB/mrpF/mrpG
+  still original), once with mrpB/mrpF/mrpG *also* redesigned the same
+  way as mrpE (random background negative pool, `pfam_model` removed).
+  mrpA/mrpC/mrpD kept unchanged in both builds specifically to provide
+  real, biologically-related (same Mrp/Mnh complex) competing sequences
+  in the DIAMOND db -- a sharper, cheaper probe for the specific
+  calibration-drift risk than either total isolation or a full 90-minute
+  43-family rebuild.
+- **Result: the calibration-drift risk did not recur.** mrpB/mrpF/mrpG
+  all went to exactly 0 false positives on both methods (mrpB DIAMOND
+  19->0, HMM 718->0; mrpF DIAMOND 704->0, HMM 819->0; mrpG DIAMOND
+  765->0, HMM 745->0), with large genuine F1 gains across all three
+  (mrpB 0.649->0.675 DIAMOND / 0.248->0.692 HMM; mrpF 0.370->0.718 /
+  0.273->0.743; mrpG 0.611->0.712 / 0.496->0.614). The unchanged sibling
+  families showed no false-positive inflation: mrpA's numbers were
+  identical between the two runs, mrpC/mrpD moved by under 0.04 F1 --
+  matching this project's own documented "ordinary full-panel
+  database-composition noise" (Phase 2 numbered-paralog sweep, `v7`
+  notes), not the >0.4-F1 collapse pattern the earlier fusion-fix
+  regression produced. Plausible reason the risk didn't recur here:
+  mrpA/C/D are different Pfam domains entirely (PF00361, PF00420 vs.
+  PF04039/PF04066/PF03334) with no real sequence homology to
+  mrpB/F/G for a loosened cutoff to accidentally admit, unlike the
+  fusion case, where the removed content was genuine shared PF04039
+  sequence that had been anchoring the old threshold.
+- **mrpE re-validated as a side effect**: this same 7-family test also
+  exercises mrpE (previously isolation-only), with real mrpA/mrpC/mrpD
+  competition present. Held up cleanly (F1 0.708->0.716 DIAMOND,
+  0.69->0.727 HMM across the two 7-family runs) -- the isolation-only
+  validation gap flagged above is now closed.
+- Adopted in `families.yaml` for all three (mrpB, mrpF, mrpG); see each
+  family's own entry for the full writeup. mrpG's redesign wasn't backed
+  by mrpB/mrpF's volume of live-UniProt-sampling evidence going in (a
+  reasonable bet based on its identical `pfam_model` +
+  `pfam_ga_review_needed` shape, not independently confirmed the same
+  way) -- but the 7-family benchmark result validates the outcome
+  directly regardless.
+- gshB's negative pool not touched -- confirmed structurally different
+  (see above), the mrp-style redesign doesn't apply. Its `pfam_model` was
+  a separate, real problem though -- see below.
+
+### gshB: pfam_model removal recovers the biggest single-family F1 win on this branch
+
+Panel re-ranked after the murB/mrpB/mrpE/mrpF/mrpG fixes above to find the
+next priority. gshB stood out with a distinctive profile unlike any of the
+mrp genes: HMM precision was already excellent (0.968) -- confirming its
+negative pool (63% purity-flagged, the worst in the panel by that raw
+number) was never actually the problem, consistent with the real minority
+diversity found in it above -- but HMM recall was catastrophic (0.307) on
+a large positive pool (7,756), ruling out data-thinness as an explanation
+too.
+
+- **Root cause**: gshB uses `pfam_model: PF02951`, the same setup already
+  found to hurt mrpE's recall. gshB is a ~310aa protein; Pfam's GA cutoff
+  is calibrated for full-length curated-sequence matches, not the short
+  fragments 6-frame-translated simulated reads produce, so real positive
+  reads were legitimately scoring below it. The reasoning that originally
+  justified keeping `pfam_model` here ("a contaminated pool couldn't
+  produce a reliable local calibration anyway, so deferring to Pfam's GA
+  cutoff is the reliable path") is the identical logic already disproven
+  on mrpE -- it validated the calibration-status flag, not the real F1.
+- **Tested as a 4-family subset** (gshA, gshB, gshF, gor via
+  `make_family_subset.py`), only gshB's `pfam_model` removed, siblings
+  left unchanged as a cross-family check -- none share PF02951 with gshB,
+  so little competition risk was expected going in, and none appeared:
+  gshA/gshF/gor's numbers moved by single digits (noise) between the two
+  runs, both before and after. DIAMOND unaffected in all four families
+  (`pfam_model` only touches the HMM path).
+- **Result**: HMM recall 0.307->0.827, precision 0.968->0.942 (small,
+  acceptable cost), F1 0.466->0.880 -- the largest single-family F1 gain
+  found on this branch, bigger than mrpE's own version of the same fix
+  (0.19->0.704, which combined a negative-pool redesign with the
+  `pfam_model` removal; gshB got most of its win from `pfam_model` alone).
+  Adopted in `families.yaml`; negative_query and negative_pfam unchanged.
+
 ### Status at time of writing
 
 - RefSeq merge (`01e`) and the per-method reference split
@@ -1006,9 +1158,15 @@ that matches what was actually tested, not the other way around.
   confirming the split's benefit holds at the scale this will actually
   ship at, not just in isolation.
 - UniProt/RefSeq provenance tracking fixed, Docker image verified working
-  and its osmotool pin brought current, `.dockerignore` added, and murB's
-  negative-pool fix validated and made permanent in `families.yaml` -- all
-  committed on this branch.
+  and its osmotool pin brought current, `.dockerignore` added, and
+  murB/mrpE/mrpB/mrpF/mrpG's negative-pool fixes plus gshB's `pfam_model`
+  removal all validated (mrpE alone in isolation then re-validated with
+  mrpB/F/G as a 7-family group; the other three validated directly as a
+  group; gshB validated as its own 4-family gsh group) and made permanent
+  in `families.yaml` -- all committed on this branch. opuBC/opuAC
+  re-examined and confirmed to be a different, already-exhausted problem
+  (close-paralog competition, not negative-pool mislabeling) -- not
+  touched.
 - Committed and pushed to `add-refseq-positives` (PR #15, still open).
 - `v9` (and the murB/mrpG/otsA/mscS/otsB single-family test releases) are
   local builds only (`releases/` is gitignored) -- no further action
