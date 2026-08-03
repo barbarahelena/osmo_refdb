@@ -586,6 +586,52 @@ families:
       as opuAA above. Also includes opuBA1/opuBA2 (real, reviewed
       numbered-paralog gene symbols, same class of gap as murB1/murB2 --
       see issue #8).
+
+      Root cause found (2026-08-03): recall is catastrophic (HMM 0.099,
+      DIAMOND 0.29) not from a calibration/negative-pool problem (both
+      methods already score PERFECT precision, 1.0/1.0) but from
+      best-hit competition -- traced directly via gene_counts.tsv/
+      hmmscan.tblout: the majority of opuBA's own true-positive reads win
+      best-hit against opuCA's model instead of opuBA's own (HMM: 140/230
+      hit reads go to opuCA, 58 to opuAA, only 32 to opuBA itself; DIAMOND
+      shows the same pattern). Same category of problem as opuBC/opuAC
+      (close-paralog competition), but not caused by a decoy_from_negatives
+      setting the way opuBC's was -- opuAA/opuBA/opuCA are ordinary,
+      always-co-present families, so there's no config to simply revert.
+      opuBA's own UniProt-curated pool (157) is roughly half opuAA's (325)
+      and opuCA's (358), a plausible reason its reference loses the
+      competition more often.
+
+      RefSeq expansion TRIED AND REVERTED (2026-08-03). Initial
+      verification looked promising -- CD-HIT-2D novelty check (500-
+      sequence sample) found 284/499 (56.9%) genuinely novel at 90%
+      identity vs. the existing UniProt pool, and a manual product-
+      description spot-check found a real but minor collision (24/499,
+      4.8%, explicitly titled "...ProV", a different, real gene) small
+      enough to handle with a narrowly-scoped `refseq_exclude_products`
+      filter (01e_add_refseq_positives.py; kept in the codebase, unused by
+      any family now, same reasoning the opuBC decoy-dedup fix was kept
+      after its own revert) rather than excluding the family outright the
+      way mrpC/mrpF were. But that verification sample was built from the
+      wrong NCBI query -- 01e's own build_query() restricts to
+      `srcdb_refseq[Properties]` (the curated non-redundant subset), which
+      only matches 236 entries for opuBA, not the ~2,500 the broader
+      verification query found. Once actually fetched with the real
+      query and merged: 233 sequences appended, but CD-HIT clustering
+      (90% identity, same step every family's pool goes through) collapsed
+      232 of them into existing clusters -- only 1 was genuinely novel.
+      The curated RefSeq subset turns out to already overlap almost
+      entirely with UniProt's own opuBA population; the broader
+      population the verification sample was drawn from looked more
+      novel specifically because it included redundant/less-curated
+      entries CD-HIT discards anyway. Net effect on a 3-family
+      opuAA/opuBA/opuCA subset build+benchmark: DIAMOND flat (F1
+      0.459->0.463, one extra training sequence), HMM regressed (F1
+      0.289->0.167) -- consistent with a single added sequence being pure
+      noise to the alignment/model build, not a real signal. Reverted;
+      opuBA's real problem (paralog best-hit competition, above) remains
+      unsolved. If revisited, verify novelty against 01e's own
+      build_query() output directly, not an approximation of it.
     positive_query: "(gene:opuBA OR gene:opuBA1 OR gene:opuBA2) AND taxonomy_id:2"
     negative_query: "xref:pfam-PF00571 NOT (gene:opuAA OR gene:opuAA1 OR gene:opuAA2 OR gene:opuBA OR gene:opuBA1 OR gene:opuBA2 OR gene:opuCA OR gene:opuCA1 OR gene:opuCA2) AND taxonomy_id:2"
     negative_pfam: PF00571

@@ -1149,6 +1149,65 @@ too.
   `pfam_model` removal; gshB got most of its win from `pfam_model` alone).
   Adopted in `families.yaml`; negative_query and negative_pfam unchanged.
 
+### opuBA: paralog best-hit competition root-caused; RefSeq expansion tried and reverted
+
+Panel re-ranked again after gshB. opuBA stood out with yet another distinct
+profile: HMM/DIAMOND precision already perfect (1.0/1.0), recall
+catastrophic (0.099/0.29) -- ruling out both the mrp-style negative-pool
+mechanism and the gshB-style `pfam_model` mechanism (opuBA uses neither).
+
+- **Root cause, traced directly through `gene_counts.tsv`/
+  `hmmscan.tblout`** rather than assumed: `11_compute_metrics.py`'s
+  `best_hit_per_read()` assigns each read to whichever family scores
+  highest across the *entire* combined database, with no cutoff involved
+  in that count. Checked where opuBA's own true-positive reads actually
+  go: the majority win best-hit against **opuCA's** model instead of
+  opuBA's own (HMM: 140/230 hit reads to opuCA, 58 to opuAA, only 32 to
+  opuBA; DIAMOND shows the same skew). Same category of problem as
+  opuBC/opuAC (close-paralog competition) -- but unlike opuBC, no
+  `decoy_from_negatives` setting caused it; opuAA/opuBA/opuCA are
+  ordinary, always-co-present families, so there's no config to revert.
+  opuBA's own UniProt-curated pool (157) is roughly half opuAA's (325)
+  and opuCA's (358), a plausible reason it loses the competition more.
+- **RefSeq expansion attempted** (same mechanism as 9 already-enabled
+  families), verified with the established discipline first: a 500-entry
+  live-NCBI sample showed 56.9% novelty at 90% identity (healthy) and a
+  real but minor collision (4.8% explicitly titled "...ProV", a
+  different gene) -- small enough to handle with a new, narrowly-scoped
+  `refseq_exclude_products` filter added to `01e_add_refseq_positives.py`
+  (substring-matches a RefSeq entry's product description, skips it at
+  fetch time) rather than excluding the family outright the way
+  mrpC/mrpF were for their own, larger collisions.
+- **Verification sample turned out to be built from the wrong query,
+  though** -- caught only after actually running it: `01e`'s own
+  `build_query()` restricts to `srcdb_refseq[Properties]` (NCBI's curated
+  non-redundant subset), matching only 236 entries for opuBA, not the
+  ~2,500 the broader verification query found. Real fetch: 233 sequences
+  appended, but CD-HIT clustering (90% identity, the same step every
+  family's pool goes through) collapsed 232 of them into existing
+  clusters -- only 1 was genuinely novel. The curated RefSeq subset
+  already overlaps almost entirely with UniProt's own opuBA population;
+  the broader verification population looked more novel specifically
+  because it included redundant/less-curated entries CD-HIT discards
+  regardless.
+- **Result** (3-family opuAA/opuBA/opuCA subset build+benchmark,
+  `make_family_subset.py`): DIAMOND flat (F1 0.459->0.463, one extra
+  training sequence), **HMM regressed** (F1 0.289->0.167) -- consistent
+  with a single added sequence perturbing the alignment/model build as
+  noise, not supplying real signal. **Reverted** -- opuBA's `families.yaml`
+  entry back to its original queries, with the full investigation
+  documented there. The `refseq_exclude_products` mechanism itself is
+  kept in `01e_add_refseq_positives.py` (generic, tested, currently
+  unused by any family) for the next case that needs it, same reasoning
+  the opuBC decoy-dedup fix was kept in `01_fetch_refs.py` after its own
+  revert.
+- **Lesson for next time**: verify RefSeq novelty/collision against
+  `01e`'s own `build_query()` output directly, not an approximation of
+  it -- the `srcdb_refseq[Properties]` restriction materially changes
+  both population size and its overlap with UniProt.
+- opuBA's real problem (paralog best-hit competition) remains unsolved,
+  same open-question status as opuBC/opuAC.
+
 ### Status at time of writing
 
 - RefSeq merge (`01e`) and the per-method reference split
@@ -1166,7 +1225,12 @@ too.
   in `families.yaml` -- all committed on this branch. opuBC/opuAC
   re-examined and confirmed to be a different, already-exhausted problem
   (close-paralog competition, not negative-pool mislabeling) -- not
-  touched.
+  touched. opuBA root-caused to the same close-paralog-competition
+  category (loses best-hit against opuCA); a RefSeq expansion attempt was
+  tried and reverted after the real fetch turned out almost entirely
+  redundant with UniProt (only the verification sample looked novel, from
+  a query that didn't match production). opuBA's underlying problem
+  remains open, same status as opuBC/opuAC.
 - Committed and pushed to `add-refseq-positives` (PR #15, still open).
 - `v9` (and the murB/mrpG/otsA/mscS/otsB single-family test releases) are
   local builds only (`releases/` is gitignored) -- no further action

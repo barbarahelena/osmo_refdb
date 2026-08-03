@@ -28,6 +28,21 @@ Entries whose RefSeq description is explicitly marked ", partial" are
 skipped at fetch time (a free, unambiguous fragment signal) -- everything
 else still goes through the normal length-outlier filter downstream.
 
+A family can optionally also declare `refseq_exclude_products: [...]` --
+substrings that, if found in a RefSeq entry's product description, skip
+that entry too. Not a general collision-avoidance mechanism (the
+gene-symbol-collision families above were excluded from
+refseq_gene_symbols entirely, not filtered) -- this is for the narrower
+case where the gene-symbol search itself is clean but a *specific*,
+identifiable minority of hits are a different, related gene under the
+same symbol search. Built and verified for opuBA (~4.8% of a 500-entry
+sample were explicitly titled "...ProV", a different gene), but opuBA's
+own RefSeq expansion was reverted for an unrelated reason before this
+filter mattered in production -- see opuBA's own families.yaml entry.
+Currently unused by any family; kept in the codebase for the next one
+that needs it, same reasoning 01_fetch_refs.py's decoy-dedup check was
+kept after its own revert.
+
 Usage:
   python 01e_add_refseq_positives.py --refs refs --families families.yaml
 Output:
@@ -150,15 +165,25 @@ def efetch_fasta(uids: list[str]) -> str:
 HEADER_RE = re.compile(r"^(\S+) (.+?) \[([^\]]+)\]\s*$")
 
 
-def parse_refseq_fasta(fasta_text: str) -> list[tuple[str, str, str]]:
-    """Returns (accession, organism, sequence) for each non-partial record."""
+def parse_refseq_fasta(fasta_text: str, exclude_products: tuple[str, ...] = ()) -> tuple[list[tuple[str, str, str]], int]:
+    """Returns ([(accession, organism, sequence), ...], n_excluded_by_product) --
+    non-partial records whose product description doesn't match any of
+    exclude_products (case-insensitive substring match), plus a count of how
+    many were dropped by that filter specifically (kept separate from the
+    partial-skip count so both are visible in the manifest)."""
     records = []
     accession = organism = None
-    partial = False
+    partial = product_excluded = False
     chunks: list[str] = []
+    n_excluded = 0
 
     def flush():
-        if accession is not None and not partial and chunks:
+        nonlocal n_excluded
+        if accession is None or not chunks:
+            return
+        if product_excluded:
+            n_excluded += 1
+        elif not partial:
             records.append((accession, organism, "".join(chunks)))
 
     for line in fasta_text.splitlines():
@@ -169,13 +194,14 @@ def parse_refseq_fasta(fasta_text: str) -> list[tuple[str, str, str]]:
             if m:
                 accession, product, organism = m.groups()
                 partial = product.rstrip().endswith(", partial")
+                product_excluded = any(s.lower() in product.lower() for s in exclude_products)
                 organism = organism.replace(" ", "_")
             else:
-                accession, organism, partial = line[1:].split()[0], "unknown", False
+                accession, organism, partial, product_excluded = line[1:].split()[0], "unknown", False, False
         elif line.strip():
             chunks.append(line.strip())
     flush()
-    return records
+    return records, n_excluded
 
 
 def main() -> None:
@@ -216,9 +242,10 @@ def main() -> None:
         sample_uids = uids if n_total <= args.max_per_family else rng.sample(uids, args.max_per_family)
         print(f"[{name}] RefSeq population: {n_total}, sampling {len(sample_uids)}")
 
+        exclude_products = tuple(fam.get("refseq_exclude_products", []))
         fasta_text = efetch_fasta(sample_uids)
-        refseq_records = parse_refseq_fasta(fasta_text)
-        n_partial_skipped = len(sample_uids) - len(refseq_records)
+        refseq_records, n_product_excluded = parse_refseq_fasta(fasta_text, exclude_products)
+        n_partial_skipped = len(sample_uids) - len(refseq_records) - n_product_excluded
 
         current_ids = existing_ids(parse_fasta(pos_path))
         to_add = []
@@ -231,15 +258,17 @@ def main() -> None:
             current_ids.add(accession)
 
         append_fasta(pos_path, to_add)
+        excluded_note = f", {n_product_excluded} product-excluded ({', '.join(exclude_products)})" if exclude_products else ""
         print(f"[{name}] {len(refseq_records)} fetched (non-partial): "
               f"{len(to_add)} appended, {n_dupe} already present, "
-              f"{n_partial_skipped} partial skipped")
+              f"{n_partial_skipped} partial skipped{excluded_note}")
 
         manifest_rows.append({
             "family": name,
             "refseq_population": n_total,
             "n_sampled": len(sample_uids),
             "n_partial_skipped": n_partial_skipped,
+            "n_product_excluded": n_product_excluded,
             "n_appended": len(to_add),
             "n_already_present": n_dupe,
             "date_fetched": date_fetched,
