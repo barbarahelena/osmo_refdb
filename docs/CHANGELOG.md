@@ -1378,6 +1378,36 @@ MscS" -- mislabeled positives.
   `annotate`-mode behavior, not this repo's own short-read benchmark
   numbers or `profile`-mode production behavior.
 
+### opuBB: fourth confirmed instance of the opuBC/opuAC/opuBA close-paralog problem
+
+Final panel-audit check before considering the branch release-ready --
+opuBB was the one remaining family with an unexamined "good precision,
+poor recall" profile (DIAMOND 0.921/0.257) matching opuBA's own signature
+before its root cause was found.
+
+- Traced directly (`gene_counts.tsv`/`hmmscan.tblout`, not assumed): the
+  majority of opuBB's own true-positive reads win best-hit against
+  **opuCB's** model instead of its own (DIAMOND 62 vs. 35.5; HMM 119 vs.
+  71) -- the identical close-paralog best-hit-competition mechanism
+  already root-caused on opuBC/opuAC/opuBA, just in the permease-subunit
+  trio (opuAB/opuBB/opuCB, PF00528) instead of the ATPase one
+  (opuAA/opuBA/opuCA, PF00571).
+- Same population pattern too: opuBB's UniProt-curated pool (187) is the
+  thinnest of its trio (opuAB 342, opuCB 256) -- opuAB itself performs
+  fine (F1 0.82-0.88), consistent with thin-pool competitive loss being
+  the driver rather than a domain-wide problem.
+- RefSeq expansion not attempted -- checked the curated population size
+  first given opuBA's own attempt already failed from near-total
+  redundancy with UniProt after clustering: opuBB's curated RefSeq
+  population (141) is smaller than opuBA's was (236), making the same
+  outcome likely enough not to spend a full build+benchmark test
+  confirming it.
+- Documented in opuBB's own `families.yaml` entry. Same open-question
+  status as opuBC/opuAC/opuBA -- no fix available with tools tried so
+  far. With this check done, every family flagged during this session's
+  full-panel re-ranking has now been either fixed or root-caused and
+  documented as a genuine dead end.
+
 ### Status at time of writing
 
 - RefSeq merge (`01e`) and the per-method reference split
@@ -1416,7 +1446,12 @@ MscS" -- mislabeled positives.
   it does NOT affect `profile` mode or this repo's own short-read
   benchmark numbers (both use best-hit/swept-threshold logic that bypasses
   the GA cutoff this field feeds), kept anyway for its real, if
-  unbenchmarked, `annotate`-mode calibration improvement.
+  unbenchmarked, `annotate`-mode calibration improvement. opuBB confirmed
+  as a fourth instance of the opuBC/opuAC/opuBA close-paralog problem
+  (loses best-hit against opuCB) -- same open-question status, documented,
+  not touched. This closes out the full-panel re-ranking done this
+  session: every family flagged as underperforming has now been either
+  fixed or root-caused and confirmed as a genuine, documented dead end.
 - Committed and pushed to `add-refseq-positives` (PR #15, still open).
 - `v9` (and the murB/mrpG/otsA/mscS/otsB single-family test releases) are
   local builds only (`releases/` is gitignored) -- no further action

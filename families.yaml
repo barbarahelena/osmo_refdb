@@ -736,6 +736,26 @@ families:
       caveats as opuAB above. Also includes opuBB1/opuBB2 (real, reviewed
       numbered-paralog gene symbols, same class of gap as murB1/murB2 --
       see issue #8).
+
+      Confirmed (2026-08-04) to be the same close-paralog best-hit-
+      competition problem already documented on opuBC/opuAC/opuBA, just in
+      this trio (opuAB/opuBB/opuCB, PF00528) instead of the ATPase one
+      (opuAA/opuBA/opuCA, PF00571) -- same shape both times: the thinnest-
+      pool sibling loses. Traced directly via gene_counts.tsv/
+      hmmscan.tblout, not assumed: the majority of opuBB's own true-
+      positive reads win best-hit against opuCB's model instead of its
+      own (DIAMOND: 62/~101 hit reads to opuCB vs. 35.5 to opuBB; HMM:
+      119/191 to opuCB vs. 71 to opuBB). opuBB's own UniProt-curated pool
+      (187) is the smallest of the trio (opuAB 342, opuCB 256) -- opuAB
+      itself performs fine (F1 0.82-0.88), consistent with thin-pool
+      competitive loss being the driver, not a domain-wide problem.
+      RefSeq expansion NOT attempted here -- checked the curated
+      population first given opuBA's own RefSeq attempt already failed
+      from near-total redundancy with UniProt after clustering: opuBB's
+      curated RefSeq population (141) is smaller than opuBA's was (236),
+      making the same outcome likely enough not to spend a build+
+      benchmark test confirming it. Same open-question status as
+      opuBC/opuAC/opuBA -- no fix available with tools tried so far.
     positive_query: "(gene:opuBB OR gene:opuBB1 OR gene:opuBB2) AND taxonomy_id:2"
     negative_query: "xref:pfam-PF00528 NOT (gene:opuAB OR gene:opuAB1 OR gene:opuAB2 OR gene:opuBB OR gene:opuBB1 OR gene:opuBB2 OR gene:opuCB OR gene:opuCB1 OR gene:opuCB2 OR gene:proW) AND taxonomy_id:2"
     negative_pfam: PF00528
