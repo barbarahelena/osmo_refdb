@@ -915,6 +915,45 @@ families:
       reverted (see that entry) for regressing precision there; mrpA's own
       negative-side decontamination is independent of mrpB's declaration
       and unaffected by that revert.
+
+      HMM underperformance root-caused (2026-08-04): mrpA/mrpD's own
+      false positives traced directly (cross-checked every other family's
+      hmmscan.tblout for stray hits on mrpA/mrpD's models) to each
+      other's own negative sets, not the rest of the panel. A 500-entry
+      live UniProt sample of the shared PF00361 pool showed a genuine mix
+      -- ~67% real, different, legitimately-hard-negative content (Complex
+      I NuoL/M/N subunits, DabB), ~10-18% genuinely mislabeled mrpA/mrpD
+      orthologs under bare locus tags ("Monovalent cation/H+ antiporter
+      subunit A/D", "MnhA/MnhD subunit", CPA3-family naming).
+
+      TRIED AND REVERTED (2026-08-04): a surgical exclusion targeting only
+      the confirmed mislabeled-positive pattern (NOT (protein_name:
+      antiporter AND (protein_name:"subunit A" OR protein_name:"subunit D"
+      OR protein_name:MnhA OR protein_name:MnhD)), same idea as mscS's
+      hmm_negative_query fix) was verified clean against a live sample
+      (matched almost entirely genuine mislabeled content, no legitimate
+      Nuo-only entries caught) but made BOTH methods WORSE for BOTH
+      families when tested (7-family mrpA-G subset build,
+      make_family_subset.py): mrpA DIAMOND F1 0.695->0.666 (fp 1048->1228),
+      mrpA HMM F1 0.383->0.359 (fp 2980->3361), mrpD DIAMOND F1
+      0.629->0.601 (fp 1739->1924), mrpD HMM F1 0.419->0.386 (fp
+      3364->3657) -- false positives went UP across the board, not down.
+      Unlike mrpB/mrpE/mrpF/mrpG's full random-background swap (where
+      ~95-99% of the pool was contamination and replacing all of it gave
+      calibration a clean, unambiguous gap to anchor on), this pool was
+      already a genuine mix with substantial (~67%) legitimate hard-
+      negative content. Removing just the highest-scoring, most
+      positive-like subset (the mislabeled ~10-18%) while leaving the more
+      distant Nuo/DabB majority in place plausibly let DIAMOND/HMM's
+      score-distribution-based calibration drift toward a more permissive
+      threshold fit to the now-easier remaining pool, admitting more false
+      positives from elsewhere -- the same calibration-drift mechanism
+      already seen on mrpB's fusion-fix history and mscS's own surgical
+      test, but here hurting both methods instead of trading one for the
+      other. Not adopted. This family's HMM underperformance (and mrpD's)
+      remains open -- partial/surgical negative-pool cleaning doesn't work
+      the way it does for a near-totally-contaminated pool; a real fix
+      would need a different approach, not a smaller version of this one.
     positive_query: "(gene:mrpA OR gene:mrpA1 OR gene:mrpA2 OR gene:mnhA OR gene:mnhA1 OR gene:mnhA2) AND taxonomy_id:2"
     negative_query: "xref:pfam-PF00361 NOT (gene:mrpA OR gene:mrpA1 OR gene:mrpA2 OR gene:mnhA OR gene:mnhA1 OR gene:mnhA2 OR gene:mrpD OR gene:mrpD1 OR gene:mrpD2 OR gene:mnhD OR gene:mnhD1 OR gene:mnhD2) AND taxonomy_id:2"
     negative_pfam: PF00361   # shared with mrpD's own architecture and with generic Complex I NuoL/M/N-type subunits

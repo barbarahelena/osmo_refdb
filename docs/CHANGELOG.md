@@ -1270,9 +1270,52 @@ assuming it was the same mechanism.
   Complex I subunits in real samples, unlike every prior fix on this
   branch. A more surgical fix (exclude only the specific
   mislabeled-positive product-description pattern from each other's
-  negative pools, keep the Nuo/DabB content) is the more promising
-  untried idea, but unverified -- flagged for a follow-up, not attempted
-  this session.
+  negative pools, keep the Nuo/DabB content) was flagged as the more
+  promising untried idea -- tried next (below), and it didn't work.
+
+### mrpA/mrpD: surgical exclusion tried, made both methods worse -- reverted
+
+Followed up on the surgical-exclusion idea flagged above, using the same
+methodology just proven out on mscS.
+
+- Built and live-verified an exclusion query targeting only the confirmed
+  mislabeled-positive pattern (`NOT (protein_name:antiporter AND
+  (protein_name:"subunit A" OR protein_name:"subunit D" OR
+  protein_name:MnhA OR protein_name:MnhD))`) -- a 200-entry check of what
+  it actually matched came back almost entirely genuine mislabeled mrpA/
+  mrpD content (various subunit A/D and MnhA/MnhD phrasings, plus CPA3
+  family classification), no legitimate Nuo-only entries caught by
+  mistake. ~18.5% of the shared PF00361 pool excluded (13,174/71,137).
+- Tested directly on mrpA's and mrpD's real `negative_query` (not a
+  calibration-only side channel like mscS's `hmm_negative_query` -- the
+  false positives here were confirmed to be real best-hit-competition
+  losses, so a real fix needed to move the actual reads/model, and
+  `hmm_negative_query` wouldn't have been the right tool for that).
+  7-family mrpA-G subset build (`make_family_subset.py`), baseline vs.
+  surgical.
+- **Result: worse across the board**, both families, both methods --
+  mrpA DIAMOND F1 0.695->0.666 (fp 1048->1228), mrpA HMM F1 0.383->0.359
+  (fp 2980->3361), mrpD DIAMOND F1 0.629->0.601 (fp 1739->1924), mrpD HMM
+  F1 0.419->0.386 (fp 3364->3657). False positives went UP, not down, in
+  every row.
+- **Why, most likely**: unlike mrpB/mrpE/mrpF/mrpG's full random-
+  background swap -- where ~95-99% of the pool was contamination, so
+  replacing all of it gave calibration an unambiguous, clean gap to
+  anchor on -- this pool was already a genuine mix with substantial
+  (~67%) legitimate hard-negative content. Removing only the highest-
+  scoring, most positive-like subset (the mislabeled ~18.5%) while
+  leaving the more distant Nuo/DabB majority in place plausibly let
+  DIAMOND/HMM's score-distribution-based calibration drift toward a more
+  permissive threshold fit to the now-easier remaining pool -- the same
+  calibration-drift mechanism already seen on mrpB's fusion-fix history
+  and mscS's own surgical test, but here hurting both methods at once
+  instead of trading one for the other.
+- **Not adopted.** Documented directly in mrpA's `families.yaml` entry so
+  this isn't retried blindly. mrpA/mrpD's HMM underperformance remains
+  genuinely open -- the lesson generalizes: partial/surgical cleaning of
+  an already-mixed negative pool is not a smaller-scale version of the
+  full-replacement fix that worked on near-totally-contaminated pools;
+  it's a different, apparently unfavorable trade.
 
 ### mscS: surgical negative-pool exclusion, and the per-method-cutoff mechanism it uncovered
 
@@ -1361,9 +1404,11 @@ MscS" -- mislabeled positives.
   removed (small, real HMM recall gain, no downside) -- no family in the
   panel uses `pfam_model` anymore. mrpA/mrpD root-caused to a genuine
   mixed problem (real Complex-I-subunit hard negatives alongside
-  mislabeled-positive contamination in their shared PF00361 pool) --
-  diagnosed but not yet fixed, flagged for a more surgical follow-up.
-  betB confirmed unfixable with current tools (promiscuous domain, no
+  mislabeled-positive contamination in their shared PF00361 pool); a
+  surgical exclusion of the mislabeled subset was tried and made both
+  methods worse for both families (calibration drift, same mechanism as
+  mrpB's fusion-fix history) -- reverted, documented, remains genuinely
+  unfixed with what's been tried. betB confirmed unfixable with current tools (promiscuous domain, no
   narrower anchor, no single identifiable contamination pattern). mscS
   fixed for `annotate` mode via a new `hmm_negative_query` mechanism
   (per-family HMM-only negative pool, mirroring `08_build_diamond_db.sh`'s
