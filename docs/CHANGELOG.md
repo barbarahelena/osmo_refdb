@@ -1408,6 +1408,44 @@ before its root cause was found.
   full-panel re-ranking has now been either fixed or root-caused and
   documented as a genuine dead end.
 
+### Full 43-family `v8` rebuild -- panel-wide validation of every fix on this branch
+
+Built and benchmarked the full panel (`releases/v8`) to confirm the 8
+fixes above hold up at real full-panel scale, not just in the isolated/
+small-group subset builds each was validated in individually -- the same
+"validate the whole branch before shipping" discipline this project used
+for `v7`/`v9`. Named `v8` since the previous local `v8` build (from an
+earlier session, `cluster-negatives-cdhit` branch) was never archived/
+published (no `v8.tar.gz`, unlike `v5`/`v7`) -- moved aside to
+`releases/v8-prerelease-backup` rather than deleted, in case it's still
+wanted.
+
+- **All 8 fixed families held up cleanly**, several with dramatic gains
+  that match (and in some cases modestly exceed) their isolated-test
+  numbers: mrpB HMM F1 0.249->0.779 (fp 713->0), mrpE HMM F1
+  0.196->0.717 (fp 2311->0), mrpF HMM F1 0.271->0.718 (fp 790->0), mrpG
+  HMM F1 0.484->0.619 (fp 758->0), gshB HMM F1 0.467->0.878 (fp mostly
+  unchanged, precision held at 0.941), murB HMM F1 0.705->0.738, cspA
+  HMM F1 0.756->0.789, mscS DIAMOND F1 0.53->0.541 / HMM F1
+  0.465->0.501. Precision stayed at or near 1.0 for the mrp
+  genes/murB/cspA even with all 42 other families' sequences competing
+  in the same DIAMOND/HMM database -- confirms the isolated/small-group
+  validation wasn't hiding a cross-family regression the way mrpB's own
+  fusion-fix history warned it could.
+- **Documented dead ends re-confirmed stable, not a testing artifact**:
+  mrpA/mrpD, betB, and opuBC/opuAC/opuBA/opuBB all moved by only normal
+  full-panel-composition drift (consistent with this project's own
+  documented noise level for untouched families), nothing alarming --
+  their open-question status stands.
+- **Panel-wide (read-volume-weighted)**: DIAMOND F1 0.827->0.832, HMM F1
+  0.693->0.722. A modest aggregate shift is the correct outcome given
+  only 8 of 43 families changed and the other 35's much larger combined
+  read volume dilutes the average -- the real story is in the 8
+  families' own numbers above, not the panel-wide one.
+- `releases/v8` is a local build only (`releases/` is gitignored) -- no
+  further action needed to preserve it beyond this changelog entry,
+  same as every prior release in this project's history.
+
 ### Status at time of writing
 
 - RefSeq merge (`01e`) and the per-method reference split
@@ -1452,6 +1490,8 @@ before its root cause was found.
   not touched. This closes out the full-panel re-ranking done this
   session: every family flagged as underperforming has now been either
   fixed or root-caused and confirmed as a genuine, documented dead end.
+  Full 43-family `v8` rebuild confirms all 8 fixes hold up at real
+  panel scale (see that section above) -- this branch is release-ready.
 - Committed and pushed to `add-refseq-positives` (PR #15, still open).
 - `v9` (and the murB/mrpG/otsA/mscS/otsB single-family test releases) are
   local builds only (`releases/` is gitignored) -- no further action
