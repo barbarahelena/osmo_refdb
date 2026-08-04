@@ -857,13 +857,15 @@ both.
   is exactly the 2,495 non-`_study` records, byte-identical to the
   originals, nothing else disturbed.
 
-### Full 43-family `v9` rebuild -- panel-wide validation
+### Full 43-family `refseq-split-baseline` rebuild -- panel-wide validation
 
-Built and benchmarked all 43 families (`releases/v9`) against `v8`, the same
-"validate the whole branch before merging" discipline this project used for
-its own `v7`/`v8` rebuilds -- the single-family tests above show the
-mechanism works, but only a full-panel build confirms it at the scale this
-will actually ship at.
+Built and benchmarked all 43 families (`releases/refseq-split-baseline`)
+against `v8-prerelease-backup` (the previous local build at the time, never
+archived/published -- see the full `v8` rebuild section later in this file
+for how it was eventually superseded), the same "validate the whole branch
+before merging" discipline this project used for its own `v7` rebuild --
+the single-family tests above show the mechanism works, but only a
+full-panel build confirms it at the scale this will actually ship at.
 
 - **Panel-wide (read-volume-weighted)**: essentially flat, as expected --
   DIAMOND F1 0.825->0.827, HMM F1 0.693->0.693. This branch's changes only
@@ -901,7 +903,7 @@ Checked what was actually broken rather than just reorganizing.
 
 - **UniProt release tracking was silently broken.** `get_uniprot_release()`
   hit `rest.uniprot.org/utils/release`, which 404s (confirmed directly) --
-  every `manifest.tsv` row across `v7`/`v8`/`v9` recorded `unknown` instead
+  every `manifest.tsv` row across `v7`/`v8-prerelease-backup`/`refseq-split-baseline` recorded `unknown` instead
   of the real release, defeating the field's whole purpose. Fixed to read
   the `X-UniProt-Release` response header off an ordinary search request
   instead (present even on the cheapest possible query, `size=0`) --
@@ -912,7 +914,7 @@ Checked what was actually broken rather than just reorganizing.
   number.
 - **The environment used for every benchmark this branch ran was not the
   one this repo documents.** Everything (mrpG/otsA/mscS/otsB, the full
-  `v9` rebuild, the murB test below) ran through a pre-existing, hand-patched
+  `refseq-split-baseline` rebuild, the murB test below) ran through a pre-existing, hand-patched
   `osmotool` conda env, not a clean build from `environment.yml`. Built and
   verified the actual Docker image for the first time this session:
   `mafft` 7.526, `trimAl` 1.5.rev1, HMMER 3.4, DIAMOND 2.2.4, CD-HIT 4.8.1,
@@ -924,8 +926,9 @@ Checked what was actually broken rather than just reorganizing.
   number produced on this branch so far used an unpinned, drifted build,
   not the one the project actually documents and pins for reproducibility.
   Numbers are still internally consistent (compared against each other and
-  against `v8`, built the same way), but a future full rebuild through
-  Docker is the one to treat as authoritative, not `v9` as currently built.
+  against `v8-prerelease-backup`, built the same way), but a future full
+  rebuild through Docker is the one to treat as authoritative, not
+  `refseq-split-baseline` as currently built.
 - **Added `.dockerignore`** (didn't exist before): the Docker build context
   was transferring all of `releases/` -- 11GB down to ~16MB, unrelated to
   correctness but a real drag on ever actually using Docker day-to-day.
@@ -949,7 +952,7 @@ near-universal single-function housekeeping enzyme, doesn't.
 - **Tested rather than assumed**: switched `negative_query`/`negative_pfam`
   to PF01565 (FAD_binding_4, the N-terminal domain MurB shares with a
   broad class of unrelated FAD-linked oxidoreductases) and ran a full
-  single-family build+benchmark against the `v9` baseline.
+  single-family build+benchmark against `refseq-split-baseline`.
 - **Calibration**: `insufficient_negative_data` (13 negatives, no workable
   cutoff) -> `clean_separation`, F1=1.000, cutoff=34.70, 61 usable
   negatives.
@@ -991,8 +994,8 @@ the discrepancy and moving on.
   cache-hit build.
 
 Net correction to the earlier framing: this branch's benchmark numbers
-(mrpG/otsA/mscS/otsB, the full `v9` rebuild, murB's PF01565 test) were
-already run against an environment close to current osmotool, not a
+(mrpG/otsA/mscS/otsB, the full `refseq-split-baseline` rebuild, murB's
+PF01565 test) were already run against an environment close to current osmotool, not a
 drifted/wrong one -- the Dockerfile just hadn't caught up yet. No need to
 re-run any of this branch's validation; the Docker image is now the one
 that matches what was actually tested, not the other way around.
@@ -1000,7 +1003,7 @@ that matches what was actually tested, not the other way around.
 ### mrpE: catastrophic F1 root-caused as a self-defeating benchmark, not a detection problem
 
 Investigated as the worst-performing family still in default `profile` scope
-(`v9` `results/metrics/summary.tsv`: DIAMOND F1 0.262, HMM F1 0.196,
+(`refseq-split-baseline` `results/metrics/summary.tsv`: DIAMOND F1 0.262, HMM F1 0.196,
 both driven by huge false-positive counts despite `qc_scorecard.tsv` showing
 `hmm_status=pfam_ga_review_needed`, the same "structural, deferred to
 Pfam's GA cutoff, considered fine" status already validated for mrpB/gshB).
@@ -1248,7 +1251,7 @@ assuming it was the same mechanism.
   (mrpA's FPs: 5,078 from mrpD.negative, 4,780 from mrpB.negative;
   mrpD's FPs: 6,593 from mrpA.negative, 1,965 from mrpB.negative), not
   from unrelated families scattered across the panel. The mrpB
-  contribution is likely stale -- that `v9` data predates this branch's
+  contribution is likely stale -- that `refseq-split-baseline` data predates this branch's
   own mrpB fix (mrpB's old negative pool was ~68% genuine mrpA+mrpB
   fusion sequences, which would legitimately score well against mrpA's
   model; not re-verified with a fresh build).
@@ -1414,7 +1417,7 @@ Built and benchmarked the full panel (`releases/v8`) to confirm the 8
 fixes above hold up at real full-panel scale, not just in the isolated/
 small-group subset builds each was validated in individually -- the same
 "validate the whole branch before shipping" discipline this project used
-for `v7`/`v9`. Named `v8` since the previous local `v8` build (from an
+for `v7`/`refseq-split-baseline`. Named `v8` since the previous local `v8` build (from an
 earlier session, `cluster-negatives-cdhit` branch) was never archived/
 published (no `v8.tar.gz`, unlike `v5`/`v7`) -- moved aside to
 `releases/v8-prerelease-backup` rather than deleted, in case it's still
@@ -1451,7 +1454,7 @@ wanted.
 - RefSeq merge (`01e`) and the per-method reference split
   (`08_build_diamond_db.sh`) are both implemented and validated at three
   levels: sequence-merge correctness, single-family build+benchmark (4
-  families), and now a full 43-family panel rebuild (`v9`, above) --
+  families), and now a full 43-family panel rebuild (`refseq-split-baseline`, above) --
   confirming the split's benefit holds at the scale this will actually
   ship at, not just in isolation.
 - UniProt/RefSeq provenance tracking fixed, Docker image verified working
@@ -1492,7 +1495,9 @@ wanted.
   fixed or root-caused and confirmed as a genuine, documented dead end.
   Full 43-family `v8` rebuild confirms all 8 fixes hold up at real
   panel scale (see that section above) -- this branch is release-ready.
-- Committed and pushed to `add-refseq-positives` (PR #15, still open).
-- `v9` (and the murB/mrpG/otsA/mscS/otsB single-family test releases) are
-  local builds only (`releases/` is gitignored) -- no further action
-  needed to preserve them beyond this changelog entry.
+- Committed and pushed to `add-refseq-positives` (PR #15).
+- `releases/v8` is the release build; `refseq-split-baseline` (the earlier
+  mid-branch full-panel rebuild, superseded by `v8` above) and the
+  murB/mrpG/otsA/mscS/otsB single-family test releases are local builds
+  only (`releases/` is gitignored) -- no further action needed to
+  preserve any of them beyond this changelog entry.
