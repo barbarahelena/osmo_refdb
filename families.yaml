@@ -165,8 +165,27 @@ families:
       four alias symbols (betL1/betL2/betP1/betP2/betS1/betS2/opuD1/opuD2
       -- 289 UniProt members combined), same class of gap as murB1/murB2
       -- see issue #8.
-    positive_query: "(gene:betL OR gene:betL1 OR gene:betL2 OR gene:betP OR gene:betP1 OR gene:betP2 OR gene:opuD OR gene:opuD1 OR gene:opuD2 OR gene:betS OR gene:betS1 OR gene:betS2) AND taxonomy_id:2"
-    negative_query: "xref:pfam-PF02028 AND (gene:betT OR gene:caiT) NOT (gene:betL OR gene:betL1 OR gene:betL2 OR gene:betP OR gene:betP1 OR gene:betP2 OR gene:opuD OR gene:opuD1 OR gene:opuD2 OR gene:betS OR gene:betS1 OR gene:betS2 OR gene:ectP OR gene:lcoP) AND taxonomy_id:2"
+
+      Also covers Lactobacillus plantarum QacT (Glaasker et al. 1996-1998),
+      a single secondary, osmotically-activated glycine betaine/carnitine
+      transporter characterized only as a transport activity -- never
+      assigned to a gene. lp_3324 (F9UTK3) is the putative locus: the only
+      BCCT (PF02028) secondary betaine/carnitine transporter in WCFS1, all
+      other betaine/carnitine hits there being OpuA/Cho ABC subunits. The
+      assignment is inferred, not experimental. The v8 build missed it on
+      both methods (HMM 345.7 vs. GA 564.8; DIAMOND top hit betL_decoy at
+      99.3% identity), because its L. paraplantarum ortholog A0ABQ0NBH6
+      sat in this family's negatives under an automated "betT" label. In
+      Lactobacillales, "betT" (5 entries, all unreviewed, all Secundi-/
+      Lactiplantibacillus, all named "glycine betaine/carnitine/choline
+      transport protein") is a generic BCCT label, not E. coli's
+      choline-specific BetT. So Lactobacillales (taxonomy 186826) is
+      excluded from the negative pool, like ectP/lcoP. F9UTK3 + A0ABQ0NBH6
+      are added as positives by accession. The ~55%-identity
+      Secundilactobacillus homologs are left out of both sets: they're
+      too divergent to claim as QacT without evidence.
+    positive_query: "(gene:betL OR gene:betL1 OR gene:betL2 OR gene:betP OR gene:betP1 OR gene:betP2 OR gene:opuD OR gene:opuD1 OR gene:opuD2 OR gene:betS OR gene:betS1 OR gene:betS2 OR accession:F9UTK3 OR accession:A0ABQ0NBH6) AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF02028 AND (gene:betT OR gene:caiT) NOT (gene:betL OR gene:betL1 OR gene:betL2 OR gene:betP OR gene:betP1 OR gene:betP2 OR gene:opuD OR gene:opuD1 OR gene:opuD2 OR gene:betS OR gene:betS1 OR gene:betS2 OR gene:ectP OR gene:lcoP OR taxonomy_id:186826) AND taxonomy_id:2"
     negative_pfam: PF02028   # BCCT transporter family
     # v4 calibration proved a single score threshold cannot separate betL
     # from betT/caiT (min_positive_score=87.2 vs max_negative_score=642.1 --

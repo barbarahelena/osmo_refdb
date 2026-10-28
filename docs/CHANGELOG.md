@@ -1449,6 +1449,65 @@ wanted.
   further action needed to preserve it beyond this changelog entry,
   same as every prior release in this project's history.
 
+### betL: L. plantarum QacT folded in; Lactobacillales "betT" removed from negatives
+
+- **Gap**: L. plantarum's QacT (Glaasker et al. 1996-1998), a secondary,
+  osmotically-activated glycine betaine/carnitine transporter, wasn't
+  detected. It was characterized only as a transport activity and was
+  never assigned to a gene. Its putative locus is lp_3324 (F9UTK3), the
+  only BCCT (PF02028) secondary betaine/carnitine transporter in WCFS1.
+  This assignment is inferred, not experimental.
+- **Root cause**: v8 missed F9UTK3 on both methods. HMM scored it 345.7,
+  below betL's GA of 564.8. DIAMOND's top hit was `betL_decoy` at 99.3%
+  identity: its L. paraplantarum ortholog A0ABQ0NBH6 sat in betL's
+  negative/decoy pool under an automated `betT` label. In Lactobacillales,
+  `betT` turns out to be a generic BCCT label. All 5 such entries are
+  unreviewed Secundi-/Lactiplantibacillus proteins named "glycine
+  betaine/carnitine/choline transport protein", not E. coli's
+  choline-specific BetT.
+- **Change**: betL's `negative_query` now excludes taxonomy 186826
+  (Lactobacillales), the same treatment as ectP/lcoP. This takes the
+  negatives from 1193 to 1188, exactly those 5. `positive_query` adds
+  F9UTK3 + A0ABQ0NBH6 by accession (896 -> 898). The ~55%-identity
+  Secundilactobacillus homologs are left out of both sets.
+- **Validation** (betL-only subsets, baseline = committed families.yaml vs.
+  this change; `releases/betL-qact-baseline`, `releases/betL-qact`):
+  - F9UTK3 itself: DIAMOND now detects it (top hit betL/A0ABQ0NBH6,
+    bitscore 1048 vs. cutoff 931.1; baseline's best was 391, missed). HMM
+    still misses it (361.0 vs. GA 560.4): one lactobacillal train sequence
+    in ~588 doesn't move the profile.
+  - Raw summary numbers dipped (DIAMOND F1 0.896->0.887, HMM
+    0.731->0.718), but that comparison is confounded. Removing 5 negatives
+    reshuffled the capped 1000-sequence negative sample, and adding one
+    positive reseeded the split. Only 92/146 test positives and 18/84
+    test negatives are shared between the two runs.
+  - Scored on the shared held-out sequences only (in both test sets, so
+    in neither train set): recall flat on both methods, but FPs rose.
+    That rise traced to a single negative, A0ABS8G752 (Fluctibacter).
+    The baseline's decoy sample happened to include a 100%-identical
+    decoy (I2BCX2) that absorbed its reads; the new sample didn't. The
+    read simulator also drew 142 reads from it vs. 16. With it excluded
+    from both: DIAMOND F1 0.913 vs. 0.912 (FP 17 vs. 18), HMM 0.844 vs.
+    0.860. No regression attributable to the change.
+  - Side finding: the betL decoy depends on which paralogs land in the
+    capped negative sample, so per-family F1 here carries ~0.01 of
+    sampling noise. That's worth remembering when reading small betL
+    deltas.
+- **Benchmark scripts (`10_run_benchmark.sh`, `11_compute_metrics.py`)
+  out of sync with current osmotool**: osmotool
+  `ab3fb9e` (after v8) tags paired read IDs with `_R1`/`_R2` and enables
+  the DIAMOND+HMM cascade by default. `10_run_benchmark.sh` doesn't pass
+  `--no_cascade` (fails on a fresh release with no
+  `profile_cascade.tsv` yet), and `11_compute_metrics.py`'s
+  `load_diamond_calls` doesn't strip the tag, so every DIAMOND call
+  misses the truth join (tp=0). Fixed: `10_run_benchmark.sh` passes
+  `--no_cascade` when the installed osmotool supports it (the Dockerfile's
+  `2826ebc` pin predates the flag and is already DIAMOND-only), and
+  `load_diamond_calls` strips a trailing `_R1`/`_R2` after the `/1`/`/2`
+  mate marker (a no-op for older osmotool output). Verified: re-running
+  step 11 on the raw tagged output reproduces the hand-stripped numbers
+  above exactly.
+
 ### Status at time of writing
 
 - RefSeq merge (`01e`) and the per-method reference split
