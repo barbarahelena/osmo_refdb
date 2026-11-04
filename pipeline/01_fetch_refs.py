@@ -21,7 +21,8 @@ Output: refs/<family>.positive.faa
                                             06_calibrate_cutoffs.py. DIAMOND
                                             calibration and the benchmark's
                                             own ground truth keep using the
-                                            main negative.faa above)
+                                            main negative.faa above, split
+                                            by 03_split_train_test.py)
         refs/<family>.positive.domains.tsv, refs/<family>.negative.domains.tsv
                                             (fusion_partner families only)
         refs/<famA>_<famB>.dedicated_fusion_fetch.faa

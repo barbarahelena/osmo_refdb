@@ -120,14 +120,23 @@ for FAMILY in ${ALL_FAMILIES}; do
             "${HMM_FILE}" "${REFS_DIR}/${FAMILY}.positive.faa" > /dev/null
     fi
 
+    # Calibration negatives: the negative.train split from
+    # 03_split_train_test.py, so the GA cutoff is never set on the
+    # negative.test sequences the benchmark simulates reads from. Falls back
+    # to the full negative.faa for a family too small to split.
+    #
     # families.yaml `hmm_negative_query` families (see 01_fetch_refs.py) get
     # an HMM-only negative pool written to <family>.hmm_negative.faa -- use
-    # it here instead of the main negative.faa when present, so the cutoff
-    # 06_calibrate_cutoffs.py computes reflects HMM's own, possibly
-    # different, negative set. DIAMOND's calibration (08b) and the
-    # benchmark's own ground truth are untouched by this -- both still read
-    # the original negative.faa.
-    NEG_SOURCE="${REFS_DIR}/${FAMILY}.negative.faa"
+    # it here instead when present, so the cutoff 06_calibrate_cutoffs.py
+    # computes reflects HMM's own, possibly different, negative set. That
+    # pool only feeds the GA cutoff, which neither the short-read benchmark
+    # (best hit, no cutoff) nor profile mode uses; DIAMOND's calibration (08b)
+    # and the benchmark's ground truth are untouched by it.
+    NEG_SOURCE="${REFS_DIR}/${FAMILY}.negative.train.faa"
+    if [ ! -s "${NEG_SOURCE}" ]; then
+        NEG_SOURCE="${REFS_DIR}/${FAMILY}.negative.faa"
+        [ -s "${NEG_SOURCE}" ] && echo "[${FAMILY}] WARNING: no negative.train split, calibrating on the full negative.faa (benchmark negatives overlap)"
+    fi
     if [ -s "${REFS_DIR}/${FAMILY}.hmm_negative.faa" ]; then
         NEG_SOURCE="${REFS_DIR}/${FAMILY}.hmm_negative.faa"
         echo "[${FAMILY}] using HMM-only negative pool (hmm_negative_query) for calibration scoring"

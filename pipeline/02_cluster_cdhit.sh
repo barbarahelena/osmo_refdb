@@ -4,10 +4,11 @@
 # Cluster each family's positive AND negative FASTA at 90% amino acid
 # identity to remove redundancy before the train/test split. Clustering
 # negatives too (not just positives) matters for the same anti-leakage
-# reason: 03_split_train_test.py splits negative.faa for decoy_from_negatives
-# families, and near-duplicate negatives split randomly across train/test
-# would let a decoy DIAMOND ref "see" a near-identical sequence to one of its
-# own benchmark negatives, inflating apparent decoy performance. Assumes
+# reason: 03_split_train_test.py splits every family's negative.faa into a
+# calibration half and a benchmark half, and near-duplicate negatives split
+# randomly across the two would let a cutoff (or, for decoy_from_negatives
+# families, a decoy DIAMOND ref) "see" a near-identical sequence to one of
+# its own benchmark negatives, inflating apparent precision. Assumes
 # cd-hit is on PATH (true inside the osmo_refdb Docker image / conda env).
 #
 # Usage: bash 02_cluster_cdhit.sh [refs_dir]

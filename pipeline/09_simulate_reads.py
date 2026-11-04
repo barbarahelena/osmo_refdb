@@ -6,7 +6,8 @@ hard negatives, for benchmarking DIAMOND vs HMM.
 Steps:
   1. Load each family's held-out positive test set (refs/<family>.positive.test.faa,
      produced upstream by 03_split_train_test.py so it was never used to
-     build the HMM or DIAMOND db) and hard-negative set (refs/<family>.negative.faa).
+     build the HMM or DIAMOND db) and held-out hard-negative set
+     (refs/<family>.negative.test.faa, never used for cutoff calibration).
   2. Optionally mix in real background metagenome reads (--background) that
      contain no known osmoadaptation genes, to estimate a realistic
      false-positive rate in community context.
@@ -51,12 +52,6 @@ def load_family_names(path: Path) -> list[str]:
     with open(path) as fh:
         data = yaml.safe_load(fh)
     return [fam["name"] for fam in data["families"]]
-
-
-def load_decoy_family_names(path: Path) -> set[str]:
-    with open(path) as fh:
-        data = yaml.safe_load(fh)
-    return {fam["name"] for fam in data["families"] if fam.get("decoy_from_negatives")}
 
 
 def parse_fasta(path: Path) -> list[tuple[str, str]]:
@@ -160,7 +155,6 @@ def main() -> None:
 
     rng = random.Random(RANDOM_SEED)
     families = load_family_names(args.families)
-    decoy_families = load_decoy_family_names(args.families)
     args.out.mkdir(parents=True, exist_ok=True)
     read_lengths = ([int(x) for x in args.read_lengths.split(",")]
                      if args.read_lengths else None)
@@ -172,17 +166,19 @@ def main() -> None:
     truth_rows = []
 
     for family in families:
-        # Decoy families (families.yaml: decoy_from_negatives) ship part of
-        # their negative pool into the searchable DIAMOND db as decoy refs
-        # (08a_build_decoy_refs.py, from negative.train.faa) -- simulating
-        # benchmark negative reads from that same pool would let a read
-        # trivially "recognize" its own literal source sequence sitting in
-        # the db, inflating precision rather than testing genuine
-        # discrimination. Use the disjoint negative.test.faa split instead.
-        # Non-decoy families are unaffected (their negatives are never in
-        # the db), so they keep using the full negative.faa as before.
-        neg_fname = (f"{family}.negative.test.faa" if family in decoy_families
-                     else f"{family}.negative.faa")
+        # Benchmark negatives come from the held-out negative.test split
+        # (03_split_train_test.py), for every family: negative.train sets the
+        # HMM/DIAMOND cutoffs (05/06, 08b) and, for decoy families, becomes
+        # the decoy refs in the DIAMOND db (08a). Simulating from it would
+        # score reads against thresholds -- or literal db entries -- built
+        # from their own source sequences. A family too small to split falls
+        # back to the full negative.faa.
+        neg_fname = f"{family}.negative.test.faa"
+        if not (args.refs / neg_fname).exists():
+            neg_fname = f"{family}.negative.faa"
+            if (args.refs / neg_fname).exists():
+                print(f"[{family}] WARNING: no negative.test split, simulating "
+                      f"benchmark negatives from the full negative.faa")
         for label, fname in (("positive", f"{family}.positive.test.faa"),
                               ("negative", neg_fname)):
             records = parse_fasta(args.refs / fname)
@@ -190,10 +186,7 @@ def main() -> None:
                 continue
 
             rng.shuffle(records)
-            held_out = records  # positive.test.faa is already held-out;
-                                 # negatives use all hard negatives (or, for
-                                 # decoy families, the held-out negative.test
-                                 # split disjoint from what became decoys)
+            held_out = records  # both files are already held-out splits
 
             genome_fasta = genome_dir / f"{family}.{label}.fasta"
             with open(genome_fasta, "w") as fh:
