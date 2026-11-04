@@ -1595,8 +1595,12 @@ each stratum.
 - `11_compute_metrics.py` only counted reads from a family's own constructs as
   its false positives; another panel gene's read called as this family was
   dropped. New `fp_cross` (other panel genes' real reads), `precision_panel`
-  and `f1_panel`. The cascade flag now uses `precision_panel`
-  (`--cascade-precision-metric precision` restores the old behaviour).
+  and `f1_panel`, as a diagnostic. The cascade flag stays on `precision`:
+  osmotool's cascade only checks a read against the HMM of the family
+  DIAMOND called, so a close paralog's read (same domain) passes it anyway.
+  Flagging from `precision_panel` would have added opuBA and ktrA to the
+  cascade for an error it can't fix. `--cascade-precision-metric
+  precision_panel` is available but off.
 - A first version counted every other-family read, which was misleading: on
   v8, ~99% of trkH's 12,191 cross-family calls were ktrB/ktrD *hard
   negatives*, draws from the same PF02386 pool as trkH's own (the three share
@@ -1606,7 +1610,7 @@ each stratum.
   `tp/fp/fn/precision/recall/f1` exactly. The largest real drops (DIAMOND):
   opuBA 0.990 -> 0.375 (166 opuAA/opuCA reads against 100 TPs), opuBB 0.894
   -> 0.464, opuCB 0.849 -> 0.602, opuCA 0.896 -> 0.726, ktrA 1.000 -> 0.843
-  (trkA reads). opuBA and ktrA would newly get the profile cascade.
+  (trkA reads). Almost all of this is confusion between close paralogs.
 - New step 1f, `01f_build_random_background.py`: 5000 random bacterial
   proteins without any of the panel's Pfam domains, minus any >= 70%
   identical to a panel positive (01b's rule). Step 9 simulates them as

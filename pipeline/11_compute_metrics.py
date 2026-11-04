@@ -23,7 +23,11 @@ False positives are counted three ways for family F (summary.tsv):
                 confusion between panel genes (e.g. a ktrB read called
                 trkH). Before 2026-11-04 these were silently dropped: a
                 misassigned read only counted as a miss for its own family.
-                precision_panel / f1_panel count fp + fp_cross.
+                precision_panel / f1_panel count fp + fp_cross. A
+                diagnostic, not a decision input: close paralogs in the
+                panel (opu ATPases/permeases, trkH/ktrB/ktrD, ...) are
+                expected to confuse each other, and whether that matters
+                depends on whether a result is read per gene or per system.
   fp_other_negatives
                 OTHER families' hard-negative and flank reads called F.
                 Reported, but in no precision: sibling families share one
@@ -386,7 +390,7 @@ def summarize_background_fpr(merged: pd.DataFrame, method: str) -> tuple[list[di
 
 def build_profile_cascade_config(
     summary_rows: list[dict], best_threshold_rows: list[dict],
-    precision_threshold: float, precision_column: str = "precision_panel",
+    precision_threshold: float, precision_column: str = "precision",
 ) -> list[dict]:
     """
     For each family, pair DIAMOND's benchmark precision (accept-every-
@@ -404,10 +408,15 @@ def build_profile_cascade_config(
     unflagged so the cascade only costs extra hmmscan time where DIAMOND
     has a demonstrated real specificity problem, not on every read.
     """
-    # precision_column: "precision_panel" (default since 2026-11-04) also
-    # counts other panel genes' reads called as this family (fp_cross);
-    # "precision" is the own-hard-negatives definition releases up to v8
-    # flagged from.
+    # precision_column defaults to "precision" (own hard negatives), which
+    # measures the one error the cascade can fix: osmotool's check only asks
+    # whether a read scores above threshold against the HMM of the family
+    # DIAMOND called (quantifier.apply_cascade_check), so it rejects reads
+    # that aren't that gene at all (betL vs betT/caiT) but not a close
+    # paralog's read, which carries the same domain and passes. Flagging
+    # from "precision_panel", which adds paralog confusion (fp_cross), would
+    # cascade families like opuBA/ktrA where it costs HMM time and recall
+    # without resolving anything.
     diamond_precision = {
         r["family"]: r[precision_column] for r in summary_rows if r["method"] == "diamond"
     }
@@ -443,11 +452,11 @@ def main() -> None:
                           "profile-mode DIAMOND+HMM cascade config). "
                           "Defaults to <out>/profile_cascade.tsv.")
     ap.add_argument("--cascade-precision-metric", choices=["precision_panel", "precision"],
-                     default="precision_panel",
+                     default="precision",
                      help="summary.tsv column the cascade flag is decided on: "
-                          "precision_panel (own hard negatives + other panel "
-                          "genes' reads) or precision (own hard negatives only, "
-                          "the pre-2026-11-04 behaviour).")
+                          "precision (own hard negatives; default, what the "
+                          "cascade's same-family HMM check can fix) or "
+                          "precision_panel (also other panel genes' reads).")
     ap.add_argument("--cascade-precision-threshold", type=float, default=0.95,
                      help="Families with DIAMOND precision below this are "
                           "flagged for the profile-mode cascade check.")
