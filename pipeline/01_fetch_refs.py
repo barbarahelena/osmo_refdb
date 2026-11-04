@@ -51,6 +51,43 @@ ACCESSION_BATCH_SIZE = 100   # UniProt REST hard-caps OR queries at 100 conditio
                               # conditions in query. Maximum allowed is 100." for 200) -- not a URL-length limit
 SLEEP_BETWEEN_PAGES = 0.5
 FETCH_RANDOM_SEED = 42
+RETRY_ATTEMPTS = 8            # per request, for transient failures only
+RETRY_BACKOFF_SECONDS = 5     # doubled after each failed attempt ...
+RETRY_BACKOFF_MAX = 300       # ... capped here: ~10 min total wait before giving up.
+                              # Sized for UniProt load spikes, not just blips: on
+                              # 2026-11-04 the accession-sorted listing of a ~38k-entry
+                              # Pfam family (PF00749) returned 503 from UniProt's ~60 s
+                              # server-side timeout for several minutes in a row, while
+                              # small queries still answered in <1 s.
+RETRY_STATUS = {429, 500, 502, 503, 504}
+
+
+def get_with_retry(url: str, **kwargs) -> requests.Response:
+    """requests.get with retry + exponential backoff on transient failures
+    (connection errors, timeouts, HTTP 429/5xx). Anything else -- or a
+    transient failure that outlasts every retry -- raises.
+
+    Motivating bug (2026-11-04, markers.yaml build): one transient failure
+    mid-fetch was caught by fetch_set's blanket RequestException handler,
+    which returned an empty set; main() then wrote a 0-byte
+    tsaD.positive.faa and the build carried on with that family silently
+    missing."""
+    delay = RETRY_BACKOFF_SECONDS
+    for attempt in range(1, RETRY_ATTEMPTS + 1):
+        try:
+            r = requests.get(url, **kwargs)
+            if r.status_code not in RETRY_STATUS:
+                r.raise_for_status()
+                return r
+            err: Exception = requests.HTTPError(f"HTTP {r.status_code}", response=r)
+        except (requests.ConnectionError, requests.Timeout) as e:
+            err = e
+        if attempt == RETRY_ATTEMPTS:
+            raise err
+        print(f"  transient UniProt error ({err}); retry {attempt}/{RETRY_ATTEMPTS - 1} in {delay}s")
+        time.sleep(delay)
+        delay = min(delay * 2, RETRY_BACKOFF_MAX)
+    raise AssertionError("unreachable")
 
 
 def next_page_url(link_header: str) -> str | None:
@@ -101,7 +138,7 @@ def fetch_all_sequences(query: str) -> str:
     page = 1
 
     while url:
-        r = requests.get(url, params=params if page == 1 else None, timeout=60)
+        r = get_with_retry(url, params=params if page == 1 else None, timeout=60)
         r.raise_for_status()
         all_fasta.append(r.text)
 
@@ -129,7 +166,7 @@ def fetch_all_accessions(query: str, sort: str | None = None, stop_after: int | 
     page = 1
 
     while url:
-        r = requests.get(url, params=params if page == 1 else None, timeout=60)
+        r = get_with_retry(url, params=params if page == 1 else None, timeout=60)
         r.raise_for_status()
         accessions.extend(line for line in r.text.strip().split("\n")[1:] if line)
 
@@ -152,7 +189,7 @@ def fetch_fasta_by_accessions(accessions: list[str]) -> str:
     for i in range(0, len(accessions), ACCESSION_BATCH_SIZE):
         batch = accessions[i:i + ACCESSION_BATCH_SIZE]
         query = "accession:(" + " OR ".join(batch) + ")"
-        r = requests.get(UNIPROT_API, params={"query": query, "format": "fasta", "size": ACCESSION_BATCH_SIZE},
+        r = get_with_retry(UNIPROT_API, params={"query": query, "format": "fasta", "size": ACCESSION_BATCH_SIZE},
                           timeout=60)
         r.raise_for_status()
         chunks.append(r.text)
@@ -285,8 +322,11 @@ def fetch_set(query: str, tag: str, label: str, max_seqs: int | None = None,
         print(f"  Retrieved: {n} sequences")
         return fasta_retagged, n, accessions
     except requests.RequestException as e:
-        print(f"  ERROR fetching {label}: {e}")
-        return "", 0, []
+        # Fatal, not an empty set: get_with_retry has already retried any
+        # transient failure, and silently writing an empty FASTA here is how
+        # a whole family once went missing from a build (see
+        # get_with_retry's docstring).
+        raise SystemExit(f"ERROR fetching {label} ({query}): {e}") from e
 
 
 def fetch_pfam_domains(accessions: list[str]) -> dict[str, list[str]]:
@@ -306,7 +346,7 @@ def fetch_pfam_domains(accessions: list[str]) -> dict[str, list[str]]:
     for i in range(0, len(accessions), ACCESSION_BATCH_SIZE):
         batch = accessions[i:i + ACCESSION_BATCH_SIZE]
         query = "accession:(" + " OR ".join(batch) + ")"
-        r = requests.get(UNIPROT_API,
+        r = get_with_retry(UNIPROT_API,
                           params={"query": query, "format": "tsv", "fields": "accession,xref_pfam",
                                   "size": ACCESSION_BATCH_SIZE},
                           timeout=60)
@@ -623,6 +663,9 @@ def main() -> None:
         pos_fasta, n_pos, pos_accessions = fetch_set(
             pos_query, name, "positive", max_seqs=max_pos,
             rng=random.Random(f"{FETCH_RANDOM_SEED}:{name}:positive"))
+        if n_pos == 0:
+            raise SystemExit(f"ERROR: [{name}] positive query returned no sequences -- a family "
+                             f"with no positives can't be built; fix its positive_query")
         (args.out / f"{name}.positive.faa").write_text(pos_fasta)
         n_pos_orgs, n_pos_genera = diversity_stats(pos_fasta)
         print(f"  Diversity: {n_pos_orgs} organisms / {n_pos_genera} genera")
