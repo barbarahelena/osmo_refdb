@@ -56,6 +56,12 @@
 #                     one-off larger fetch, not derived automatically.
 #                     Confirmed via a full-panel sweep (2026-07-29) to be
 #                     needed only for mazG so far -- see that entry.
+#   paralog_group     optional name shared by close paralogs in this panel
+#                     that are expected to confuse each other at read level
+#                     (e.g. opuAA/opuBA/opuCA). Changes nothing in the build;
+#                     11_compute_metrics.py adds summary_by_group.tsv, where a
+#                     read called as any member of its true family's group
+#                     counts as correct, next to the per-gene numbers.
 #   refseq_gene_symbols  optional list of gene symbols; when set,
 #                     01e_add_refseq_positives.py additionally pulls NCBI
 #                     RefSeq bacterial proteins tagged with any of these gene
@@ -264,6 +270,7 @@ families:
     negative_pfam: PF06450   # NhaB, a distinct bacterial Na+/H+ antiporter family
 
   - name: proX
+    paralog_group: opu_substrate_binding
     description: >
       Glycine betaine/proline betaine ABC transporter substrate-binding
       protein (proU system uptake). Species-specific synonyms (B. subtilis
@@ -680,6 +687,7 @@ families:
 # that gap; the Na+/H+ antiporter half (mrpA-mrpG) follows separately.
 
   - name: opuAA
+    paralog_group: opu_atpase
     description: >
       ATP-binding subunit of the Firmicutes-type glycine betaine/carnitine/
       choline ABC transporter (Bacillus subtilis OpuA system; Task 1a).
@@ -700,6 +708,7 @@ families:
     negative_pfam: PF00571   # CBS domain pair, co-occurring with ABC_tran in this transporter class
 
   - name: opuBA
+    paralog_group: opu_atpase
     description: >
       ATP-binding subunit of the OpuB system (choline-specific relative of
       OpuA; Task 1a). Same domain architecture and negative-query caveats
@@ -757,6 +766,7 @@ families:
     negative_pfam: PF00571
 
   - name: opuCA
+    paralog_group: opu_atpase
     description: >
       ATP-binding subunit of the OpuC system (carnitine/choline/betaine
       relative of OpuA; Task 1a). Same domain architecture and
@@ -772,6 +782,7 @@ families:
     negative_pfam: PF00571
 
   - name: opuAB
+    paralog_group: opu_permease
     description: >
       Permease subunit of the OpuA system (Task 1a). Single domain PF00528
       (BPD_transp_1) -- the same generic ABC-transporter permease fold
@@ -795,6 +806,7 @@ families:
     negative_pfam: PF00528   # BPD_transp_1, generic ABC transporter permease domain (same fold flagged for proW below)
 
   - name: opuBB
+    paralog_group: opu_permease
     description: >
       Permease subunit of the OpuB system (Task 1a). Same domain and
       caveats as opuAB above. Also includes opuBB1/opuBB2 (real, reviewed
@@ -825,6 +837,7 @@ families:
     negative_pfam: PF00528
 
   - name: opuCB
+    paralog_group: opu_permease
     description: >
       Permease subunit of the OpuC system (Task 1a). Same domain and
       caveats as opuAB above. Also includes opuCB1/opuCB2 (real, reviewed
@@ -842,6 +855,7 @@ families:
     negative_pfam: PF00528
 
   - name: opuAC
+    paralog_group: opu_substrate_binding
     description: >
       Substrate-binding subunit of the OpuA system (Task 1a). Same Pfam
       family (PF04069) as proX, already in this panel -- proX/opuAC/opuBC/
@@ -871,6 +885,7 @@ families:
     negative_pfam: PF04069
 
   - name: opuBC
+    paralog_group: opu_substrate_binding
     description: >
       Substrate-binding subunit of the OpuB system (Task 1a). Same Pfam
       family and caveats as opuAC above. Also includes opuBC1/opuBC2
@@ -890,6 +905,7 @@ families:
     negative_pfam: PF04069
 
   - name: opuCC
+    paralog_group: opu_substrate_binding
     description: >
       Substrate-binding subunit of the OpuC system (Task 1a). Same Pfam
       family and caveats as opuAC above. Also includes opuCC1/opuCC2
@@ -943,6 +959,7 @@ families:
 #                         fusion rather than an unrelated length outlier.
 
   - name: mrpA
+    paralog_group: mrp_large_subunit
     description: >
       Subunit A of the Firmicutes-type Mrp/Mnh Na+/H+ antiporter complex
       (Task 1b; fills the nhaA false-negative gap for Bacillota -- see this
@@ -1211,6 +1228,7 @@ families:
     scope: annotate_only
 
   - name: mrpD
+    paralog_group: mrp_large_subunit
     description: >
       Subunit D of the Mrp/Mnh complex (Task 1b). mrpD/mnhD synonym pair.
       Single domain PF00361, but that domain is itself broad (shared with
@@ -1403,6 +1421,7 @@ families:
     negative_pfam: PF00171   # Aldedh, broad aldehyde dehydrogenase superfamily (same domain flagged for gbsA below)
 
   - name: gshA
+    paralog_group: glutathione_step1
     description: >
       Glutamate-cysteine ligase (glutathione biosynthesis step 1 of 2, with
       gshB; Task 1c). PF04262 ("Glu_cys_ligase") checked: 19 domain
@@ -1435,6 +1454,7 @@ families:
     negative_pfam: PF04262
 
   - name: gshF
+    paralog_group: glutathione_step1
     description: >
       Bifunctional glutamate-cysteine ligase/glutathione synthetase (Task
       1c gap-fill, added after reviewing gshA/gshB's coverage): several
@@ -1603,6 +1623,7 @@ families:
     max_positive_override: 5000
 
   - name: trkA
+    paralog_group: trk_ktr_regulatory
     description: >
       Regulatory/NAD-binding subunit of constitutive K+ uptake (Trk system;
       Task 1d, "Kdp backup/disambiguation" -- an alternative K+ uptake
@@ -1665,6 +1686,7 @@ families:
     negative_pfam: PF02080   # TrkA_N, broad RCK-domain regulatory-subunit family
 
   - name: trkH
+    paralog_group: trk_ktr_channel
     description: >
       Pore-forming subunit of the Trk system, paired with trkA above (Task
       1d). Proteobacteria-type naming (E. coli TrkH); see trkA's entry
@@ -1720,6 +1742,7 @@ families:
     scope: annotate_only
 
   - name: ktrA
+    paralog_group: trk_ktr_regulatory
     description: >
       Regulatory/NAD-binding subunit of constitutive K+ uptake (Ktr system
       -- the Firmicutes-named counterpart to trkA above; Task 1d, and the
@@ -1743,6 +1766,7 @@ families:
     negative_pfam: PF02080
 
   - name: ktrB
+    paralog_group: trk_ktr_channel
     description: >
       Pore-forming subunit of the Ktr system, paired with ktrA above (Task
       1d) -- the Firmicutes-named counterpart to trkH. B. subtilis carries
@@ -1773,6 +1797,7 @@ families:
     scope: annotate_only
 
   - name: ktrD
+    paralog_group: trk_ktr_channel
     description: >
       Second paralogous pore-forming subunit of the Ktr system, alongside
       ktrB above (Task 1d) -- see ktrB's entry for why these two are kept

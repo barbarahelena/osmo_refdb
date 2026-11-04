@@ -44,6 +44,21 @@ False positives are counted three ways for family F (summary.tsv):
                 so the rate per million unrelated reads is the number to
                 read (it scales directly to a real metagenome).
 
+summary_by_group.tsv repeats these metrics per families.yaml
+`paralog_group`, scoring a group's members as one unit: a read called as
+any member of its true family's group is a hit (within_group_swaps counts
+how many of those were gene-level misses).
+
+Precision depends on how many negative reads are mixed in, which is set by
+fetch caps and split fractions, not biology. hard_negative_fp_per_million
+(hard-negative reads called as the family, per million hard-negative reads)
+and background_fp_per_million don't: read those two side by side to compare
+families, groups or releases. At group level the hard-negative rate is the
+chance a hard-negative read lands on ANY member, so it also catches negatives
+"claimed" by a sibling, which per-gene precision never counts (a negative
+from opuBA's sample called opuAA is neither opuBA's error nor opuAA's own
+negative).
+
 Also sweeps DIAMOND's/HMM's bit-score thresholds to produce ROC/PR-style
 curves (saved as PNGs) plus two summary tables:
   - summary.tsv: precision/recall/F1 accepting every best-hit call as-is
@@ -204,6 +219,13 @@ def label_reads(calls: pd.DataFrame, truth: pd.DataFrame) -> pd.DataFrame:
     merged["correct"] = merged["is_genuine_positive"] & (
         merged["family_called"] == merged["family_true"]
     )
+    # Masks _metrics() needs for every family/group/length bucket, computed
+    # once here instead of rescanning the string columns each call.
+    merged["_bg_source"] = merged["family_true"].isin(BACKGROUND_SOURCES)
+    merged["_random_bg"] = merged["family_true"] == RANDOM_BG_FAMILY
+    merged["_hard_neg"] = merged["label"] == "negative"
+    merged["family_true"] = merged["family_true"].astype("category")
+    merged["family_called"] = merged["family_called"].astype("category")
     return merged
 
 
@@ -306,42 +328,96 @@ def _r3(x: float):
     return round(x, 3) if x == x else ""
 
 
-def summarize(merged: pd.DataFrame, method: str, families: list[str]) -> list[dict]:
+def _metrics(merged: pd.DataFrame, members: set[str], n_random_bg: int) -> dict | None:
+    """Counts and metrics for a set of families scored as one unit: a single
+    family (summary.tsv) or a paralog group (summary_by_group.tsv). A read
+    from a member's construct called as any member counts as a hit, so at
+    group level confusion between siblings is not an error. See the module
+    docstring for the false-positive columns."""
+    own = merged["family_true"].isin(members)
+    if not own.any():
+        return None
+    called = merged["family_called"].isin(members)
+    genuine = merged["is_genuine_positive"]
+    other = ~own & ~merged["_bg_source"] & called
+    tp = int((own & called & genuine).sum())
+    fn = int((own & genuine & ~called).sum())
+    fp = int((own & called & ~genuine).sum())
+    fp_cross = int((other & genuine).sum())
+    fp_other_neg = int((other & ~genuine).sum())
+    fp_bg = int((merged["_random_bg"] & called).sum())
+    hard_neg = own & merged["_hard_neg"]
+    n_hard_neg = int(hard_neg.sum())
+    fp_hard_neg = int((hard_neg & called).sum())
+    precision = _ratio(tp, tp + fp)
+    recall = _ratio(tp, tp + fn)
+    precision_panel = _ratio(tp, tp + fp + fp_cross)
+    return {
+        "tp": tp, "fp": fp, "fn": fn,
+        "precision": _r3(precision),
+        "recall": _r3(recall),
+        "f1": _r3(_f1(precision, recall)),
+        "fp_cross": fp_cross,
+        "fp_other_negatives": fp_other_neg,
+        "precision_panel": _r3(precision_panel),
+        "f1_panel": _r3(_f1(precision_panel, recall)),
+        "n_hard_negative_reads": n_hard_neg,
+        "hard_negative_fp_per_million": (round(fp_hard_neg / n_hard_neg * 1e6, 1)
+                                         if n_hard_neg else ""),
+        "fp_background": fp_bg if n_random_bg else "",
+        "background_fp_per_million": (round(fp_bg / n_random_bg * 1e6, 1)
+                                      if n_random_bg else ""),
+        # genuine member reads called as a DIFFERENT member: a miss at gene
+        # level, a hit at group level (always 0 for a single family)
+        "within_group_swaps": (int((own & genuine & called & (
+            merged["family_called"].astype(str) != merged["family_true"].astype(str))).sum())
+            if len(members) > 1 else 0),
+    }
+
+
+def summarize(merged: pd.DataFrame, method: str, families: list[str],
+              groups: dict[str, str] | None = None) -> list[dict]:
     """Per-family counts and metrics; see the module docstring for the three
     false-positive columns."""
+    groups = groups or {}
+    n_random_bg = int(merged["_random_bg"].sum())
     rows = []
-    is_bg_source = merged["family_true"].isin(BACKGROUND_SOURCES)
-    n_random_bg = int((merged["family_true"] == RANDOM_BG_FAMILY).sum())
     for family in families:
-        own = merged["family_true"] == family
-        if not own.any():
+        m = _metrics(merged, {family}, n_random_bg)
+        if m is None:
             continue
-        called = merged["family_called"] == family
-        genuine = merged["is_genuine_positive"]
-        tp = int((own & called & genuine).sum())
-        fn = int((own & genuine & ~called).sum())
-        fp = int((own & called & ~genuine).sum())
-        other = ~own & ~is_bg_source & called
-        fp_cross = int((other & genuine).sum())
-        fp_other_neg = int((other & ~genuine).sum())
-        fp_bg = int(((merged["family_true"] == RANDOM_BG_FAMILY) & called).sum())
-        precision = _ratio(tp, tp + fp)
-        recall = _ratio(tp, tp + fn)
-        precision_panel = _ratio(tp, tp + fp + fp_cross)
-        rows.append({
-            "method": method, "family": family, "tp": tp, "fp": fp, "fn": fn,
-            "precision": _r3(precision),
-            "recall": _r3(recall),
-            "f1": _r3(_f1(precision, recall)),
-            "fp_cross": fp_cross,
-            "fp_other_negatives": fp_other_neg,
-            "precision_panel": _r3(precision_panel),
-            "f1_panel": _r3(_f1(precision_panel, recall)),
-            "fp_background": fp_bg if n_random_bg else "",
-            "background_fp_per_million": (round(fp_bg / n_random_bg * 1e6, 1)
-                                          if n_random_bg else ""),
-        })
+        del m["within_group_swaps"]
+        rows.append({"method": method, "family": family, **m,
+                     "paralog_group": groups.get(family, "")})
     return rows
+
+
+def summarize_groups(merged: pd.DataFrame, method: str, families: list[str],
+                     groups: dict[str, str]) -> list[dict]:
+    """Per paralog group (families.yaml paralog_group): the same metrics as
+    summary.tsv with the group's members scored as one unit. Next to each
+    row, the members' summed per-gene tp so the gain from not counting
+    sibling swaps is visible."""
+    n_random_bg = int(merged["_random_bg"].sum())
+    members_by_group: dict[str, list[str]] = {}
+    for family in families:
+        if family in groups:
+            members_by_group.setdefault(groups[family], []).append(family)
+    rows = []
+    for group, members in members_by_group.items():
+        m = _metrics(merged, set(members), n_random_bg)
+        if m is None:
+            continue
+        rows.append({"method": method, "paralog_group": group,
+                     "members": ",".join(members), **m})
+    return rows
+
+
+def load_paralog_groups(path: Path) -> dict[str, str]:
+    with open(path) as fh:
+        data = yaml.safe_load(fh)
+    return {fam["name"]: fam["paralog_group"] for fam in data["families"]
+            if fam.get("paralog_group")}
 
 
 def summarize_by_length(merged: pd.DataFrame, method: str, families: list[str],
@@ -380,6 +456,8 @@ def summarize_background_fpr(merged: pd.DataFrame, method: str) -> tuple[list[di
             "fp_per_million": round(len(called) / n_reads * 1e6, 1),
         })
         for family, n in called["family_called"].value_counts().items():
+            if n == 0:   # categorical dtype lists every category
+                continue
             by_family.append({
                 "method": method, "source": source, "family_called": family,
                 "n_false_positive_calls": int(n), "n_background_reads": n_reads,
@@ -463,6 +541,7 @@ def main() -> None:
     args = ap.parse_args()
 
     families = load_family_names(args.families)
+    groups = load_paralog_groups(args.families)
     args.out.mkdir(parents=True, exist_ok=True)
     truth = load_read_truth(args.results / "reads")
 
@@ -470,6 +549,7 @@ def main() -> None:
     hmm_calls = load_hmm_calls(args.results / "hmm")
 
     summary_rows = []
+    group_rows = []
     best_threshold_rows = []
     length_stratified_rows = []
     background_fpr_rows = []
@@ -478,7 +558,8 @@ def main() -> None:
 
     if not diamond_calls.empty:
         diamond_merged = label_reads(diamond_calls, truth)
-        summary_rows += summarize(diamond_merged, "diamond", families)
+        summary_rows += summarize(diamond_merged, "diamond", families, groups)
+        group_rows += summarize_groups(diamond_merged, "diamond", families, groups)
         best_threshold_rows += summarize_best_threshold(diamond_merged, "diamond", "bitscore", families)
         length_stratified_rows += summarize_by_length(diamond_merged, "diamond", families)
         bg_overall, bg_by_family = summarize_background_fpr(diamond_merged, "diamond")
@@ -491,7 +572,8 @@ def main() -> None:
 
     if not hmm_calls.empty:
         hmm_merged = label_reads(hmm_calls, truth)
-        summary_rows += summarize(hmm_merged, "hmm", families)
+        summary_rows += summarize(hmm_merged, "hmm", families, groups)
+        group_rows += summarize_groups(hmm_merged, "hmm", families, groups)
         best_threshold_rows += summarize_best_threshold(hmm_merged, "hmm", "bitscore", families)
         length_stratified_rows += summarize_by_length(hmm_merged, "hmm", families)
         bg_overall, bg_by_family = summarize_background_fpr(hmm_merged, "hmm")
@@ -509,6 +591,14 @@ def main() -> None:
             writer.writeheader()
             writer.writerows(summary_rows)
         print(f"Per-family precision/recall/F1 written to {summary_path}")
+
+    if group_rows:
+        group_path = args.out / "summary_by_group.tsv"
+        with open(group_path, "w", newline="") as fh:
+            writer = csv.DictWriter(fh, fieldnames=list(group_rows[0].keys()), delimiter="\t")
+            writer.writeheader()
+            writer.writerows(group_rows)
+        print(f"Per-paralog-group precision/recall/F1 written to {group_path}")
 
     best_threshold_path = args.out / "best_threshold_summary.tsv"
     if best_threshold_rows:

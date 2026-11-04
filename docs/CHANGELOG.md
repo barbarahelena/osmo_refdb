@@ -1621,6 +1621,28 @@ each stratum.
   arbitrary. Tested live: 5000 sampled over 74 strata of a 72.7M population,
   9 dropped, ~7 min first run; 09/09b produce ~100k labelled background reads.
 
+### Paralog groups and a mix-independent hard-negative rate
+
+- New optional `paralog_group` in `families.yaml`, set on 19 families in 7
+  groups: opu substrate-binding (proX, opuAC/BC/CC), opu ATPase
+  (opuAA/BA/CA), opu permease (opuAB/BB/CB), Trk/Ktr channel
+  (trkH, ktrB, ktrD), Trk/Ktr regulatory (trkA, ktrA), glutathione step 1
+  (gshA, gshF), Mrp large subunit (mrpA, mrpD; the least certain grouping).
+  `summary_by_group.tsv` scores each group as one unit with the same
+  columns as `summary.tsv`, plus `within_group_swaps`.
+- New `n_hard_negative_reads` and `hard_negative_fp_per_million`: precision
+  depends on how many negatives are mixed in (fetch caps, split fractions),
+  this rate doesn't. It also exposes something per-gene precision hides for
+  sibling families: a hard negative from opuBA's sample called opuAA is
+  neither opuBA's error nor opuAA's own negative, so no gene counts it.
+- Re-scored v8 (DIAMOND): the opu ATPase group catches 3% of its hard
+  negatives, so its gene-level weakness is mostly paralog confusion. The
+  Trk/Ktr channel group catches 63% and glutathione step 1 37%: the
+  documented negative-pool label noise (real unlabelled orthologs in the
+  PF02386 / PF04262 pools), the situation mrpE was in before its
+  random-background redesign. Grouping can't fix those; worth trying the
+  mrpE-style redesign on them next.
+
 ### Status
 
 Code and offline checks done. Needs the combined rebuild with
