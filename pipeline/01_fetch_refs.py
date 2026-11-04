@@ -14,6 +14,14 @@ Fetches, per gene family defined in families.yaml:
 Usage:  python 01_fetch_refs.py [--families families.yaml] [--out refs]
 Output: refs/<family>.positive.faa
         refs/<family>.negative.faa
+        refs/<family>.hmm_negative.faa     (families.yaml `hmm_negative_query`
+                                            families only -- a separate,
+                                            HMM-calibration-only negative
+                                            pool; see 05_build_hmms.sh /
+                                            06_calibrate_cutoffs.py. DIAMOND
+                                            calibration and the benchmark's
+                                            own ground truth keep using the
+                                            main negative.faa above)
         refs/<family>.positive.domains.tsv, refs/<family>.negative.domains.tsv
                                             (fusion_partner families only)
         refs/<famA>_<famB>.dedicated_fusion_fetch.faa
@@ -38,7 +46,6 @@ import requests
 import yaml
 
 UNIPROT_API = "https://rest.uniprot.org/uniprotkb/search"
-UNIPROT_INFO = "https://rest.uniprot.org/utils/release"
 BATCH_SIZE = 500
 ACCESSION_BATCH_SIZE = 100   # UniProt REST hard-caps OR queries at 100 conditions (confirmed: "Too many OR
                               # conditions in query. Maximum allowed is 100." for 200) -- not a URL-length limit
@@ -68,10 +75,17 @@ def load_families(path: Path) -> list[dict]:
 
 
 def get_uniprot_release() -> str:
+    """UniProt has no dedicated release-info endpoint reachable from
+    rest.uniprot.org (the previous UNIPROT_INFO -- /utils/release -- 404s;
+    confirmed directly, not just timing out, so every manifest.tsv row this
+    produced silently recorded "unknown" instead of failing loudly). The
+    release is available for free on the X-UniProt-Release response header
+    of any ordinary search request -- confirmed present even on the
+    cheapest possible query (size=0)."""
     try:
-        r = requests.get(UNIPROT_INFO, timeout=10)
+        r = requests.get(UNIPROT_API, params={"query": "reviewed:true", "size": 0}, timeout=10)
         r.raise_for_status()
-        return r.json().get("releaseNumber", "unknown")
+        return r.headers.get("X-UniProt-Release", "unknown")
     except Exception:
         return "unknown"
 
@@ -619,6 +633,36 @@ def main() -> None:
         (args.out / f"{name}.negative.faa").write_text(neg_fasta)
         n_neg_orgs, n_neg_genera = diversity_stats(neg_fasta)
         print(f"  Diversity: {n_neg_orgs} organisms / {n_neg_genera} genera")
+
+        # Opt-in per-family HMM-only negative pool (families.yaml
+        # `hmm_negative_query`) -- for a family where DIAMOND and HMM need
+        # different negatives, not just different reference sequences (see
+        # 08_build_diamond_db.sh's _study/_refseq positive-side split for
+        # the DIAMOND-specific precedent this mirrors on the negative side).
+        # Confirmed on mscS: its broad PF00924 negative pool is dominated by
+        # bare-locus-tag entries that are actually mscS itself (mislabeled
+        # positives). A full swap to a surgically cleaned pool helped HMM's
+        # benchmark F1 but loosened DIAMOND's calibration and hurt it (same
+        # mechanism as mrpB's fusion-fix history) -- this field lets ONLY
+        # 06_calibrate_cutoffs.py's whole-protein GA-cutoff calibration see
+        # the cleaned pool. IMPORTANT: this does NOT reproduce that HMM
+        # benchmark improvement -- 11_compute_metrics.py's summary.tsv is
+        # pure best-hit-per-read on raw bit scores and never applies the GA
+        # cutoff, and osmotool's `profile`-mode cascade uses a separately-
+        # swept short-read threshold instead of it too (see
+        # build_profile_cascade_config's docstring). It only changes the
+        # cutoff osmotool's `annotate` mode applies directly (full-length
+        # ORF calls) -- see mscS's own families.yaml entry for the full
+        # writeup. 08b's DIAMOND calibration, 01b/01c's QC, and the
+        # benchmark's own ground truth all still use the original,
+        # unfiltered negative_query fetch above, unaffected.
+        hmm_neg_query = fam.get("hmm_negative_query")
+        if hmm_neg_query:
+            hmm_neg_fasta, n_hmm_neg, _ = fetch_set(
+                hmm_neg_query, f"{name}_neg", "hmm-only negative", max_seqs=max_neg,
+                rng=random.Random(f"{FETCH_RANDOM_SEED}:{name}:hmm_negative"))
+            (args.out / f"{name}.hmm_negative.faa").write_text(hmm_neg_fasta)
+            print(f"  HMM-only negative pool: {n_hmm_neg} sequences -> {name}.hmm_negative.faa")
 
         # Fusion-partner families (e.g. mrpA/mrpB, see families.yaml) need
         # real Pfam domain evidence, not just length, to tell a genuine

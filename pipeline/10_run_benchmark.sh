@@ -36,6 +36,17 @@ DIAMOND_MIN_QUERY_COVER="${DIAMOND_MIN_QUERY_COVER:-0.50}"
 # default: a short read is always much shorter than most full-length
 # reference proteins, so a strict threshold here also costs real recall).
 DIAMOND_MIN_SUBJECT_COVER="${DIAMOND_MIN_SUBJECT_COVER:-0.0}"
+# osmotool ab3fb9e turned the DIAMOND+HMM cascade on by default, and it
+# refuses to run without osmo_refdb.profile_cascade.tsv -- which step 11
+# only writes AFTER this benchmark, so a fresh release can't satisfy it.
+# This step benchmarks DIAMOND alone anyway (HMM is scored separately
+# below), so pass --no_cascade wherever the installed osmotool knows the
+# flag (the Dockerfile pins v0.7.0, which has it); older osmotool versions
+# (e.g. 2826ebc) predate it and already run DIAMOND-only.
+CASCADE_ARGS=()
+if osmotool profile --help 2>/dev/null | grep -q -- "--no_cascade"; then
+    CASCADE_ARGS+=(--no_cascade)
+fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -58,7 +69,8 @@ for R1 in "${READS_DIR}"/*_R1.fastq*; do
         --min_identity "${DIAMOND_MIN_IDENTITY}" \
         --min_query_cover "${DIAMOND_MIN_QUERY_COVER}" \
         --min_subject_cover "${DIAMOND_MIN_SUBJECT_COVER}" \
-        --keep_aln
+        --keep_aln \
+        "${CASCADE_ARGS[@]+"${CASCADE_ARGS[@]}"}"
 done
 
 echo ""

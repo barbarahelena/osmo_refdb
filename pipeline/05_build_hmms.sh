@@ -120,9 +120,21 @@ for FAMILY in ${ALL_FAMILIES}; do
             "${HMM_FILE}" "${REFS_DIR}/${FAMILY}.positive.faa" > /dev/null
     fi
 
-    if [ -s "${REFS_DIR}/${FAMILY}.negative.faa" ]; then
+    # families.yaml `hmm_negative_query` families (see 01_fetch_refs.py) get
+    # an HMM-only negative pool written to <family>.hmm_negative.faa -- use
+    # it here instead of the main negative.faa when present, so the cutoff
+    # 06_calibrate_cutoffs.py computes reflects HMM's own, possibly
+    # different, negative set. DIAMOND's calibration (08b) and the
+    # benchmark's own ground truth are untouched by this -- both still read
+    # the original negative.faa.
+    NEG_SOURCE="${REFS_DIR}/${FAMILY}.negative.faa"
+    if [ -s "${REFS_DIR}/${FAMILY}.hmm_negative.faa" ]; then
+        NEG_SOURCE="${REFS_DIR}/${FAMILY}.hmm_negative.faa"
+        echo "[${FAMILY}] using HMM-only negative pool (hmm_negative_query) for calibration scoring"
+    fi
+    if [ -s "${NEG_SOURCE}" ]; then
         hmmsearch --cpu "${THREADS}" --tblout "${NEG_SCORES}" --noali \
-            "${HMM_FILE}" "${REFS_DIR}/${FAMILY}.negative.faa" > /dev/null
+            "${HMM_FILE}" "${NEG_SOURCE}" > /dev/null
     else
         : > "${NEG_SCORES}"   # empty; 06_calibrate_cutoffs.py handles this gracefully
     fi

@@ -58,6 +58,9 @@ def load_read_truth(reads_dir: Path) -> pd.DataFrame:
     return pd.read_csv(reads_dir / "read_truth.tsv", sep="\t")
 
 
+MATE_TAG_RE = re.compile(r"^(.*/[12])_R[12]$")
+
+
 def load_diamond_calls(diamond_dir: Path) -> pd.DataFrame:
     """
     Parse osmotool's kept alignment TSVs (--keep_aln) to get per-read best-hit
@@ -80,8 +83,11 @@ def load_diamond_calls(diamond_dir: Path) -> pd.DataFrame:
         df = df.sort_values("bitscore", ascending=False).drop_duplicates("qseqid")
         df["sample"] = sample
         df["family"] = df["sseqid"].str.split("|").str[0]
-        # osmotool reports qseqid as the raw read ID, unchanged
-        df["read_id"] = df["qseqid"]
+        # osmotool >= ab3fb9e appends _R1/_R2 to paired read IDs (so two
+        # mates can't collide); the simulated reads' own IDs already end in
+        # /1 or /2, so stripping that tag recovers the read_truth.tsv ID.
+        # Older osmotool reports the raw read ID, which this leaves unchanged.
+        df["read_id"] = df["qseqid"].str.replace(MATE_TAG_RE, r"\1", regex=True)
         rows.append(df)
     if not rows:
         return pd.DataFrame(columns=["read_id", "family", "bitscore", "evalue", "sample"])

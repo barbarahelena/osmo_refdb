@@ -56,6 +56,28 @@
 #                     one-off larger fetch, not derived automatically.
 #                     Confirmed via a full-panel sweep (2026-07-29) to be
 #                     needed only for mazG so far -- see that entry.
+#   refseq_gene_symbols  optional list of gene symbols; when set,
+#                     01e_add_refseq_positives.py additionally pulls NCBI
+#                     RefSeq bacterial proteins tagged with any of these gene
+#                     names and merges them into the positive pool, for
+#                     families whose UniProt population is already fully
+#                     exhausted (fetched count == UniProt's own total, no
+#                     cap left to raise) but where RefSeq's independently-
+#                     annotated population turned out to add real,
+#                     non-redundant, correctly-annotated sequences --
+#                     confirmed per-family via a CD-HIT-2D novelty check
+#                     plus a manual product-description spot-check before
+#                     enabling (see docs/CHANGELOG.md). NOT safe to enable
+#                     blindly: a bare gene symbol can collide with a
+#                     completely unrelated gene in a different organism --
+#                     confirmed for mrpB/mrpC/mrpF during evaluation (e.g.
+#                     "MrpC" is also a Proteus fimbrial usher gene and a
+#                     Myxococcus CRP/FNR transcription factor) -- so this is
+#                     opt-in per family, not a general mechanism. Note:
+#                     08_build_diamond_db.sh excludes these merged sequences
+#                     (and 01d's _study ones) from the DIAMOND reference
+#                     specifically, even though HMM's alignment keeps them --
+#                     see that script's header comment.
 
 families:
   - name: ectA
@@ -96,9 +118,23 @@ families:
     # Same flanking-signal hypothesis as ectA was tested here too (v5-trimgt-test,
     # trim_gt: 0.6) but DIDN'T hold: DIAMOND got meaningfully worse (F1
     # 0.799->0.757, precision 0.711->0.637) while HMM was ~unchanged. Kept
-    # at the 0.8 default (omitted here) -- ectB's promiscuous-domain
-    # problem needs a different fix; EC-number-verified positive curation
-    # is the next thing to try, not attempted yet.
+    # at the 0.8 default (omitted here).
+    # TRIED AND REVERTED (2026-07-31): EC-number-verified curation --
+    # positive_query AND ec:2.6.1.76, negative_query NOT ec:2.6.1.76
+    # (confirmed identical EC across ectB/ectB1/ectB2, 20/20 sampled). Real,
+    # not hypothetical, contamination found: 5,158/108,273 (4.8%) of the raw
+    # PF00202 negative pool is secretly EC 2.6.1.76 (unlabeled true ectB
+    # orthologs under a bare locus tag), same pattern as murB/otsA/otsB
+    # elsewhere in this panel. But single-family isolated build+benchmark
+    # (make_family_subset.py, same code both sides, controlling for the
+    # full-panel-vs-isolation confound) showed no measurable effect: DIAMOND
+    # F1 0.721->0.720, HMM F1 0.588->0.584 -- both within noise. Consistent
+    # with qc_scorecard.tsv already showing this family's negative pool
+    # wasn't actually miscalibrated (2.9% purity flagged, 498.7-bit margin)
+    # before this was tried -- unlike murB, there was no real problem here
+    # for EC filtering to fix. Not adopted: adds an EC-number dependency to
+    # the query for zero measured benefit. ectB's promiscuous-domain
+    # problem (the reverted trim_gt regression above) remains open.
 
   - name: ectC
     description: >
@@ -129,8 +165,27 @@ families:
       four alias symbols (betL1/betL2/betP1/betP2/betS1/betS2/opuD1/opuD2
       -- 289 UniProt members combined), same class of gap as murB1/murB2
       -- see issue #8.
-    positive_query: "(gene:betL OR gene:betL1 OR gene:betL2 OR gene:betP OR gene:betP1 OR gene:betP2 OR gene:opuD OR gene:opuD1 OR gene:opuD2 OR gene:betS OR gene:betS1 OR gene:betS2) AND taxonomy_id:2"
-    negative_query: "xref:pfam-PF02028 AND (gene:betT OR gene:caiT) NOT (gene:betL OR gene:betL1 OR gene:betL2 OR gene:betP OR gene:betP1 OR gene:betP2 OR gene:opuD OR gene:opuD1 OR gene:opuD2 OR gene:betS OR gene:betS1 OR gene:betS2 OR gene:ectP OR gene:lcoP) AND taxonomy_id:2"
+
+      Also covers Lactobacillus plantarum QacT (Glaasker et al. 1996-1998),
+      a single secondary, osmotically-activated glycine betaine/carnitine
+      transporter characterized only as a transport activity -- never
+      assigned to a gene. lp_3324 (F9UTK3) is the putative locus: the only
+      BCCT (PF02028) secondary betaine/carnitine transporter in WCFS1, all
+      other betaine/carnitine hits there being OpuA/Cho ABC subunits. The
+      assignment is inferred, not experimental. The v8 build missed it on
+      both methods (HMM 345.7 vs. GA 564.8; DIAMOND top hit betL_decoy at
+      99.3% identity), because its L. paraplantarum ortholog A0ABQ0NBH6
+      sat in this family's negatives under an automated "betT" label. In
+      Lactobacillales, "betT" (5 entries, all unreviewed, all Secundi-/
+      Lactiplantibacillus, all named "glycine betaine/carnitine/choline
+      transport protein") is a generic BCCT label, not E. coli's
+      choline-specific BetT. So Lactobacillales (taxonomy 186826) is
+      excluded from the negative pool, like ectP/lcoP. F9UTK3 + A0ABQ0NBH6
+      are added as positives by accession. The ~55%-identity
+      Secundilactobacillus homologs are left out of both sets: they're
+      too divergent to claim as QacT without evidence.
+    positive_query: "(gene:betL OR gene:betL1 OR gene:betL2 OR gene:betP OR gene:betP1 OR gene:betP2 OR gene:opuD OR gene:opuD1 OR gene:opuD2 OR gene:betS OR gene:betS1 OR gene:betS2 OR accession:F9UTK3 OR accession:A0ABQ0NBH6) AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF02028 AND (gene:betT OR gene:caiT) NOT (gene:betL OR gene:betL1 OR gene:betL2 OR gene:betP OR gene:betP1 OR gene:betP2 OR gene:opuD OR gene:opuD1 OR gene:opuD2 OR gene:betS OR gene:betS1 OR gene:betS2 OR gene:ectP OR gene:lcoP OR taxonomy_id:186826) AND taxonomy_id:2"
     negative_pfam: PF02028   # BCCT transporter family
     # v4 calibration proved a single score threshold cannot separate betL
     # from betT/caiT (min_positive_score=87.2 vs max_negative_score=642.1 --
@@ -290,6 +345,11 @@ families:
       negative_query/fusion_marker_pfam, not the partner's).
     positive_query: "(gene:otsA OR gene:otsA1 OR gene:otsA2) AND taxonomy_id:2"
     negative_query: "xref:pfam-PF00982 NOT (gene:otsA OR gene:otsA1 OR gene:otsA2) AND taxonomy_id:2"
+    # RefSeq novelty check: 11,356 RefSeq bacterial proteins vs. 905 in
+    # UniProt (fully exhausted). 500-sequence sample: 29.8% (149/500)
+    # genuinely novel at 90% identity, 94% correctly annotated
+    # "alpha,alpha-trehalose-phosphate synthase (UDP-forming)".
+    refseq_gene_symbols: [otsA, otsA1, otsA2]
     scope: annotate_only
     negative_pfam: PF00982   # Glyco_transf_20, GT20/trehalose synthase family
     fusion_partner: otsB
@@ -332,6 +392,11 @@ families:
       it improved there and runs independently of otsB's declaration.
     positive_query: "(gene:otsB OR gene:otsB1 OR gene:otsB2) AND taxonomy_id:2"
     negative_query: "xref:pfam-PF02358 NOT (gene:otsB OR gene:otsB1 OR gene:otsB2) AND taxonomy_id:2"
+    # RefSeq novelty check: 38,927 RefSeq bacterial proteins vs. 2,732 in
+    # UniProt (fully exhausted). 500-sequence sample: 65.6% (328/500)
+    # genuinely novel at 90% identity, 100% correctly annotated
+    # "trehalose-phosphatase". Largest novelty rate in the panel.
+    refseq_gene_symbols: [otsB, otsB1, otsB2]
     negative_pfam: PF02358   # Trehalose_PPase
 
   - name: mscL
@@ -352,6 +417,11 @@ families:
       section.
     positive_query: "(gene:mscL OR gene:mscL1 OR gene:mscL2) AND taxonomy_id:2"
     negative_query: "xref:pfam-PF01741 NOT (gene:mscL OR gene:mscL1 OR gene:mscL2) AND taxonomy_id:2"
+    # RefSeq novelty check: 56,506 RefSeq bacterial proteins vs. 8,910 in
+    # UniProt (fully exhausted). 500-sequence sample: 42.8% (214/500)
+    # genuinely novel at 90% identity, 100% correctly annotated
+    # "large-conductance mechanosensitive channel protein MscL".
+    refseq_gene_symbols: [mscL, mscL1, mscL2]
     negative_pfam: PF01741
 
   - name: mscS
@@ -364,8 +434,71 @@ families:
       the benchmark and cutoff_manifest.tsv status before trusting it.
       Also includes mscS1/mscS2 (real, reviewed numbered-paralog gene
       symbols, same class of gap as murB1/murB2 -- see issue #8).
+
+      Root-caused (2026-08-04), not just flagged: traced HMM's false
+      positives directly (cross-checked every other family's own
+      hmmscan.tblout for stray hits on mscS's model) -- negligible
+      cross-panel contamination (single-digit noise), confirming the
+      false positives come from WITHIN mscS's own negative pool, not
+      elsewhere in the panel. A live UniProt sample of that pool (54,533
+      candidates) showed a genuine mix: real named paralogs (kefA, ybdG,
+      ykuT -- legitimate hard negatives, distinct proteins) alongside a
+      large population of bare-locus-tag entries whose product
+      description is literally "Mechanosensitive ion channel protein
+      MscS" -- mislabeled positives, not hard negatives.
+
+      hmm_negative_query added (2026-08-04): a surgical exclusion
+      (xref:pfam-PF00924 NOT gene:mscS* AND (protein_name:KefA OR
+      protein_name:YbdG OR protein_name:YkuT OR NOT protein_name:MscS))
+      keeps the named paralogs, drops the bare-tag MscS entries (54,533 ->
+      2,757 candidates). Tested as a full swap first (both DIAMOND and HMM
+      calibrated + benchmarked on the surgical pool): HMM improved (F1
+      0.481->0.546) but DIAMOND regressed (F1 0.546->0.5) -- the same
+      calibration-drift mechanism already documented on mrpB's fusion-fix
+      history: 08b_calibrate_diamond_cutoffs.py sets its cutoff from the
+      negative set's own distribution, and removing the (conceptually
+      wrong but score-similar) bare-tag entries loosened DIAMOND's
+      threshold. Rather than accept that trade, added `hmm_negative_query`
+      as a new opt-in field (01_fetch_refs.py/05_build_hmms.sh) so ONLY
+      HMM's calibration uses the surgical pool -- DIAMOND calibration
+      (08b), 01b/01c QC, and the benchmark's own ground truth all still
+      use the unfiltered negative_query below, matching
+      08_build_diamond_db.sh's existing DIAMOND-specific positive-side
+      split (_study/_refseq exclusion), just mirrored on the negative side
+      for the opposite method.
+
+      IMPORTANT caveat, found verifying the deployed mechanism (not
+      assumed): `hmm_negative_query` only feeds 06_calibrate_cutoffs.py's
+      whole-protein GA-cutoff calibration. `11_compute_metrics.py`'s
+      primary summary.tsv metric -- the one every F1 number in this file
+      is drawn from -- is pure best-hit-per-read competition on raw
+      hmmscan bit scores and never applies that cutoff at all (confirmed
+      by reading load_hmm_calls/best_hit_per_read/label_reads directly),
+      so this fix reproduces NONE of the full-swap HMM improvement above
+      in this repo's own short-read benchmark (re-tested after adding the
+      field: byte-identical to the unfixed baseline). It also does
+      nothing for osmotool's `profile` mode in production -- confirmed via
+      build_profile_cascade_config()'s own docstring, the DIAMOND+HMM
+      cascade uses HMM's short-read-swept best_threshold_summary.tsv
+      value, explicitly NOT the GA cutoff, for exactly this reason (short
+      reads, not full ORFs). What it DOES change is the GA cutoff
+      osmotool's `annotate` mode uses directly (full-length ORF calls,
+      the same data type this calibration actually scores) -- cutoff
+      shifted 221.9->214.1 bits, calibration-time whole-protein separation
+      f1_at_cutoff 0.697->0.815. Kept for that reason (a genuine,
+      correctly-targeted data-quality fix for annotate mode) despite this
+      repo having no whole-ORF-level benchmark to independently confirm
+      the real-world magnitude the way summary.tsv does for profile mode.
     positive_query: "(gene:mscS OR gene:mscS1 OR gene:mscS2) AND taxonomy_id:2"
     negative_query: "xref:pfam-PF00924 NOT (gene:mscS OR gene:mscS1 OR gene:mscS2) AND taxonomy_id:2"
+    hmm_negative_query: "xref:pfam-PF00924 NOT (gene:mscS OR gene:mscS1 OR gene:mscS2) AND (protein_name:KefA OR protein_name:YbdG OR protein_name:YkuT OR NOT protein_name:MscS) AND taxonomy_id:2"
+    # RefSeq novelty check: 4,535 RefSeq bacterial proteins vs. 1,569 in
+    # UniProt (fully exhausted). 500-sequence sample: 26.4% (132/500)
+    # genuinely novel at 90% identity, 100% correctly annotated
+    # "small-conductance mechanosensitive channel MscS" -- no kefA/mscK/
+    # ynaI cross-contamination despite this family's own documented
+    # promiscuous-Pfam caution above.
+    refseq_gene_symbols: [mscS, mscS1, mscS2]
     negative_pfam: PF00924   # MS_channel, broad MscS-like channel family
 
   - name: galE
@@ -440,6 +573,13 @@ families:
       drifting if the underlying UniProt data changes over time.
     positive_query: "(gene:mazG OR gene:mazG1 OR gene:mazG2) AND taxonomy_id:2"
     negative_query: "xref:pfam-PF03819 NOT (gene:mazG OR gene:mazG1 OR gene:mazG2) AND taxonomy_id:2"
+    # RefSeq novelty check: 45,441 RefSeq bacterial proteins vs. 5,340 in
+    # UniProt (UniProt's own gene-symbol population already fully
+    # exhausted -- fetched count == total). 500-sequence sample: 41.0%
+    # (205/500) genuinely novel at 90% identity against the existing
+    # UniProt+study-merged pool, 100% correctly annotated "nucleoside
+    # triphosphate pyrophosphohydrolase". Strongest case in the panel.
+    refseq_gene_symbols: [mazG, mazG1, mazG2]
     negative_pfam: PF03819   # MazG family (Pfam name is gene-specific, likely narrower than galE's)
     max_negative_override: 3000
     negative_median_override: 116
@@ -464,8 +604,22 @@ families:
       positive gap, not a negative-pool issue, found while investigating
       the same class of bug as mrpF/mrpG's PhaF/yufB gap.
     positive_query: "(gene:murB OR gene:murB1 OR gene:murB2) AND taxonomy_id:2"
-    negative_query: "xref:pfam-PF02873 NOT (gene:murB OR gene:murB1 OR gene:murB2) AND taxonomy_id:2"
-    negative_pfam: PF02873   # MurB C-terminal domain (murB-specific; skips the broader shared PF01565 FAD-binding domain)
+    negative_query: "xref:pfam-PF01565 NOT (gene:murB OR gene:murB1 OR gene:murB2) AND taxonomy_id:2"
+    # RefSeq novelty check: 74,987 RefSeq bacterial proteins vs. 12,332 in
+    # UniProt (fully exhausted). 500-sequence sample: 32.8% (164/500)
+    # genuinely novel at 90% identity, 100% correctly annotated
+    # "UDP-N-acetylmuramate dehydrogenase".
+    refseq_gene_symbols: [murB, murB1, murB2]
+    # Anchored on PF01565 (FAD_binding_4), the N-terminal domain MurB shares
+    # with a broad class of FAD-linked oxidoreductases, not PF02873 (MurB_C,
+    # the C-terminal domain) -- PF02873 is close to diagnostic for MurB
+    # itself, which starved the negative pool (53 UniProt candidates total,
+    # 75% of those flagged by 01b as likely mislabeled true positives).
+    # PF01565 has 76,989 bacterial candidates excluding murB/murB1/murB2
+    # (confirmed live via UniProt REST, 2026-07-31); every real MurB still
+    # carries PF02873 too, so 01b's purity filter still catches true
+    # orthologs pulled in under the broader anchor.
+    negative_pfam: PF01565   # FAD-binding domain shared with related oxidoreductases (broadened from PF02873 -- see comment above)
     scope: annotate_only
 
 
@@ -507,6 +661,52 @@ families:
       as opuAA above. Also includes opuBA1/opuBA2 (real, reviewed
       numbered-paralog gene symbols, same class of gap as murB1/murB2 --
       see issue #8).
+
+      Root cause found (2026-08-03): recall is catastrophic (HMM 0.099,
+      DIAMOND 0.29) not from a calibration/negative-pool problem (both
+      methods already score PERFECT precision, 1.0/1.0) but from
+      best-hit competition -- traced directly via gene_counts.tsv/
+      hmmscan.tblout: the majority of opuBA's own true-positive reads win
+      best-hit against opuCA's model instead of opuBA's own (HMM: 140/230
+      hit reads go to opuCA, 58 to opuAA, only 32 to opuBA itself; DIAMOND
+      shows the same pattern). Same category of problem as opuBC/opuAC
+      (close-paralog competition), but not caused by a decoy_from_negatives
+      setting the way opuBC's was -- opuAA/opuBA/opuCA are ordinary,
+      always-co-present families, so there's no config to simply revert.
+      opuBA's own UniProt-curated pool (157) is roughly half opuAA's (325)
+      and opuCA's (358), a plausible reason its reference loses the
+      competition more often.
+
+      RefSeq expansion TRIED AND REVERTED (2026-08-03). Initial
+      verification looked promising -- CD-HIT-2D novelty check (500-
+      sequence sample) found 284/499 (56.9%) genuinely novel at 90%
+      identity vs. the existing UniProt pool, and a manual product-
+      description spot-check found a real but minor collision (24/499,
+      4.8%, explicitly titled "...ProV", a different, real gene) small
+      enough to handle with a narrowly-scoped `refseq_exclude_products`
+      filter (01e_add_refseq_positives.py; kept in the codebase, unused by
+      any family now, same reasoning the opuBC decoy-dedup fix was kept
+      after its own revert) rather than excluding the family outright the
+      way mrpC/mrpF were. But that verification sample was built from the
+      wrong NCBI query -- 01e's own build_query() restricts to
+      `srcdb_refseq[Properties]` (the curated non-redundant subset), which
+      only matches 236 entries for opuBA, not the ~2,500 the broader
+      verification query found. Once actually fetched with the real
+      query and merged: 233 sequences appended, but CD-HIT clustering
+      (90% identity, same step every family's pool goes through) collapsed
+      232 of them into existing clusters -- only 1 was genuinely novel.
+      The curated RefSeq subset turns out to already overlap almost
+      entirely with UniProt's own opuBA population; the broader
+      population the verification sample was drawn from looked more
+      novel specifically because it included redundant/less-curated
+      entries CD-HIT discards anyway. Net effect on a 3-family
+      opuAA/opuBA/opuCA subset build+benchmark: DIAMOND flat (F1
+      0.459->0.463, one extra training sequence), HMM regressed (F1
+      0.289->0.167) -- consistent with a single added sequence being pure
+      noise to the alignment/model build, not a real signal. Reverted;
+      opuBA's real problem (paralog best-hit competition, above) remains
+      unsolved. If revisited, verify novelty against 01e's own
+      build_query() output directly, not an approximation of it.
     positive_query: "(gene:opuBA OR gene:opuBA1 OR gene:opuBA2) AND taxonomy_id:2"
     negative_query: "xref:pfam-PF00571 NOT (gene:opuAA OR gene:opuAA1 OR gene:opuAA2 OR gene:opuBA OR gene:opuBA1 OR gene:opuBA2 OR gene:opuCA OR gene:opuCA1 OR gene:opuCA2) AND taxonomy_id:2"
     negative_pfam: PF00571
@@ -555,6 +755,26 @@ families:
       caveats as opuAB above. Also includes opuBB1/opuBB2 (real, reviewed
       numbered-paralog gene symbols, same class of gap as murB1/murB2 --
       see issue #8).
+
+      Confirmed (2026-08-04) to be the same close-paralog best-hit-
+      competition problem already documented on opuBC/opuAC/opuBA, just in
+      this trio (opuAB/opuBB/opuCB, PF00528) instead of the ATPase one
+      (opuAA/opuBA/opuCA, PF00571) -- same shape both times: the thinnest-
+      pool sibling loses. Traced directly via gene_counts.tsv/
+      hmmscan.tblout, not assumed: the majority of opuBB's own true-
+      positive reads win best-hit against opuCB's model instead of its
+      own (DIAMOND: 62/~101 hit reads to opuCB vs. 35.5 to opuBB; HMM:
+      119/191 to opuCB vs. 71 to opuBB). opuBB's own UniProt-curated pool
+      (187) is the smallest of the trio (opuAB 342, opuCB 256) -- opuAB
+      itself performs fine (F1 0.82-0.88), consistent with thin-pool
+      competitive loss being the driver, not a domain-wide problem.
+      RefSeq expansion NOT attempted here -- checked the curated
+      population first given opuBA's own RefSeq attempt already failed
+      from near-total redundancy with UniProt after clustering: opuBB's
+      curated RefSeq population (141) is smaller than opuBA's was (236),
+      making the same outcome likely enough not to spend a build+
+      benchmark test confirming it. Same open-question status as
+      opuBC/opuAC/opuBA -- no fix available with tools tried so far.
     positive_query: "(gene:opuBB OR gene:opuBB1 OR gene:opuBB2) AND taxonomy_id:2"
     negative_query: "xref:pfam-PF00528 NOT (gene:opuAB OR gene:opuAB1 OR gene:opuAB2 OR gene:opuBB OR gene:opuBB1 OR gene:opuBB2 OR gene:opuCB OR gene:opuCB1 OR gene:opuCB2 OR gene:proW) AND taxonomy_id:2"
     negative_pfam: PF00528
@@ -734,6 +954,45 @@ families:
       reverted (see that entry) for regressing precision there; mrpA's own
       negative-side decontamination is independent of mrpB's declaration
       and unaffected by that revert.
+
+      HMM underperformance root-caused (2026-08-04): mrpA/mrpD's own
+      false positives traced directly (cross-checked every other family's
+      hmmscan.tblout for stray hits on mrpA/mrpD's models) to each
+      other's own negative sets, not the rest of the panel. A 500-entry
+      live UniProt sample of the shared PF00361 pool showed a genuine mix
+      -- ~67% real, different, legitimately-hard-negative content (Complex
+      I NuoL/M/N subunits, DabB), ~10-18% genuinely mislabeled mrpA/mrpD
+      orthologs under bare locus tags ("Monovalent cation/H+ antiporter
+      subunit A/D", "MnhA/MnhD subunit", CPA3-family naming).
+
+      TRIED AND REVERTED (2026-08-04): a surgical exclusion targeting only
+      the confirmed mislabeled-positive pattern (NOT (protein_name:
+      antiporter AND (protein_name:"subunit A" OR protein_name:"subunit D"
+      OR protein_name:MnhA OR protein_name:MnhD)), same idea as mscS's
+      hmm_negative_query fix) was verified clean against a live sample
+      (matched almost entirely genuine mislabeled content, no legitimate
+      Nuo-only entries caught) but made BOTH methods WORSE for BOTH
+      families when tested (7-family mrpA-G subset build,
+      make_family_subset.py): mrpA DIAMOND F1 0.695->0.666 (fp 1048->1228),
+      mrpA HMM F1 0.383->0.359 (fp 2980->3361), mrpD DIAMOND F1
+      0.629->0.601 (fp 1739->1924), mrpD HMM F1 0.419->0.386 (fp
+      3364->3657) -- false positives went UP across the board, not down.
+      Unlike mrpB/mrpE/mrpF/mrpG's full random-background swap (where
+      ~95-99% of the pool was contamination and replacing all of it gave
+      calibration a clean, unambiguous gap to anchor on), this pool was
+      already a genuine mix with substantial (~67%) legitimate hard-
+      negative content. Removing just the highest-scoring, most
+      positive-like subset (the mislabeled ~10-18%) while leaving the more
+      distant Nuo/DabB majority in place plausibly let DIAMOND/HMM's
+      score-distribution-based calibration drift toward a more permissive
+      threshold fit to the now-easier remaining pool, admitting more false
+      positives from elsewhere -- the same calibration-drift mechanism
+      already seen on mrpB's fusion-fix history and mscS's own surgical
+      test, but here hurting both methods instead of trading one for the
+      other. Not adopted. This family's HMM underperformance (and mrpD's)
+      remains open -- partial/surgical negative-pool cleaning doesn't work
+      the way it does for a near-totally-contaminated pool; a real fix
+      would need a different approach, not a smaller version of this one.
     positive_query: "(gene:mrpA OR gene:mrpA1 OR gene:mrpA2 OR gene:mnhA OR gene:mnhA1 OR gene:mnhA2) AND taxonomy_id:2"
     negative_query: "xref:pfam-PF00361 NOT (gene:mrpA OR gene:mrpA1 OR gene:mrpA2 OR gene:mnhA OR gene:mnhA1 OR gene:mnhA2 OR gene:mrpD OR gene:mrpD1 OR gene:mrpD2 OR gene:mnhD OR gene:mnhD1 OR gene:mnhD2) AND taxonomy_id:2"
     negative_pfam: PF00361   # shared with mrpD's own architecture and with generic Complex I NuoL/M/N-type subunits
@@ -843,10 +1102,40 @@ families:
       loss is expected to be small. mrpA's own negative-side decontamination
       is unaffected by this revert -- it runs off mrpA's own declaration,
       not mrpB's, and is kept (see mrpA's entry).
+
+      REDESIGNED (2026-08-03), same fix as mrpE above, applied here after
+      confirming the identical root cause: a 100-entry live UniProt sample
+      of the old negative pool (PF04039 minus gene:mrpB*, 9,774 candidates
+      total) showed it's overwhelmingly genuine MrpB/MnhB orthologs under
+      bare locus tags ("Monovalent cation/H+ antiporter subunit A/B",
+      "Cation:proton antiporter"), the same "domain is essentially
+      diagnostic for the gene" situation as mrpE, not the fusion-specific
+      contamination already documented above (that fix stripped out one
+      contamination *source*; this one addresses the negative-pool design
+      itself). Swapped to a random background (taxonomy_id:2 NOT
+      xref:pfam-PF04039) and dropped pfam_model, same as mrpE.
+      Given the fusion-fix regression above already showed once that
+      "cleaner negatives" can backfire via DIAMOND's cutoff calibration
+      drifting permissive and admitting false positives from OTHER
+      families in a full build, this was NOT validated in isolation the
+      way mrpE originally was -- tested as part of a 7-family mrpA-G
+      subset build (make_family_subset.py) instead, specifically to keep
+      real competing sequences from mrpA/mrpC/mrpD (unchanged) in the
+      same DIAMOND db. Result: mrpB's own false positives went to zero for
+      both methods (DIAMOND 19->0, HMM 718->0; F1 0.649->0.675 DIAMOND,
+      0.248->0.692 HMM) with NO false-positive inflation on the unchanged
+      sibling families -- mrpA's numbers were unchanged, mrpC/mrpD moved
+      by less than 0.04 F1, consistent with this project's own documented
+      ordinary full-panel database-composition noise, not the >0.4-F1
+      collapse pattern the earlier fusion-fix regression showed. The
+      calibration-drift risk that broke the fusion fix didn't recur here,
+      plausibly because mrpA/C/D are different Pfam domains entirely (no
+      real sequence homology to mrpB for a loosened cutoff to
+      accidentally admit), unlike the fusion case where the removed
+      content was genuine shared PF04039 sequence.
     positive_query: "(gene:mrpB OR gene:mrpB1 OR gene:mrpB2 OR gene:mnhB OR gene:mnhB1 OR gene:mnhB2) AND taxonomy_id:2"
-    negative_query: "xref:pfam-PF04039 NOT (gene:mrpB OR gene:mrpB1 OR gene:mrpB2 OR gene:mnhB OR gene:mnhB1 OR gene:mnhB2) AND taxonomy_id:2"
-    negative_pfam: PF04039
-    pfam_model: PF04039
+    negative_query: "taxonomy_id:2 NOT xref:pfam-PF04039"
+    negative_pfam: PF04039   # documents the family's own domain; no longer the negative-pool anchor -- see REDESIGNED note above
 
   - name: mrpC
     description: >
@@ -895,24 +1184,50 @@ families:
   - name: mrpE
     description: >
       Subunit E of the Mrp/Mnh complex (Task 1b). mrpE/mnhE synonym pair.
-      PF01899 ("MNHE" in Pfam's own naming) checked: 9 domain
-      architectures, 10745 proteins, name matches directly -- adopted via
-      pfam_model. Also includes mrpE1/mrpE2/mnhE1/mnhE2 (real, reviewed
-      numbered-paralog gene symbols, same class of gap as murB1/murB2 --
-      see issue #8).
+      PF01899 ("MNHE" in Pfam's own naming): 9 domain architectures, 10745
+      proteins, name matches directly. Also includes mrpE1/mrpE2/mnhE1/
+      mnhE2 (real, reviewed numbered-paralog gene symbols, same class of
+      gap as murB1/murB2 -- see issue #8).
 
-      Negative-pool contamination here (21% flagged) is structural, same
-      root cause as mrpB/mrpC above. Same vindication as mrpB:
-      cutoff_manifest.tsv shows hmm_status=pfam_ga_review_needed, meaning
-      the HMM path already defers to Pfam's own GA cutoff rather than a
-      locally-calibrated one, so the domain-architecture screening that
-      justified pfam_model here is validated for a second, independent
-      reason. See README's "Structural negative-pool contamination"
-      section.
+      REDESIGNED (2026-08-01): previously used xref:pfam-PF01899 NOT
+      gene:mrpE* as the negative pool, plus pfam_model: PF01899 (both
+      reverted here). Root-caused, not just calibration-flagged: PF01899
+      has no Pfam clan or InterPro overlap to re-anchor on the way murB
+      used PF01565 -- confirmed via the InterPro API (set_info/overlaps_with
+      both null). A 500-entry live UniProt sample of the "negative" pool
+      (9,839 total PF01899 members, only 569 with a curated mrpE/mnhE
+      symbol) showed ~99% are genuine MrpE/MnhE orthologs under a bare
+      locus tag ("Na+/H+ antiporter subunit E", "Cation:proton
+      antiporter", etc.) -- this domain is essentially diagnostic for the
+      gene, so "same domain, no gene symbol" selects mislabeled true
+      positives, not hard negatives. Benchmark impact was not cosmetic:
+      isolated single-family build+benchmark (make_family_subset.py)
+      measured DIAMOND F1 0.239 (precision 0.149!) and HMM F1 0.19
+      (precision 0.118) against this pool -- both driven almost entirely
+      by false positives against a ground truth that was itself wrong.
+      Swapping to a random length-unrestricted bacterial background
+      (taxonomy_id:2 NOT xref:pfam-PF01899, letting 01c's own
+      median-based length filter do the matching like every other family)
+      gave 0 false positives out of ~1000 negative reads for both
+      methods -- precision 1.0/1.0, confirming mrpE was never hard to
+      detect; the old benchmark was measuring the negative pool's label
+      noise, not the model. pfam_model removal (custom-built HMM,
+      locally F1-calibrated instead of Pfam's raw GA cutoff) recovered
+      real recall on top of that fix -- mrpE is a short protein (~150-
+      250aa) and short simulated reads only cover a fragment of the
+      domain, so many true-positive reads legitimately scored below
+      Pfam's full-length-tuned GA cutoff (27.0 bits); local calibration
+      picked a cutoff (157.2 bits on whole-protein scoring) that recovers
+      more of them. Combined result: DIAMOND F1 0.239->0.75, HMM F1
+      0.19->0.704. One known gap: the sole real close paralog, PhaE (the
+      K+/H+-specific counterpart, ~4% of the old pool), is itself
+      integrated into PF01899 by Pfam, so it's excluded from this
+      negative pool the same as everything else under the domain --
+      untested against that one specific confusable case, not fixable
+      without hand-curation.
     positive_query: "(gene:mrpE OR gene:mrpE1 OR gene:mrpE2 OR gene:mnhE OR gene:mnhE1 OR gene:mnhE2) AND taxonomy_id:2"
-    negative_query: "xref:pfam-PF01899 NOT (gene:mrpE OR gene:mrpE1 OR gene:mrpE2 OR gene:mnhE OR gene:mnhE1 OR gene:mnhE2) AND taxonomy_id:2"
-    negative_pfam: PF01899
-    pfam_model: PF01899
+    negative_query: "taxonomy_id:2 NOT xref:pfam-PF01899"
+    negative_pfam: PF01899   # documents the family's own domain; no longer the negative-pool anchor -- see REDESIGNED note above
 
   - name: mrpF
     description: >
@@ -937,10 +1252,23 @@ families:
       includes mrpF1/mrpF2/mnhF1/mnhF2/PhaF1/PhaF2 (real, reviewed
       numbered-paralog gene symbols, same class of gap as murB1/murB2 --
       see issue #8).
+
+      REDESIGNED (2026-08-03), same fix as mrpE/mrpB above: pfam_model
+      removed, negative pool swapped from xref:pfam-PF04066 minus gene
+      symbols to a random bacterial background (taxonomy_id:2 NOT
+      xref:pfam-PF04066). Live UniProt sample of the old pool (9,135
+      candidates) confirmed the same "domain is essentially diagnostic
+      for the gene" pattern as mrpB/mrpE -- the structural residue this
+      family's own PhaF fix above couldn't reach. Validated as part of the
+      same 7-family mrpA-G subset build as mrpB (real mrpA/mrpC/mrpD
+      competing sequences present, not isolation), checking specifically
+      for the calibration-drift regression mrpB's fusion-fix history
+      warned about. Result: false positives to zero for both methods
+      (DIAMOND 704->0, HMM 819->0; F1 0.370->0.718 DIAMOND, 0.273->0.743
+      HMM), no false-positive inflation on mrpA/mrpC/mrpD.
     positive_query: "(gene:mrpF OR gene:mrpF1 OR gene:mrpF2 OR gene:mnhF OR gene:mnhF1 OR gene:mnhF2 OR gene:PhaF OR gene:PhaF1 OR gene:PhaF2) AND taxonomy_id:2"
-    negative_query: "xref:pfam-PF04066 NOT (gene:mrpF OR gene:mrpF1 OR gene:mrpF2 OR gene:mnhF OR gene:mnhF1 OR gene:mnhF2 OR gene:PhaF OR gene:PhaF1 OR gene:PhaF2) AND taxonomy_id:2"
-    negative_pfam: PF04066
-    pfam_model: PF04066
+    negative_query: "taxonomy_id:2 NOT xref:pfam-PF04066"
+    negative_pfam: PF04066   # documents the family's own domain; no longer the negative-pool anchor -- see REDESIGNED note above
 
   - name: mrpG
     description: >
@@ -960,15 +1288,31 @@ families:
       curated name to, which no alias addition could catch. mrpG's
       negative-pool contamination looks structural: PF03334 apparently
       has few members that are genuinely distinct from mrpG/mnhG itself,
-      not a missing-synonym problem. Worth a separate look if this
-      family's calibration keeps flagging poorly after this fix. Also
-      includes mrpG1/mrpG2/mnhG1/mnhG2 (real, reviewed numbered-paralog
-      gene symbols, same class of gap as murB1/murB2 -- see issue #8;
-      yufB1/yufB2 checked with zero UniProt hits, not added).
+      not a missing-synonym problem. Also includes mrpG1/mrpG2/mnhG1/
+      mnhG2 (real, reviewed numbered-paralog gene symbols, same class of
+      gap as murB1/murB2 -- see issue #8; yufB1/yufB2 checked with zero
+      UniProt hits, not added).
+
+      REDESIGNED (2026-08-03), confirming the "separate look" flagged
+      above: same fix as mrpE/mrpB/mrpF -- pfam_model removed, negative
+      pool swapped to a random bacterial background (taxonomy_id:2 NOT
+      xref:pfam-PF03334). Not separately UniProt-sampled the way
+      mrpB/mrpF were (same pfam_model + structural-contamination shape
+      made it a reasonable bet), but validated the same way: 7-family
+      mrpA-G subset build with real mrpA/mrpC/mrpD competing sequences
+      present. Result: false positives to zero for both methods (DIAMOND
+      765->0, HMM 745->0; F1 0.611->0.712 DIAMOND, 0.496->0.614 HMM), no
+      false-positive inflation on mrpA/mrpC/mrpD.
     positive_query: "(gene:mrpG OR gene:mrpG1 OR gene:mrpG2 OR gene:mnhG OR gene:mnhG1 OR gene:mnhG2 OR gene:yufB) AND taxonomy_id:2"
-    negative_query: "xref:pfam-PF03334 NOT (gene:mrpG OR gene:mrpG1 OR gene:mrpG2 OR gene:mnhG OR gene:mnhG1 OR gene:mnhG2 OR gene:yufB) AND taxonomy_id:2"
-    negative_pfam: PF03334
-    pfam_model: PF03334
+    negative_query: "taxonomy_id:2 NOT xref:pfam-PF03334"
+    # RefSeq novelty check: 21,148 RefSeq bacterial proteins vs. 1,672 in
+    # UniProt (fully exhausted). 500-sequence sample: 76.6% (383/500)
+    # genuinely novel at 90% identity, 99.5% correctly annotated
+    # "monovalent cation/H(+) antiporter subunit G". NOT extended to
+    # mrpB/mrpC/mrpF siblings -- their equivalent gene symbols collide
+    # with unrelated genes in other organisms (see field doc above).
+    refseq_gene_symbols: [mrpG, mrpG1, mrpG2, mnhG, mnhG1, mnhG2, yufB]
+    negative_pfam: PF03334   # documents the family's own domain; no longer the negative-pool anchor -- see REDESIGNED note above
 
 # --- 2026-07-23: Gut-validated osmotic-stress subsystems (Task 1c) -------
 #
@@ -1109,21 +1453,43 @@ families:
       of gap as murB1/murB2 -- see issue #8).
 
       Negative-pool contamination here is the worst in this panel (63%
-      flagged) but structural, same root cause as mrpB above. Same
-      vindication: cutoff_manifest.tsv shows
-      hmm_status=pfam_ga_review_needed, meaning the HMM path already
-      defers to Pfam's own GA cutoff rather than a locally-calibrated one
-      that this contaminated pool couldn't have produced reliably anyway
-      -- the domain-architecture screening that justified pfam_model here
-      is validated for a second, independent reason, and matters more here
-      than anywhere else in this panel given gshA/gshB are pitched as this
-      panel's strongest evidence-tier genes (Ng et al. 2023 in vivo
-      validation). See README's "Structural negative-pool contamination"
-      section.
+      flagged) but structural, same root cause as mrpB above -- and,
+      unlike mrpB/mrpE/mrpF/mrpG, genuinely NOT the same "domain is
+      basically the gene" situation: a live UniProt sample confirmed real
+      minority diversity in the pool (other ATP-grasp domain proteins,
+      including a RimK-like ribosomal-protein-modification enzyme), so
+      the negative pool itself was never redesigned here.
+
+      pfam_model REMOVED (2026-08-04). The reasoning that originally
+      justified keeping it -- "a contaminated pool couldn't have produced
+      a reliable local calibration anyway, so deferring to Pfam's GA
+      cutoff is the reliable path, not just a shortcut" -- turned out to
+      be the identical (wrong) reasoning already disproven on mrpE: it
+      validated the calibration-status flag (hmm_status=
+      pfam_ga_review_needed), not the actual downstream F1. gshB is a
+      ~310aa protein; Pfam's GA cutoff is tuned for full-length curated
+      matches, not the short fragments 6-frame-translated simulated reads
+      produce, so real positive reads were legitimately scoring below it.
+      Tested as part of a 4-family gshA/gshB/gshF/gor subset build
+      (make_family_subset.py, gshB's own pfam_model removed, siblings
+      unchanged as a cross-family sanity check -- none share PF02951, so
+      little competition risk expected, and confirmed: gshA/gshF/gor's
+      numbers moved by single digits, noise-level, both before and after).
+      Result: HMM recall 0.307->0.827, precision 0.968->0.942, F1
+      0.466->0.880 -- the biggest single-family win found on this branch,
+      for a negligible precision cost. DIAMOND unaffected (pfam_model only
+      applies to the HMM path). The "matters more here than anywhere else
+      given gshA/gshB are this panel's strongest evidence-tier genes" point
+      from the original reasoning still stands -- it's just an argument
+      for getting this right, not for keeping pfam_model.
     positive_query: "(gene:gshB OR gene:gshB1 OR gene:gshB2) AND taxonomy_id:2"
     negative_query: "xref:pfam-PF02951 NOT (gene:gshB OR gene:gshB1 OR gene:gshB2) AND taxonomy_id:2"
+    # RefSeq novelty check: 34,172 RefSeq bacterial proteins vs. 3,579 in
+    # UniProt (fully exhausted). 500-sequence sample: 18.4% (92/500)
+    # genuinely novel at 90% identity, 100% correctly annotated
+    # "glutathione synthase".
+    refseq_gene_symbols: [gshB, gshB1, gshB2]
     negative_pfam: PF02951   # GSH-S_N, glutathione-synthetase-specific substrate-binding domain (not the generic PF02955 ATP-grasp fold)
-    pfam_model: PF02951
 
   - name: gor
     description: >
@@ -1159,13 +1525,29 @@ families:
       them -- if per-genome deduplication happens anywhere, it would be in
       osmotool's annotate/profile output (Task 2, a separate repo), not
       here, so there is nothing to disable in this repo either way.
-      pfam_model: PF00313 adopted directly (Pfam's own long-established CSD
-      gathering cutoff). max_positive_override caps the fetch at 5000 --
+      pfam_model: PF00313 REMOVED (2026-08-04). Was Pfam's own long-
+      established CSD gathering cutoff, adopted on the reasoning that a
+      curated, long-established Pfam model would be at least as reliable
+      as a custom one -- checked directly instead of assumed: qc_scorecard
+      showed perfect precision (1.0/1.0 both methods) but real recall loss
+      (HMM 0.627 vs. DIAMOND 0.681), the same short-read-fragment-vs-
+      full-length-GA-cutoff mismatch already found and fixed on mrpE/gshB.
+      cspA's negative pool already showed zero overlap with positives
+      (n_negative_scored=0, hmm_status=pfam_ga_clean) -- the cleanest,
+      lowest-risk case for this fix yet, no negative-pool redesign needed
+      at all, just the cutoff source. Isolated single-family
+      build+benchmark confirmed a real but modest gain: HMM F1
+      0.771->0.783 (recall 0.627->0.643), precision unchanged (1.0/1.0).
+      Smaller than mrpE/gshB's wins, plausibly because cspA's positive set
+      is deliberately broad (many divergent csp paralogs across all of
+      Bacteria, by design -- see above), so the custom-built model ends up
+      close to Pfam's own model anyway; still adopted since there's no
+      downside. max_positive_override caps the fetch at 5000 --
       PF00313 has roughly 80,000 UniProt member proteins total, and
       fetching/clustering/aligning all of them would be disproportionate;
-      capped safely here since the HMM path doesn't use our alignment at
-      all (pfam_model) and DIAMOND reference diversity plateaus well before
-      80k largely-redundant paralogs. Negative set anchored on PF00436
+      the custom HMM build (no longer skipped now that pfam_model is
+      gone) uses this same capped, aligned/trimmed training set, same as
+      every other non-pfam_model family. Negative set anchored on PF00436
       (SSB, single-stranded DNA-binding protein) -- a related-but-distinct
       OB-fold family, not a literal confusable paralog the way betL/gor's
       negatives are, just the closest well-curated "different function,
@@ -1173,7 +1555,6 @@ families:
     positive_query: "xref:pfam-PF00313 AND taxonomy_id:2"
     negative_query: "xref:pfam-PF00436 NOT xref:pfam-PF00313 AND taxonomy_id:2"
     negative_pfam: PF00436   # SSB, single-stranded DNA-binding protein (related OB-fold, functionally distinct)
-    pfam_model: PF00313
     max_positive_override: 5000
 
   - name: trkA
@@ -1231,6 +1612,11 @@ families:
       chase further.
     positive_query: "(gene:trkA OR gene:trkA1 OR gene:trkA2) AND taxonomy_id:2"
     negative_query: "xref:pfam-PF02080 NOT (gene:trkA OR gene:trkA1 OR gene:trkA2 OR gene:ktrA OR gene:ktrA1 OR gene:ktrA2) AND taxonomy_id:2"
+    # RefSeq novelty check: 24,815 RefSeq bacterial proteins vs. 4,858 in
+    # UniProt (fully exhausted). 500-sequence sample: 25.2% (126/500)
+    # genuinely novel at 90% identity, 100% correctly annotated "Trk
+    # system potassium transporter TrkA".
+    refseq_gene_symbols: [trkA, trkA1, trkA2]
     negative_pfam: PF02080   # TrkA_N, broad RCK-domain regulatory-subunit family
 
   - name: trkH

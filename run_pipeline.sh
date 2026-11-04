@@ -84,6 +84,11 @@ do_build() {
         --refs "${REFS_DIR}" --families "${FAMILIES_FILE}"
 
     echo ""
+    echo "--- 1e. Merge extra positives from NCBI RefSeq (opt-in per family) ---"
+    python pipeline/01e_add_refseq_positives.py \
+        --refs "${REFS_DIR}" --families "${FAMILIES_FILE}"
+
+    echo ""
     echo "--- 2. CD-HIT cluster positives + negatives (remove redundancy) ---"
     bash pipeline/02_cluster_cdhit.sh "${REFS_DIR}"
 
