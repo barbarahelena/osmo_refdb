@@ -45,16 +45,20 @@ one() {
   { [ -s "$out" ] || [ -s "$G/${bid}_${acc}.fna" ]; } && { echo "CACHED $bid"; return 0; }
   p=$(echo "${acc#GCA_}" | sed 's/\(...\)\(...\)\(...\)/\1\/\2\/\3/')
   base="https://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/$p/"
-  dir=$(curl -sS -m 60 --retry 3 --retry-delay 2 "$base" \
-        | grep -oE "${acc}\.[0-9]+_[^/\"]+" | sort -u -V | tail -1)
-  [ -z "$dir" ] && { echo "FAIL $bid $acc: no FTP dir (suppressed?)"; return 0; }
+  dirs=$(curl -sS -m 60 --retry 3 --retry-delay 2 "$base" \
+         | grep -oE "${acc}\.[0-9]+_[^/\"]+" | sort -u -V -r)
+  [ -z "$dirs" ] && { echo "FAIL $bid $acc: no FTP dir (suppressed?)"; return 0; }
   tmp="$out.part"
-  if curl -sS -m 600 --retry 3 --retry-delay 2 -o "$tmp" \
-       "${base}${dir}/${dir}_genomic.fna.gz" && gzip -t "$tmp" 2>/dev/null; then
-    mv "$tmp" "$out"; echo "OK $bid $dir"
-  else
-    rm -f "$tmp"; echo "FAIL $bid $acc: download failed ($dir)"
-  fi
+  # newest version first; a suppressed version keeps its folder but only
+  # the metadata reports (the FASTA 404s), so fall back to the next one
+  for dir in $dirs; do
+    if curl -sS -f -m 600 --retry 3 --retry-delay 2 -o "$tmp" \
+         "${base}${dir}/${dir}_genomic.fna.gz" 2>/dev/null && gzip -t "$tmp" 2>/dev/null; then
+      mv "$tmp" "$out"; echo "OK $bid $dir"; return 0
+    fi
+    rm -f "$tmp"
+  done
+  echo "FAIL $bid $acc: no genomic FASTA in any version ($(echo $dirs | tr ' ' ','))"
 }
 export -f one
 export G="$PV/genomes"
