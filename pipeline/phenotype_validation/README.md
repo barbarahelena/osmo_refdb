@@ -22,7 +22,9 @@ content. Different jobs.
 
 ## Status
 
-Pilot complete on a 43-strain random sample; full study not yet run. The
+Pilot complete on a 43-strain random sample. Full BacDive ID sweep harvested
+and the phenotype table built (2026-11-04); genome download, annotation and
+analysis not yet run. The
 analysis plan below is **pre-registered** — written before the full harvest, so
 that the salt-in prediction and the blocking strategy are commitments rather
 than post-hoc descriptions. Amendments belong in separate commits with a stated
@@ -76,6 +78,24 @@ Coverage, measured on a seeded random sample of 1000 IDs (558 resolved):
 | both | 8.2% |
 | genome + parseable quantitative NaCl max | 7.0% → **~6,800 strains** |
 
+Full ID sweep (2026-11-04, IDs 1–182,000 in 1,820 batches), which replaces the
+sample's projections with counts:
+
+| | count |
+|---|---|
+| strains in BacDive | **102,187** (IDs end at ~179,200) |
+| halophily record + genome accession | 6,643 |
+| … with a quantitative NaCl max | **6,344** |
+| … with a no-growth upper bound | 1,794 |
+| distinct genera (quantitative max) | 1,608 (3.95 strains/genus) |
+| archaea | 110 |
+| pre-registered salt-in strains | 59, in 23 genera |
+| assembly level (quantitative max) | 1,024 complete, 115 chromosome, 2,718 scaffold, 2,487 contig |
+
+The sample's ~97,650 total undercounted because it drew from IDs 1–175,000,
+the same cap the sweep originally had. 163 NaCl records are skipped by
+`build_table.py` rather than parsed: 99 in molar units and 64 in g/L.
+
 Strain-level matters: tolerance varies within a species, and records carry
 `INSDC accession` plus `assembly level` and a strain↔genome match `score`, so
 the genome is matched to the strain that was actually assayed. A species-level
@@ -127,6 +147,14 @@ How many genera qualify is unknown until the sweep, which is why the sweep runs
 per genus (37 genera / 41 strains), so Set B requires deliberate targeting and
 cannot be assembled from a random draw.
 
+**Amendment (2026-11-04).** Written after the sweep and the phenotype table,
+before any panel output on the sweep's strains existed. The full sweep is not a
+random draw, and it already holds 324 genera with ≥3 strains spanning ≥4
+percentage points of NaCl max (4,291 strains; largest *Streptomyces* 337,
+*Pseudomonas* 148, *Flavobacterium* 119, *Paenibacillus* 118, *Vibrio* 86). Set B
+is therefore built from the sweep as-is, with no separate targeting step. The
+Set B criterion itself is unchanged.
+
 Quantify the confound directly as well: ANOVA of `nacl_max` by
 genus/family/order gives the fraction of phenotype variance explained by
 taxonomy alone. If that is most of it, report it.
@@ -171,6 +199,12 @@ them without declaring it would be cherry-picking.
 Haloarchaea are nearly absent from a random draw (1 of 46 archaeal strains in
 the pilot), so this stratum needs a targeted `/v2/taxon/{genus}` pass over the
 genera in `salt_in_taxa.tsv`.
+
+**Amendment (2026-11-04).** Same timing as the Set B amendment above. The
+targeted pass is dropped as redundant: the full sweep fetched every BacDive
+ID, so a taxon query can only return strains already harvested. The sweep
+gives 59 salt-in strains across 23 of the genera in `salt_in_taxa.tsv`.
+Membership and the family-specific prediction are unchanged.
 
 ### Power
 
@@ -227,11 +261,12 @@ Scripts live here; output goes to `releases/<release>/phenotype_validation/`
 (git-ignored), following the `real_genome_validation/` convention.
 
 ```bash
-PV=releases/v8/phenotype_validation
+PV=releases/v8/phenotype_validation_full   # pilot: releases/v8/phenotype_validation
 
-# 1. harvest BacDive (seeded sample, or the full ID sweep)
-#    v2 API, 100 IDs per call, no credentials needed
-bash  pipeline/phenotype_validation/harvest_bacdive.sh "$PV"
+# 1. harvest BacDive: `sweep` (every ID, ~1,820 calls) or `sample` (the
+#    pilot's seeded 1000 IDs). v2 API, 100 IDs per call, no credentials.
+#    Keep sample and sweep in separate dirs; the script refuses to mix them.
+bash  pipeline/phenotype_validation/harvest_bacdive.sh "$PV" sweep
 
 # 2. phenotype table: one row per strain with NaCl + a genome accession
 python pipeline/phenotype_validation/build_table.py --dir "$PV"
@@ -274,5 +309,8 @@ python pipeline/phenotype_validation/analyze.py      --dir "$PV"
   genera are unevenly split. A stricter version of the blocking in Set A/B uses
   16S identity or tree distance; BacDive records carry 16S accessions, so the
   data for that is already available.
-- Do not re-run the full ID sweep casually. It is ~1,750 calls against a public
-  academic service; cache `bacdive_raw/` and reuse it.
+- Do not re-run the full ID sweep casually. It is ~1,820 calls against a public
+  academic service; cache `bacdive_raw/` and reuse it. The 2026-11-04 sweep
+  took ~1.5 h at ~3.4 s/batch; 7 batches failed (proxy 502s, 180 s timeouts,
+  HTTP/2 framing errors) and a second run fetched them, since cached batches
+  are skipped.
