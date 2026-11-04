@@ -1,0 +1,166 @@
+# markers.yaml -- universal single-copy marker genes for normalising
+# `osmotool profile` abundances to copies per genome.
+#
+# NOT part of the osmoadaptation panel (families.yaml). Built as its own,
+# separate release so these genes never sit in the same DIAMOND db as the
+# osmo families: if they did, they would compete with osmo families in
+# select_best_hits' best-alignment contest and shift those families'
+# benchmarked precision/recall. See README "Marker genes for copies-per-
+# genome normalisation" for the build/package workflow:
+#
+#   FAMILIES_FILE=markers.yaml bash run_pipeline.sh all <release>-markers
+#   python pipeline/12_package_markers.py \
+#       --marker-release releases/<release>-markers --release releases/<release>
+#
+# Same schema as families.yaml (see its header for every field).
+#
+# Why these ten: they are the ten universal single-copy marker COGs used
+# by fetchMG / mOTUs (Sunagawa et al. 2013, Nat Methods 10:1196; Milanese
+# et al. 2019, Nat Commun 10:1014). All are core translation / protein-
+# targeting machinery, chosen as markers because their copy number per
+# genome is stable -- deliberately unlike murB, which has a documented
+# salt-tolerance association (Culligan et al. 2012) and two real paralogs
+# in some taxa, so it must never be used as a normaliser. A normaliser
+# must not covary with osmotic status: re-check the literature for each
+# of these before relying on the absolute values.
+#
+#   COG0012 ychF   COG0016 pheS   COG0018 argS   COG0172 serS
+#   COG0215 cysS   COG0495 leuS   COG0525 valS   COG0533 tsaD
+#   COG0541 ffh    COG0552 ftsY
+#
+# "Single-copy" is not strict: UniProt (2026-11-04) has a small number of
+# numbered-paralog entries for every one of these (e.g. 375 argS1/argS2,
+# mostly B. cereus group; 370 cysS1/cysS2) out of ~18,000 bacterial
+# entries each, i.e. <2%. Those paralogs are included in the positives
+# below (same treatment as murB1/murB2 in families.yaml) because their
+# reads would hit these references regardless. At community level,
+# osmotool's median-with-MAD-outlier-removal across all ten markers is
+# what absorbs a lineage-specific duplication in any one of them.
+#
+# Negatives: where a marker has a specific named confusable paralog
+# (leuS/valS vs ileS, cysS vs metG, ffh/ftsY vs flhF, tsaD vs tsaB), that
+# paralog is the negative set and decoy_from_negatives is on, so a read
+# from the paralog is routed to a never-reported "<marker>_decoy" label
+# instead of inflating the marker. Note leuS and valS deliberately do NOT
+# use their shared Pfam domain (PF00133) as the negative pool: it contains
+# the other marker, and a valS decoy built from it would steal true valS
+# reads. Elsewhere a related Pfam fold is used as an ordinary hard
+# negative for calibration only.
+#
+# Positives are capped (max_positive_override) because each marker has
+# ~18,000 bacterial UniProt entries; 4000 randomly sampled, then clustered
+# at 90% identity, is ample diversity for a short-read DIAMOND reference.
+
+families:
+  - name: ychF
+    description: >
+      COG0012, redox-responsive ATPase YchF/EngD (Obg-family GTPase
+      fold, binds ATP). Negative pool: other PF01926 (MMR_HSR1) GTPases
+      (Era, EngA, ObgE, HflX, ...), for calibration only -- too broad a
+      pool for a useful decoy.
+    positive_query: "(gene:ychF OR gene:engD OR gene:ychF1 OR gene:ychF2) AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF01926 NOT (gene:ychF OR gene:engD OR gene:ychF1 OR gene:ychF2) AND taxonomy_id:2"
+    negative_pfam: PF01926   # 50S ribosome-binding GTPase (MMR_HSR1)
+    max_positive_override: 4000
+
+  - name: pheS
+    description: >
+      COG0016, phenylalanyl-tRNA synthetase alpha subunit (class II aaRS).
+      Negative pool: class II aaRS catalytic core of Asp/Asn/LysRS
+      (PF00152). Not PF01409 NOT pheS: only 676 entries, and 9/12 sampled
+      were unlabeled PheS orthologs (bare locus tag, "phenylalanine--tRNA
+      ligase") -- a contaminated pool, not real negatives.
+    positive_query: "(gene:pheS OR gene:pheS1 OR gene:pheS2) AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF00152 AND taxonomy_id:2"
+    negative_pfam: PF00152   # tRNA synthetases class II (D, K and N)
+    max_positive_override: 4000
+
+  - name: argS
+    description: >
+      COG0018, arginyl-tRNA synthetase (class I aaRS). Includes
+      argS1/argS2 (reviewed, real paralog pairs in e.g. B. cereus group
+      and Bacillus halodurans). Negative pool: class I Glu/GlnRS catalytic
+      domain (PF00749). Not PF00750 NOT argS: only 221 entries, and every
+      one sampled (8/8) was a reviewed argS1/argS2, i.e. a true positive.
+    positive_query: "(gene:argS OR gene:argS1 OR gene:argS2) AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF00749 AND taxonomy_id:2"
+    negative_pfam: PF00749   # tRNA synthetases class I (E and Q), catalytic domain
+    max_positive_override: 4000
+
+  - name: serS
+    description: >
+      COG0172, seryl-tRNA synthetase (class II aaRS). Negative pool: the
+      rest of PF00587 (ThrRS, ProRS, HisRS, GlyRS-alpha2), for
+      calibration only -- a multi-paralog pool, too broad for a decoy.
+    positive_query: "(gene:serS OR gene:serS1 OR gene:serS2) AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF00587 NOT (gene:serS OR gene:serS1 OR gene:serS2) AND taxonomy_id:2"
+    negative_pfam: PF00587   # tRNA synthetase class II core domain (G, H, P, S and T)
+    max_positive_override: 4000
+
+  - name: cysS
+    description: >
+      COG0215, cysteinyl-tRNA synthetase (class I aaRS). Negative/decoy:
+      methionyl-tRNA synthetase, its closest class I paralog (bacterial
+      gene symbol is usually metG; metS kept for the minority that use it).
+    positive_query: "(gene:cysS OR gene:cysS1 OR gene:cysS2) AND taxonomy_id:2"
+    negative_query: "(gene:metG OR gene:metS) AND taxonomy_id:2"
+    decoy_from_negatives: true
+    max_positive_override: 4000
+
+  - name: leuS
+    description: >
+      COG0495, leucyl-tRNA synthetase (class I aaRS). Negative/decoy:
+      isoleucyl-tRNA synthetase (ileS), which shares the PF00133 catalytic
+      domain. See file header for why valS is deliberately not in this pool.
+    positive_query: "(gene:leuS OR gene:leuS1 OR gene:leuS2) AND taxonomy_id:2"
+    negative_query: "(gene:ileS OR gene:ileS1 OR gene:ileS2) AND taxonomy_id:2"
+    decoy_from_negatives: true
+    max_positive_override: 4000
+
+  - name: valS
+    description: >
+      COG0525, valyl-tRNA synthetase (class I aaRS). Negative/decoy:
+      ileS, same reasoning as leuS.
+    positive_query: "(gene:valS OR gene:valS1 OR gene:valS2) AND taxonomy_id:2"
+    negative_query: "(gene:ileS OR gene:ileS1 OR gene:ileS2) AND taxonomy_id:2"
+    decoy_from_negatives: true
+    max_positive_override: 4000
+
+  - name: tsaD
+    description: >
+      COG0533, tRNA N6-adenosine threonylcarbamoyltransferase TsaD
+      (formerly Gcp/YgjD). Negative/decoy: the rest of PF00814, in
+      bacteria essentially its inactive paralog TsaB (YeaZ). The EC
+      number is used on BOTH sides: gene-symbol exclusion alone left real
+      TsaD under bare locus tags in the PF00814 pool (sampled 2026-11-04:
+      "N(6)-L-threonylcarbamoyladenine synthase (EC 2.3.1.234)", ~310 aa,
+      3/15 entries), which as decoys would have stolen true TsaD reads.
+      TsaB carries no EC; with NOT ec:2.3.1.234 the pool drops 18,004 ->
+      14,065 and the 15-entry sample was all TsaB / peptidase M22
+      (~170-250 aa). A few short mis-EC'd TsaB-like entries may enter the
+      positives this way -- 01c_check_length_outliers.py flags those.
+    positive_query: "(gene:tsaD OR gene:gcp OR gene:ygjD OR gene:tsaD1 OR gene:tsaD2 OR ec:2.3.1.234) AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF00814 NOT (gene:tsaD OR gene:gcp OR gene:ygjD OR gene:tsaD1 OR gene:tsaD2) NOT ec:2.3.1.234 AND taxonomy_id:2"
+    negative_pfam: PF00814   # tRNA N6-adenosine threonylcarbamoyltransferase
+    decoy_from_negatives: true
+    max_positive_override: 4000
+
+  - name: ffh
+    description: >
+      COG0541, signal recognition particle protein Ffh (SRP54). Shares
+      the SRP54 GTPase domain (PF00448) with ftsY -- that pair is told
+      apart by best-hit between the two markers themselves, since both
+      are in this db. Negative/decoy: the third bacterial SRP-type
+      GTPase, flagellar biosynthesis regulator FlhF.
+    positive_query: "(gene:ffh OR gene:ffh1 OR gene:ffh2) AND taxonomy_id:2"
+    negative_query: "gene:flhF AND taxonomy_id:2"
+    decoy_from_negatives: true
+    max_positive_override: 4000
+
+  - name: ftsY
+    description: >
+      COG0552, signal recognition particle receptor FtsY. See ffh.
+    positive_query: "(gene:ftsY OR gene:ftsY1 OR gene:ftsY2) AND taxonomy_id:2"
+    negative_query: "gene:flhF AND taxonomy_id:2"
+    decoy_from_negatives: true
+    max_positive_override: 4000

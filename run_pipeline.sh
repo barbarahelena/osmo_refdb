@@ -13,6 +13,16 @@
 #   bash run_pipeline.sh benchmark [release_name]  # simulate reads -> run
 #                                                   # DIAMOND+HMM -> metrics
 #   bash run_pipeline.sh all [release_name]        # build then benchmark
+#   bash run_pipeline.sh markers [release_name]    # build + benchmark the
+#                                                   # universal single-copy
+#                                                   # marker genes
+#                                                   # (markers.yaml) as their
+#                                                   # own release,
+#                                                   # <release_name>-markers,
+#                                                   # then package them into
+#                                                   # <release_name>/markers/
+#                                                   # for osmotool profile's
+#                                                   # copies_per_genome column
 #
 # All outputs for a given release_name (default: "dev") are written under
 # releases/<release_name>/ so multiple database versions can coexist and be
@@ -56,8 +66,26 @@ RESULTS_DIR="${RELEASE_DIR}/results"
 SPLIT_MODE="${SPLIT_MODE:-random}"
 
 usage() {
-    echo "Usage: bash run_pipeline.sh {build|benchmark|all} [release_name]"
+    echo "Usage: bash run_pipeline.sh {build|benchmark|all|markers} [release_name]"
     exit 1
+}
+
+do_markers() {
+    # Markers are a separate build on purpose (own DIAMOND db, so they never
+    # compete with osmo families for best hits) -- see markers.yaml's header.
+    local marker_release="${RELEASE_NAME}-markers"
+    if [ ! -s "${RELEASE_DIR}/osmo_refdb.dmnd" ]; then
+        echo "ERROR: ${RELEASE_DIR}/osmo_refdb.dmnd not found. Build the main release first." >&2
+        exit 1
+    fi
+    echo "### osmo_refdb markers — building '${marker_release}', packaging into '${RELEASE_NAME}' ###"
+    FAMILIES_FILE=markers.yaml SPLIT_MODE="${SPLIT_MODE}" THREADS="${THREADS}" \
+        bash "${SCRIPT_DIR}/run_pipeline.sh" all "${marker_release}"
+    echo ""
+    echo "--- 12. Package markers into ${RELEASE_DIR}/markers/ ---"
+    python pipeline/12_package_markers.py \
+        --marker-release "releases/${marker_release}" --release "${RELEASE_DIR}" \
+        --markers markers.yaml
 }
 
 do_build() {
@@ -214,6 +242,9 @@ case "${CMD}" in
     all)
         do_build
         do_benchmark
+        ;;
+    markers)
+        do_markers
         ;;
     *)
         usage

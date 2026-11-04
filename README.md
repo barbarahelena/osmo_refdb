@@ -47,6 +47,9 @@ bash run_pipeline.sh build v1        # fetch, cluster, split, align,
                                       # hmmbuild, calibrate, press, diamond makedb
 bash run_pipeline.sh benchmark v1    # simulate reads, run DIAMOND+HMM, score
 bash run_pipeline.sh all v1          # build then benchmark
+bash run_pipeline.sh markers v1      # build + package marker genes into
+                                      # releases/v1/markers/ (see "Marker genes
+                                      # for copies-per-genome normalisation")
 ```
 
 Everything for a given release name is written to `releases/<name>/`
@@ -385,9 +388,54 @@ everything together.
 | 10 | `10_run_benchmark.sh` | Run DIAMOND (`osmotool profile`) + HMM (hmmscan) on simulated reads |
 | 11 | `11_compute_metrics.py` | Precision/recall/F1, ROC/PR curves, per-family best-threshold summary, read-length-stratified summary, background false-positive rate, and `osmo_refdb.profile_cascade.tsv` (families where DIAMOND's benchmark precision falls below a threshold, paired with HMM's best short-read bitscore cutoff -- the config `osmotool profile`'s DIAMOND+HMM cascade consumes) |
 
+| 12 | `12_package_markers.py` | Copy a separately-built marker release (`markers.yaml`, see below) into a main release's `markers/` subdirectory: DIAMOND db, its source FASTA (for reference lengths), decoy-label exclusion list, and a manifest with per-marker lengths and the marker build's DIAMOND benchmark precision/recall |
+
 Steps 4–8 only ever touch the TRAIN split; steps 9–11 only ever touch the
 TEST split — this train/test separation is required so the benchmark
 measures genuine generalization rather than memorization.
+
+## Marker genes for copies-per-genome normalisation
+
+`osmotool profile` reports RPM, which shifts with host/eukaryotic DNA
+content and average genome size across samples. When a release ships a
+`markers/` subdirectory, `profile` also reports `copies_per_genome`: a
+family's reads per kb of effective gene length divided by the mean of ten
+universal single-copy marker genes, i.e. the average number of copies per
+genome in the community. The method follows MicrobeCensus (Nayfach &
+Pollard 2015), reimplemented for DIAMOND rather than vendored (it's GPL-3.0,
+and its trained cutoffs/coefficients only apply to RAPsearch2 scores); see
+`osmotool`'s `normalise.py` for the details.
+
+The markers (`markers.yaml`: the ten fetchMG/mOTUs COGs -- ychF, pheS,
+argS, serS, cysS, leuS, valS, tsaD, ffh, ftsY) go through the same fetch ->
+QC -> cluster -> split -> calibrate -> benchmark pipeline as the osmo
+families, but as **their own release with their own DIAMOND db**, so they
+never compete with osmo families in best-hit selection and adding them
+can't change any osmo family's benchmark. murB is deliberately not a
+marker: it has a reported salt-tolerance association (Culligan et al.
+2012) and real paralogs in some taxa, and a normaliser must not covary
+with what it normalises.
+
+```bash
+bash run_pipeline.sh build v9          # main release first
+bash run_pipeline.sh markers v9        # builds + benchmarks releases/v9-markers/,
+                                       # then packages it into releases/v9/markers/
+```
+
+`markers` is equivalent to
+`FAMILIES_FILE=markers.yaml bash run_pipeline.sh all v9-markers` followed by
+`python pipeline/12_package_markers.py --marker-release releases/v9-markers --release releases/v9`;
+the packaging step can also add markers to an existing release (e.g. v8)
+without rebuilding it. Review `releases/<name>-markers/results/metrics/summary.tsv`
+before shipping: a marker with poor DIAMOND precision inflates the
+denominator for every family.
+
+Phase-1 limitation: per-family detection sensitivity isn't corrected for.
+Markers and osmo families use the same DIAMOND thresholds, so the bias
+partly cancels, but `copies_per_genome` is best read as comparable across
+samples rather than as an exact absolute copy number. Calibrating
+per-family sensitivity coefficients from the simulated-read benchmark
+(MicrobeCensus's approach) is the planned phase 2.
 
 ## Real-genome validation
 
