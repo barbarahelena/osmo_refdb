@@ -101,6 +101,13 @@ built before this change to regenerate them.
 
 ## Adding a new gene family
 
+Capped fetches (every family's negatives, and positives with
+`max_positive_override`) are sampled from the whole matching UniProt
+population. The accession lists are cached per UniProt release in
+`cache/uniprot/`, so the first build after a new UniProt release spends
+about an hour listing them and later builds reuse the cache. Pass
+`--no-cache` to `01_fetch_refs.py` to force a fresh listing.
+
 Edit `families.yaml` — add one entry with a `name`, `positive_query`
 (UniProt REST query) and `negative_query` (a hard-negative Pfam-family
 query). Then rerun `bash run_pipeline.sh all <release_name>`. No other file
@@ -371,6 +378,7 @@ everything together.
 | 1c | `01c_check_length_outliers.py` | Flag/drop sequences (positive or negative) whose length is way off their family's median -- likely a multi-domain fusion protein or a partial fragment, not a clean single-domain family member (see `refs/length_outlier_manifest.tsv`) |
 | 1d | `01d_add_extra_positives.py` | Merge manually-curated extra positives (e.g. Bakta hits from a local study that this repo's own tool missed) from `extra_sequences/<family>.faa` into the fetched positive set, before clustering dedupes the combined pool (see `refs/extra_positives_manifest.tsv`) |
 | 1e | `01e_add_refseq_positives.py` | For families opted in via `families.yaml`'s `refseq_gene_symbols` (only where UniProt's own gene-symbol population is already fully exhausted and a per-family novelty/contamination check confirmed it's safe), merge additional real positives from NCBI RefSeq into the fetched positive set (see `refs/refseq_positives_manifest.tsv`) |
+| 1f | `01f_build_random_background.py` | Sample a shared random bacterial background (default 5000 proteins carrying none of the panel's Pfam domains, minus any >= 70% identical to a panel positive) into `refs/random_background.faa`. Benchmark-only: never used for calibration or in either db. Step 9 simulates reads from it and step 11 reports each family's off-target false positives per million of those reads (see `refs/random_background_manifest.tsv`) |
 | 2 | `02_cluster_cdhit.sh` | CD-HIT cluster positives and negatives at 90% identity (remove redundancy, avoid train/test leakage from near-duplicates) |
 | 3 | `03_split_train_test.py` | Split positives into train (build) / test (held-out benchmark), and every family's negatives into train (cutoff calibration in steps 5-6 and 8b; decoy refs in step 8a) / test (benchmark negative reads), so the benchmark never scores negatives that set a cutoff. Non-decoy families hold out half their negatives (`--negative-test-fraction`, default 0.5); decoy families use `--test-fraction` |
 | 4 | `04_align_trim.sh` | MAFFT align + trimAl trim the TRAIN positives. trimAl's gap threshold defaults to 0.8 but can be overridden per family via `families.yaml`'s `trim_gt` |
@@ -386,7 +394,7 @@ everything together.
 | 9 | `09_simulate_reads.py` | Simulate reads from held-out TEST positives + TEST negatives (the negative split disjoint from calibration and from any decoy refs, so a benchmark read is never scored against a threshold or db entry built from its own source sequence) |
 | 9b | `09b_compute_read_truth.py` | Locate each read on its source contig (k-mer match) and label it by actual CDS overlap, not just its source construct -- a read that lands entirely in flanking DNA carries no gene signal and must not be scored as a positive. Also labels real background reads and records read length. |
 | 10 | `10_run_benchmark.sh` | Run DIAMOND (`osmotool profile`) + HMM (hmmscan) on simulated reads |
-| 11 | `11_compute_metrics.py` | Precision/recall/F1, ROC/PR curves, per-family best-threshold summary, read-length-stratified summary, background false-positive rate, and `osmo_refdb.profile_cascade.tsv` (families where DIAMOND's benchmark precision falls below a threshold, paired with HMM's best short-read bitscore cutoff -- the config `osmotool profile`'s DIAMOND+HMM cascade consumes) |
+| 11 | `11_compute_metrics.py` | Precision/recall/F1, ROC/PR curves, per-family best-threshold summary, read-length-stratified summary, background false-positive rate, and `osmo_refdb.profile_cascade.tsv` (families where DIAMOND's benchmark precision falls below a threshold, paired with HMM's best short-read bitscore cutoff -- the config `osmotool profile`'s DIAMOND+HMM cascade consumes). `summary.tsv` counts false positives three ways: `fp` (the family's own hard negatives and flanks; `precision`/`f1`, comparable to releases up to v8), `fp_cross` (other panel genes' real reads called as this family; `precision_panel`/`f1_panel`, which the cascade flag now uses), and `fp_background`/`background_fp_per_million` (random background reads). `fp_other_negatives` (other families' hard negatives called as this family) is reported but in no precision, since sibling families share one negative pool |
 
 | 12 | `12_package_markers.py` | Copy a separately-built marker release (`markers.yaml`, see below) into a main release's `markers/` subdirectory: DIAMOND db, its source FASTA (for reference lengths), decoy-label exclusion list, and a manifest with per-marker lengths and the marker build's DIAMOND benchmark precision/recall |
 

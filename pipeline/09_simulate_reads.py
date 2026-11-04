@@ -45,6 +45,8 @@ from pathlib import Path
 import yaml
 
 RANDOM_SEED = 42
+RANDOM_BG_FAMILY = "random_bg"          # must match 01f / 11
+RANDOM_BG_FASTA = "random_background.faa"
 FLANK_LEN = 300  # bp of random flanking DNA on each side of the CDS
 
 
@@ -164,6 +166,7 @@ def main() -> None:
     simulator = which_simulator()
 
     truth_rows = []
+    jobs: list[tuple[str, str, str]] = []
 
     for family in families:
         # Benchmark negatives come from the held-out negative.test split
@@ -179,56 +182,68 @@ def main() -> None:
             if (args.refs / neg_fname).exists():
                 print(f"[{family}] WARNING: no negative.test split, simulating "
                       f"benchmark negatives from the full negative.faa")
-        for label, fname in (("positive", f"{family}.positive.test.faa"),
-                              ("negative", neg_fname)):
-            records = parse_fasta(args.refs / fname)
-            if not records:
-                continue
+        jobs += [(family, "positive", f"{family}.positive.test.faa"),
+                 (family, "negative", neg_fname)]
 
-            rng.shuffle(records)
-            held_out = records  # both files are already held-out splits
+    # Shared random bacterial background (01f_build_random_background.py):
+    # unrelated proteins, scored in 11_compute_metrics.py as off-target
+    # false positives per family. Appended last so every family's rng draws
+    # above are identical whether or not the background exists.
+    if (args.refs / RANDOM_BG_FASTA).exists():
+        jobs.append((RANDOM_BG_FAMILY, "negative", RANDOM_BG_FASTA))
+    else:
+        print(f"NOTE: no {RANDOM_BG_FASTA} in {args.refs} -- benchmark has no "
+              f"random background (run 01f_build_random_background.py)")
 
-            genome_fasta = genome_dir / f"{family}.{label}.fasta"
-            with open(genome_fasta, "w") as fh:
-                for header, protein in held_out:
-                    context = build_genomic_context(protein, rng)
-                    fh.write(f">{header}\n{context}\n")
-                    truth_rows.append({
-                        "source_header": header,
-                        "family": family,
-                        "label": label,
-                    })
+    for family, label, fname in jobs:
+        records = parse_fasta(args.refs / fname)
+        if not records:
+            continue
 
-            n_reads = len(held_out) * args.reads_per_sequence
+        rng.shuffle(records)
+        held_out = records  # both files are already held-out splits
 
-            if read_lengths:
-                # Exact length control needed for stratification -- wgsim
-                # respects -1/-2 exactly, iss's named models don't let you
-                # dial in an arbitrary bp length. Fresh seed per length (not
-                # just per family/label) so multiple lengths of the same
-                # sample don't draw identical read starting positions.
-                for length in read_lengths:
-                    out_prefix = args.out / f"{family}.{label}.rl{length}"
-                    sim_seed = rng.randint(0, 2**31 - 1)
-                    print(f"[{family}/{label}] {len(held_out)} sequences -> "
-                          f"~{n_reads} simulated read pairs (wgsim, {length}bp, seed={sim_seed})")
-                    simulate_with_wgsim(genome_fasta, out_prefix, n_reads, sim_seed, read_length=length)
-            else:
-                out_prefix = args.out / f"{family}.{label}"
-                # Deterministic per-(family, label) seed, drawn from the
-                # module's own seeded rng -- reproducible given the same
-                # RANDOM_SEED and families.yaml iteration order, without
-                # wgsim/iss's own internal RNGs (which neither tool seeds
-                # by default) silently making every run's actual simulated
-                # reads different even when the held-out input sequences
-                # are identical.
+        genome_fasta = genome_dir / f"{family}.{label}.fasta"
+        with open(genome_fasta, "w") as fh:
+            for header, protein in held_out:
+                context = build_genomic_context(protein, rng)
+                fh.write(f">{header}\n{context}\n")
+                truth_rows.append({
+                    "source_header": header,
+                    "family": family,
+                    "label": label,
+                })
+
+        n_reads = len(held_out) * args.reads_per_sequence
+
+        if read_lengths:
+            # Exact length control needed for stratification -- wgsim
+            # respects -1/-2 exactly, iss's named models don't let you
+            # dial in an arbitrary bp length. Fresh seed per length (not
+            # just per family/label) so multiple lengths of the same
+            # sample don't draw identical read starting positions.
+            for length in read_lengths:
+                out_prefix = args.out / f"{family}.{label}.rl{length}"
                 sim_seed = rng.randint(0, 2**31 - 1)
                 print(f"[{family}/{label}] {len(held_out)} sequences -> "
-                      f"~{n_reads} simulated read pairs ({simulator}, seed={sim_seed})")
-                if simulator == "iss":
-                    simulate_with_iss(genome_fasta, out_prefix, n_reads, sim_seed)
-                else:
-                    simulate_with_wgsim(genome_fasta, out_prefix, n_reads, sim_seed)
+                      f"~{n_reads} simulated read pairs (wgsim, {length}bp, seed={sim_seed})")
+                simulate_with_wgsim(genome_fasta, out_prefix, n_reads, sim_seed, read_length=length)
+        else:
+            out_prefix = args.out / f"{family}.{label}"
+            # Deterministic per-(family, label) seed, drawn from the
+            # module's own seeded rng -- reproducible given the same
+            # RANDOM_SEED and families.yaml iteration order, without
+            # wgsim/iss's own internal RNGs (which neither tool seeds
+            # by default) silently making every run's actual simulated
+            # reads different even when the held-out input sequences
+            # are identical.
+            sim_seed = rng.randint(0, 2**31 - 1)
+            print(f"[{family}/{label}] {len(held_out)} sequences -> "
+                  f"~{n_reads} simulated read pairs ({simulator}, seed={sim_seed})")
+            if simulator == "iss":
+                simulate_with_iss(genome_fasta, out_prefix, n_reads, sim_seed)
+            else:
+                simulate_with_wgsim(genome_fasta, out_prefix, n_reads, sim_seed)
 
     if args.background:
         bg_r1, bg_r2 = args.background

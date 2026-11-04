@@ -1560,3 +1560,65 @@ wanted.
   murB/mrpG/otsA/mscS/otsB single-family test releases are local builds
   only (`releases/` is gitignored) -- no further action needed to
   preserve any of them beyond this changelog entry.
+
+## This branch (`fix-negative-sampling`) -- benchmark negatives: leakage, sampling, and what counts as a false positive
+
+Stacked on `marker-normalization` so one rebuild benchmarks both.
+
+### Benchmark negatives held out from calibration (`9683622`)
+
+Only decoy families (betL) split their negatives. Every other family set its
+HMM GA and DIAMOND bitscore cutoffs on the full `negative.faa` and then
+simulated benchmark negative reads from the same file, and `osmotool
+profile` applies the 08b cutoffs during the benchmark. `03_split_train_test.py`
+now splits every family's negatives: `negative.train` for calibration (05/06,
+08b) and decoys (08a), `negative.test` for benchmark reads (09). Non-decoy
+families hold out half (`--negative-test-fraction 0.5`); decoy families keep
+`--test-fraction`. Checked against `releases/v8/refs`: all positive splits and
+betL's negative split are byte-identical to v8's. Benchmark negative read
+volume per family roughly halves, so `precision` is not directly comparable
+to v8's.
+
+### Capped fetches sampled from the whole population (`69ed10e`)
+
+The old sampler drew from the first 5x cap accessions in accession order:
+ectA's 1000 negatives came from the first 5000 of ~320k, and the
+random-background negatives of mrpB/mrpE/mrpF/mrpG from the first 5000 of
+~75.5 million. Populations up to 2M are now listed in full (cached per
+release) and sampled uniformly; larger ones get a proportional stratified
+sample over creation-year x length strata. Accession wildcard/range queries
+don't exist in UniProt's API, so the stratified path is approximate within
+each stratum.
+
+### Cross-family and random-background false positives (this commit)
+
+- `11_compute_metrics.py` only counted reads from a family's own constructs as
+  its false positives; another panel gene's read called as this family was
+  dropped. New `fp_cross` (other panel genes' real reads), `precision_panel`
+  and `f1_panel`. The cascade flag now uses `precision_panel`
+  (`--cascade-precision-metric precision` restores the old behaviour).
+- A first version counted every other-family read, which was misleading: on
+  v8, ~99% of trkH's 12,191 cross-family calls were ktrB/ktrD *hard
+  negatives*, draws from the same PF02386 pool as trkH's own (the three share
+  one `negative_query`; so do proX/opuAC/opuBC/opuCC, trkA/ktrA, gshA/gshF).
+  Those are reported as `fp_other_negatives` and kept out of precision.
+- Re-scoring v8's own benchmark output with the new script reproduces v8's
+  `tp/fp/fn/precision/recall/f1` exactly. The largest real drops (DIAMOND):
+  opuBA 0.990 -> 0.375 (166 opuAA/opuCA reads against 100 TPs), opuBB 0.894
+  -> 0.464, opuCB 0.849 -> 0.602, opuCA 0.896 -> 0.726, ktrA 1.000 -> 0.843
+  (trkA reads). opuBA and ktrA would newly get the profile cascade.
+- New step 1f, `01f_build_random_background.py`: 5000 random bacterial
+  proteins without any of the panel's Pfam domains, minus any >= 70%
+  identical to a panel positive (01b's rule). Step 9 simulates them as
+  family `random_bg`; step 11 reports `fp_background` and
+  `background_fp_per_million` per family plus `background_fpr.tsv` /
+  `background_fpr_by_family.tsv`. Background reads are kept out of every
+  precision and out of the best-threshold sweep, since their volume is
+  arbitrary. Tested live: 5000 sampled over 74 strata of a 72.7M population,
+  9 dropped, ~7 min first run; 09/09b produce ~100k labelled background reads.
+
+### Status
+
+Code and offline checks done. Needs the combined rebuild with
+`marker-normalization`'s markers and teaA.
+

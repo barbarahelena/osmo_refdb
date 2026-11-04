@@ -117,6 +117,11 @@ do_build() {
         --refs "${REFS_DIR}" --families "${FAMILIES_FILE}"
 
     echo ""
+    echo "--- 1f. Shared random bacterial background (benchmark-only negatives) ---"
+    python pipeline/01f_build_random_background.py \
+        --refs "${REFS_DIR}" --families "${FAMILIES_FILE}" --threads "${THREADS}"
+
+    echo ""
     echo "--- 2. CD-HIT cluster positives + negatives (remove redundancy) ---"
     bash pipeline/02_cluster_cdhit.sh "${REFS_DIR}"
 
@@ -196,7 +201,7 @@ do_benchmark() {
     mkdir -p "${RESULTS_DIR}"
 
     echo ""
-    echo "--- 9. Simulate reads from held-out test positives + hard negatives ---"
+    echo "--- 9. Simulate reads from held-out test positives, hard negatives + random background ---"
     # Optional: READ_LENGTHS="100,150,250,300" for read-length-stratified
     # metrics; BACKGROUND_R1/BACKGROUND_R2 to score a real metagenome
     # sample's false-positive rate (see background_fpr.tsv).
