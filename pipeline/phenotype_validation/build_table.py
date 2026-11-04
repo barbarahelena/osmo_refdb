@@ -61,7 +61,8 @@ def main():
     rows, unparsed, molar = [], [], 0
 
     for f in sorted(glob.glob(os.path.join(args.dir, 'bacdive_raw', 'b*.json'))):
-        for bid, r in json.load(open(f))['results'].items():
+        # a batch with no strains returns results as [] rather than {}
+        for bid, r in (json.load(open(f))['results'] or {}).items():
             h = (r.get('Physiology and metabolism') or {}).get('halophily')
             gs = (r.get('Sequence information') or {}).get('Genome sequences')
             if not h or not gs:
