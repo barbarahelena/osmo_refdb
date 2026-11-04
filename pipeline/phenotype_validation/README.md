@@ -36,16 +36,16 @@ Earlier pins, including the `4cbc3ba` on `main` at the time this branch was cut,
 predate `quantifier.KNOWN_FAMILIES` being corrected from an original ~15-family
 list to the full 43-family panel — so families like `mrpG`, `gshB` and `trkA`
 are not in the old pin's known-family list at all, and `annotate` would silently
-under-report. The bump is already in flight on `add-refseq-positives`; this
-branch does not duplicate it, so check [../../Dockerfile](../../Dockerfile)
-before building:
+under-report.
+
+`main` now pins osmotool `v0.7.0` (PR #15), which satisfies this. v0.7.0 also
+switches `annotate`'s HMM step from hmmscan to hmmsearch (osmotool 2358bc0),
+so the pilot's throughput figures, measured on `2826ebc` with hmmscan, are
+conservative for the full run. Rebuild the image before running, and check:
 
 ```bash
-grep 'osmotool.git@' Dockerfile    # must not be 4cbc3ba
+grep 'osmotool.git@' Dockerfile    # expect v0.7.0 or later
 ```
-
-If hmmsearch has since landed in osmotool (see Notes below), the pin moves again
-and the throughput figures here become conservative.
 
 ## Data source: BacDive
 
@@ -253,15 +253,17 @@ python pipeline/phenotype_validation/analyze.py      --dir "$PV"
 - **`--threads` on `annotate` is counterproductive.** Measured on a
   5330-protein genome: hmmscan takes 13 s at `--cpu 1` and 16 s at `--cpu 8`.
   Threading overhead exceeds the gain. Use 1 thread per job and parallelise
-  across genomes instead.
+  across genomes instead. (Measured with hmmscan on `2826ebc`; not re-measured
+  for hmmsearch under v0.7.0.)
 - **hmmsearch is 4.4× faster than hmmscan with an identical hit set**, verified
   across all 43 pilot genomes (526 s → 119 s, 43/43 agree, 0 differ). This is
   safe *specifically because* osmotool uses `--cut_ga`, a bit-score gathering
   threshold; E-values differ between the tools, since hmmscan's search space is
   43 models while hmmsearch's is thousands of sequences. If the cutoff were ever
-  changed to an E-value, this equivalence breaks.
-- Once hmmsearch lands in osmotool, Prodigal (~11 s, single-threaded) dominates
-  `annotate` and becomes the hard floor per genome.
+  changed to an E-value, this equivalence breaks. osmotool v0.7.0 adopted
+  hmmsearch (2358bc0); this comparison was a manual benchmark run before that.
+- With hmmsearch in osmotool v0.7.0, Prodigal (~11 s, single-threaded) should
+  dominate `annotate` and set the per-genome floor.
 - Effective parallel speedup is only ~3.2× across 10 cores (~32% efficiency) on
   an M4, whose cores are 4 performance + 6 efficiency. More concurrency will not
   help much; the remaining win is algorithmic.

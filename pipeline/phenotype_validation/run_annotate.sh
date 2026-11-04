@@ -6,9 +6,10 @@
 #     releases/v8/phenotype_validation releases/v8 10 1
 #
 # One output dir per strain under <outdir>/annotate/. Parallel by strain with
-# ONE thread each: hmmscan gets slower as threads rise (13s at --cpu 1 vs 16s
-# at --cpu 8 on a 5330-protein genome), so job-level parallelism is the only
-# kind that helps. Prodigal is single-threaded and sets the per-genome floor.
+# ONE thread each: hmmscan got slower as threads rose (13s at --cpu 1 vs 16s
+# at --cpu 8 on a 5330-protein genome, osmotool 2826ebc), so job-level
+# parallelism is the only kind that helped. osmotool v0.7.0 uses hmmsearch
+# instead; Prodigal is single-threaded and sets the per-genome floor.
 set -uo pipefail
 export PATH=/opt/conda/envs/osmo_refdb/bin:$PATH
 PV=${1:?usage: run_annotate.sh <outdir> <release> [par] [threads]}
