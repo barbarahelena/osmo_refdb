@@ -13,9 +13,13 @@ frozen, versioned reference database release. `osmo_refdb` is the
 reproducible pipeline that produces that release. You should not need
 MAFFT, cd-hit, InSilicoSeq, etc. installed just to run `osmotool`.
 
-`osmotool profile` (short reads) never needs HMMER -- HMM's calibrated
-cutoffs are scaled for full-length sequences, not read fragments, so
-DIAMOND alone is used there. `osmotool annotate` (full-length ORFs from
+`osmotool profile` (short reads) uses DIAMOND as the primary caller.
+Since osmotool v0.7.0 it also runs a DIAMOND+HMM cascade by default:
+reads DIAMOND assigns to a family flagged in
+`osmo_refdb.profile_cascade.tsv` (families with low DIAMOND benchmark
+precision) get a second opinion from HMMER, using a short-read bitscore
+threshold rather than the full-length GA cutoff. So `profile` needs
+HMMER too unless you pass `--no_cascade`. `osmotool annotate` (full-length ORFs from
 an assembly) defaults to HMM (`--method hmm`) since real-genome testing
 showed it meaningfully more specific than DIAMOND for this reference
 database (see `hmms/osmo_refdb.hmm` + `--hmm_db`); pass `--method diamond`

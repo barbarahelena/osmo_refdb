@@ -41,8 +41,8 @@ DIAMOND_MIN_SUBJECT_COVER="${DIAMOND_MIN_SUBJECT_COVER:-0.0}"
 # only writes AFTER this benchmark, so a fresh release can't satisfy it.
 # This step benchmarks DIAMOND alone anyway (HMM is scored separately
 # below), so pass --no_cascade wherever the installed osmotool knows the
-# flag; older pins (e.g. the Dockerfile's 2826ebc) predate it and already
-# run DIAMOND-only.
+# flag (the Dockerfile pins v0.7.0, which has it); older osmotool versions
+# (e.g. 2826ebc) predate it and already run DIAMOND-only.
 CASCADE_ARGS=()
 if osmotool profile --help 2>/dev/null | grep -q -- "--no_cascade"; then
     CASCADE_ARGS+=(--no_cascade)

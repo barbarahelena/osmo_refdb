@@ -16,10 +16,16 @@ RUN conda env create -f /opt/osmo_refdb/environment.yml \
 # --- install osmotool itself (needed for the DIAMOND/HMM side of the
 #     benchmark, via `osmotool profile`/`osmotool annotate`). Installed
 #     directly from its GitHub repo rather than vendoring a local copy --
-#     pinned to a specific commit for reproducibility; bump deliberately
-#     when osmo_refdb should pick up newer osmotool changes. Once osmotool
-#     has tagged releases, prefer pinning a tag (@v0.1.0) or switching to
+#     pinned to a release tag for reproducibility; bump deliberately
+#     when osmo_refdb should pick up newer osmotool changes. Switch to
 #     `pip install osmotool==<version>` once it's on PyPI.
+#
+# Bumped 2826ebc->v0.7.0 (2026-11-04): picks up the DIAMOND+HMM cascade
+# being on by default (ab3fb9e; 10_run_benchmark.sh passes --no_cascade
+# since the cascade config is only written after the benchmark), HMM
+# detection via hmmsearch instead of hmmscan (2358bc0), and the cascade
+# fix for reads without /1 /2 mate markers (4c613d8). No dependency
+# changes vs 2826ebc, so --no-deps is still sufficient.
 #
 # Bumped 4cbc3ba->2826ebc (2026-07-31): the old pin predated ~25 commits of
 # real functional changes, including quantifier.KNOWN_FAMILIES being fixed
@@ -31,7 +37,7 @@ RUN conda env create -f /opt/osmo_refdb/environment.yml \
 # current osmotool HEAD, not the stale pin -- this bump makes the Dockerfile
 # match what was actually tested, rather than the other way around.
 RUN conda run -n osmo_refdb pip install --no-deps \
-    "git+https://github.com/barbarahelena/osmotool.git@2826ebc"
+    "git+https://github.com/barbarahelena/osmotool.git@v0.7.0"
 
 COPY . /opt/osmo_refdb/
 
