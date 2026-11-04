@@ -145,6 +145,51 @@ families:
     negative_query: "xref:pfam-PF07883 NOT (gene:ectC OR gene:ectC1 OR gene:ectC2) AND taxonomy_id:2"
     negative_pfam: PF07883   # Cupin_2 domain
 
+  - name: teaA
+    description: >
+      Ectoine/hydroxyectoine-binding periplasmic protein of a TRAP
+      transporter: the substrate-binding subunit, and the only subunit
+      carrying substrate specificity (teaB/teaC are generic DctQ/DctM
+      membrane components, same reasoning as only adding the binding
+      protein for opuA/opuB/opuC). The first dedicated ectoine transporter in
+      the panel; ectoine uptake was otherwise only visible through broad
+      compatible-solute transporters (proP, proX, opuC).
+
+      Covers BOTH functional roles this clade is known for, which sequence
+      cannot separate: TeaA (Halomonas elongata, E1VBK1), osmoregulated
+      recovery of ectoine leaking out of the cell (Grammann et al. 2002, J
+      Bacteriol 184:3078), and UehA (Ruegeria pomeroyi, Q5LUA7), ectoine
+      uptake as a nutrient for catabolism, not osmoprotection (UniProt
+      function annotation). Checked 2026-11-04: TeaA and UehA are 61%
+      identical over 321/341 aa and share UniRef50_E1VBK1; splitting the
+      cluster's 324 bacterial members by nearest seed tracks taxonomy, not
+      function (223/229 Gammaproteobacteria nearest TeaA, 86/86
+      Alphaproteobacteria nearest UehA), so a "TeaA-only" family would only
+      have been a taxonomic filter. Read a teaA signal as "ectoine-uptake
+      capacity", not specifically osmotic recovery; in annotate mode,
+      co-occurrence with ectABC (synthesis) vs. ectoine-catabolism genes is
+      what would tell the two roles apart.
+
+      Positives are defined by UniRef50 cluster membership rather than gene
+      symbol because the symbol barely exists in UniProt (13 bacterial teaA
+      entries, 1 reviewed) while the clade is ~25x larger under generic
+      "TRAP transporter substrate-binding protein DctP" / "C4-dicarboxylate
+      ABC transporter" names. All 324 members are 50-97% identical to TeaA
+      or UehA but only ~30% to a genuinely different DctP-family binder
+      (E. coli YiaO, P37676) -- including 7 members that UniProt itself
+      labels "YiaO" by annotation transfer, which are 54-82% identical to
+      TeaA/UehA and ~30% to real YiaO, i.e. mislabeled clade members.
+      NOTE: UniRef cluster IDs/membership can change between UniProt
+      releases; if this query's count moves a lot from 324, re-check that
+      E1VBK1 and Q5LUA7 are still in the same UniRef50 cluster.
+
+      Hard negatives: the rest of the DctP-family TRAP binding proteins
+      (PF03480), for calibration only -- a broad multi-substrate pool, too
+      broad for a useful decoy.
+    positive_query: "uniref_cluster_50:UniRef50_E1VBK1 AND taxonomy_id:2"
+    negative_query: "xref:pfam-PF03480 NOT uniref_cluster_50:UniRef50_E1VBK1 AND taxonomy_id:2"
+    negative_pfam: PF03480   # DctP, TRAP transporter solute receptor
+
   - name: betL
     description: >
       Glycine betaine transporter (BCCT family; compatible solute import).
