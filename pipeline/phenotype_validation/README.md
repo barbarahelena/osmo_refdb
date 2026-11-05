@@ -129,6 +129,35 @@ The panel is never judged on its own correlation. It is always compared against:
 
 The defensible claim is "the panel beats these", never a bare correlation or AUC.
 
+**Amendment (2026-11-05): how the random panel is built.** Written after
+`analyze.py` had produced the osmo panel's own Set A/B results on the full
+sweep, and before any random-panel output existed. One random panel is one
+draw, and says nothing about where the real panel sits among random panels. So
+`build_random_pool.py` builds a pool of non-osmotic families, and
+`analyze_extended.py` draws 1,000 panels from it as a null distribution:
+
+- Source: Pfam-A 39.0 (53,275 families). Excluded: all 44 accessions in
+  `families.yaml`, and 1,126 families whose name or description matches
+  osmotic/cation terms (`OSMO_TERMS` in the script). Only families with a GA
+  cutoff are kept, since the search uses `--cut_ga` like osmotool.
+- Screen: 6,000 seeded candidates searched against the 43 pilot proteomes.
+  1,106 hit at least 2 of them. Most of Pfam is eukaryotic or viral, and a
+  panel of families absent from every genome would be a straw man.
+- Pool: those 1,106 are skewed rare, while the osmo panel sits mid-prevalence.
+  So prevalence in the screen is binned in tenths, and each bin gets 4× as many
+  pool families as the osmo panel has in it (fewer where not enough exist). The
+  result is 174 families with a median prevalence of 0.42 (osmo panel 0.42).
+  The stratification was chosen from screen prevalence alone, before any
+  phenotype was joined to a random family.
+- "Size-matched" means the same number of families: 44, the feature matrix's
+  column count, not the 43 written above. Two nulls are reported: unconstrained
+  draws, and draws where each osmo family is replaced by one of its 5
+  nearest-prevalence pool families.
+- Genome size, GC and contig count are computed from the assembly FASTA by
+  `run_random_panel.sh`, since osmotool does not report them. The same pass
+  reruns Prodigal (`-p meta`, as in osmotool) for the pool search. Its protein
+  count agrees with osmotool's `total_proteins` for every strain.
+
 ### Two analysis sets
 
 **Set A — unbiased.** Every strain with a genome and a quantitative NaCl max,
@@ -281,6 +310,25 @@ docker run --rm -v "$PWD":/work -w /work --entrypoint bash osmo_refdb:latest \
 # 5. join features to phenotype, then read out
 python pipeline/phenotype_validation/build_matrix.py --dir "$PV"
 python pipeline/phenotype_validation/analyze.py      --dir "$PV"
+
+# 6. random-panel pool (Pfam-A.hmm.gz from the Pfam FTP, version in
+#    random_panel/Pfam.version). Screened against the pilot's proteomes,
+#    with IDs prefixed "<bacdive_id>|"
+RP="$PV/random_panel"
+python pipeline/phenotype_validation/build_random_pool.py candidates \
+    --pfam "$RP/Pfam-A.hmm.gz" --families families.yaml --out-dir "$RP" --n 6000
+hmmsearch --cut_ga --cpu 8 --noali --tblout "$RP/screen.tbl" -o /dev/null \
+    "$RP/candidates.hmm" "$RP/screen_proteomes.faa"
+python pipeline/phenotype_validation/build_random_pool.py pool \
+    --pfam "$RP/Pfam-A.hmm.gz" --out-dir "$RP" --screen "$RP/screen.tbl" \
+    --osmo-matrix releases/v8/phenotype_validation/feature_matrix.tsv --n-genomes 43
+
+# 7. genome size/GC + pool search per genome (~5.5 h for 6,637 at 8x1), then
+#    baselines, random-panel null, mixed models, grouped CV, family ranking.
+#    analyze_extended.py needs numpy, pandas, scipy, scikit-learn, statsmodels
+docker run --rm -v "$PWD":/work -w /work --entrypoint bash osmo_refdb:latest \
+    pipeline/phenotype_validation/run_random_panel.sh "$PV" "$RP/pool.hmm" 8
+python pipeline/phenotype_validation/analyze_extended.py --dir "$PV"
 ```
 
 ## Notes and gotchas
@@ -314,3 +362,10 @@ python pipeline/phenotype_validation/analyze.py      --dir "$PV"
   took ~1.5 h at ~3.4 s/batch; 7 batches failed (proxy 502s, 180 s timeouts,
   HTTP/2 framing errors) and a second run fetched them, since cached batches
   are skipped.
+- `analyze_extended.py` on macOS arm64 with numpy 2.0 prints over a thousand
+  `divide by zero / overflow / invalid value encountered in matmul` warnings.
+  This is a false alarm from numpy's Accelerate backend: a plain `a @ b` on
+  ordinary random numbers triggers it too. Every table it writes was checked to
+  be finite, apart from the expected NaNs for `mrpA_mrpB_fused`, which is
+  present in no genome. `grep -v -e Warning -e '^  re'` on the log leaves the
+  results.
