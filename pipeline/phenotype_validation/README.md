@@ -22,9 +22,9 @@ content. Different jobs.
 
 ## Status
 
-Pilot complete on a 43-strain random sample. Full BacDive ID sweep harvested
-and the phenotype table built (2026-11-04); genome download, annotation and
-analysis not yet run. The
+Pilot complete on a 43-strain random sample. Full BacDive ID sweep, genomes,
+annotation and every analysis in the plan run on 6,637 strains (2026-11-05);
+see "Full result" below. The
 analysis plan below is **pre-registered** — written before the full harvest, so
 that the salt-in prediction and the blocking strategy are commitments rather
 than post-hoc descriptions. Amendments belong in separate commits with a stated
@@ -283,6 +283,98 @@ Three deflations, weighted heavily:
 3. Low-breadth strains track proteome size (*Campylobacter*, 1623 proteins → 3
    families). Since genome size runs against the phenotype here this works
    against the result, not for it.
+
+## Full result (2026-11-05, n = 6,291 salt-out strains, 1,585 genera)
+
+6,637 of 6,643 strains had a downloadable genome. Six accessions have no
+genomic FASTA in any version. 6,338 of the rest have a quantitative NaCl max,
+and 47 of those are salt-in. Logs are `analysis.log` (`analyze.py`) and
+`analysis_extended.log` (`analyze_extended.py`). Breadth means families
+present out of 44, with mean 18.5 and SD 6.25. Brackets are 95% genus-cluster
+bootstrap CIs.
+
+**Baselines (Set A, Spearman rho vs NaCl max).** All three genome-level
+baselines run slightly against salt tolerance. The panel runs with it, and
+gets stronger once they are partialled out:
+
+```
+total_proteins                     -0.194  [-0.254, -0.127]
+genome size                        -0.208  [-0.269, -0.148]
+GC                                 -0.108  [-0.191, -0.016]
+panel breadth                      +0.355  [+0.285, +0.424]
+breadth | proteins + size + GC     +0.496  [+0.428, +0.554]
+```
+
+**Taxonomy.** Genus alone explains 77% of NaCl-max variance (eta²), and family
+explains 51%. That is why Set B and the blocked CV are the tests that count.
+
+**Set B (319 genera, 4,266 strains).** The median within-genus rho is +0.171
+over 313 genera with a defined rho. 192 genera are positive and 105 negative
+(two-sided sign test p = 5.0e-7). Among genera with n ≥ 30 the split is 22 to 4. The
+genus-demeaned partial r, with all three baselines controlled, is +0.121. In
+the mixed model `nacl_max ~ breadth + proteins + size + GC + (1|genus)`, each
+SD of breadth adds **+0.98 % NaCl** [+0.79, +1.17] in Set B and +1.36 % in
+Set A. By the pre-committed diagnostic, the signal survives ancestry control.
+It is smaller within genera than across them.
+
+**Random-panel null (1,000 panels of 44 families each).** None of the 1,000
+random panels matches the osmo panel on any statistic, in either null, so p is
+at its floor of 1/1001:
+
+```
+                                   osmo   null median  null 95th
+                                          (prevalence-matched)
+Set A rho                         +0.355     -0.132     -0.065
+Set A rho | baselines             +0.496     +0.032     +0.124
+Set B within-genus partial r      +0.121     -0.003     +0.027
+Set B median within-genus rho     +0.171     +0.000     +0.014
+```
+
+Random gene content correlates *negatively* with salt tolerance before
+adjustment. It tracks genome size, which runs the other way. Panels are drawn
+from one 174-family pool and overlap, so this null is somewhat narrower than
+independent draws from all of Pfam would be.
+
+**Grouped CV (5 folds, out-of-fold Spearman; R² in brackets).** Ridge results
+are below. Gradient boosting ranks the feature sets the same way, and the
+random-panel row is the median of 20 prevalence-matched draws.
+
+```
+                              genus-blocked      family-blocked
+baselines only                +0.167 (0.04)      +0.145 (0.03)
+baselines + random panel      +0.392 (0.18)      +0.304 (0.08)
+baselines + osmo panel        +0.637 (0.42)      +0.622 (0.37)
+```
+
+Random families do add predictive signal. Gene content in general carries
+lifestyle and lineage information. Most of that gain is lost when whole
+families are held out (+0.39 → +0.30), while the osmo panel barely moves
+(+0.64 → +0.62). Its signal transfers to unseen families. The random panels'
+signal mostly does not.
+
+**Family ranking (within-genus r, Set B).** The top families are `ectA`,
+`ectB`, `betL` and `ectC` (+0.08 to +0.11), then `mrpD/E/A/C/G/F` and `ktrA`
+(+0.06 to +0.08). The mrp rows are one co-occurring complex, so they count as
+one observation. `kdpA` is the most negative, both raw (−0.36) and within
+genus (−0.06), which repeats the pilot's split between the two K⁺ strategies.
+`otsA`/`otsB` (trehalose) are negative across genera but slightly positive
+within them.
+
+**Secondary model (all strains, strategy × panel).** The interaction is null
+(−0.27 [−4.1, +3.5]). The 47 salt-in strains fall in 22 genera, none shared
+with salt-out strains, so strategy cannot be separated from genus. This model
+has almost no information on the interaction.
+
+**Salt-in negative control: inconclusive as designed.** The pre-registered
+prediction holds on its face. K⁺ uptake is present in 42% of salt-in strains
+vs 32% of salt-out, and compatible solutes in 11% vs 32%. But random pool
+families also drop in salt-in strains, from 43% to 24%. Salt-out *archaea*
+look the same (solutes 9%, random 20%). Most salt-in strains are haloarchaea,
+so the solute deficit can't be told apart from generally weaker detection in
+archaeal genomes by bacterial-dominated HMMs. K⁺ uptake is the only part that
+goes against that pull: 42% in salt-in vs 29% in salt-out archaea.
+Separating the two needs salt-out archaea matched to the salt-in genera, and
+the sweep has 54 of them.
 
 ## Workflow
 
