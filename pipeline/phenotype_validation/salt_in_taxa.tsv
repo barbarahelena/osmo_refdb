@@ -51,6 +51,26 @@ Haladaptatus	genus	Archaea;Halobacteria	salt_in	medium
 Halostagnicola	genus	Archaea;Halobacteria	salt_in	medium
 Halolamina	genus	Archaea;Halobacteria	salt_in	medium
 Halopenitus	genus	Archaea;Halobacteria	salt_in	medium
+# AMENDMENT 2026-11-06: the list named Halobacteria genera one by one and
+# missed 14 that occur in the BacDive sweep (25 strains). They were found
+# after the full analysis, by checking the family of every archaeal strain
+# labelled salt-out. Assigned from class membership (see the CAUTION note
+# above: within the archaea, class Halobacteria is the salt-in lineage),
+# so confidence is medium.
+Halarchaeum	genus	Archaea;Halobacteria	salt_in	medium
+Haloarchaeobius	genus	Archaea;Halobacteria	salt_in	medium
+Halomicrococcus	genus	Archaea;Halobacteria	salt_in	medium
+Halostella	genus	Archaea;Halobacteria	salt_in	medium
+Natronoarchaeum	genus	Archaea;Halobacteria	salt_in	medium
+Halomicroarcula	genus	Archaea;Halobacteria	salt_in	medium
+Halorientalis	genus	Archaea;Halobacteria	salt_in	medium
+Halobellus	genus	Archaea;Halobacteria	salt_in	medium
+Halogranum	genus	Archaea;Halobacteria	salt_in	medium
+Halopelagius	genus	Archaea;Halobacteria	salt_in	medium
+Halobaculum	genus	Archaea;Halobacteria	salt_in	medium
+Halonotius	genus	Archaea;Halobacteria	salt_in	medium
+Natronobacterium	genus	Archaea;Halobacteria	salt_in	medium
+Saliphagus	genus	Archaea;Halobacteria	salt_in	medium
 Halanaerobium	genus	Bacteria;Haloanaerobiales	salt_in	high
 Halothermothrix	genus	Bacteria;Haloanaerobiales	salt_in	high
 Halobacteroides	genus	Bacteria;Haloanaerobiales	salt_in	high
