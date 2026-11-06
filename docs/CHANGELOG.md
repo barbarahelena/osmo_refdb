@@ -1643,8 +1643,36 @@ each stratum.
   random-background redesign. Grouping can't fix those; worth trying the
   mrpE-style redesign on them next.
 
+### v9 build and follow-up fixes
+
+The combined v9 build (with `marker-normalization`'s markers and teaA) ran
+on 2026-11-06. Benchmark precision and F1 rose (DIAMOND median F1
+0.732 -> 0.784), but mostly because half as many negative reads are mixed
+in; the per-million hard-negative rates of the hard groups barely moved.
+Rerunning the BacDive phenotype validation on v9 kept the headline result
+(panel breadth vs NaCl max rho +0.364 -> +0.371) but showed genome-level
+HMM cutoffs shifting for reasons that weren't biology:
+
+- **Negative fetch cap 1000 -> 2000** (`01_fetch_refs.py --max-negative`).
+  The calibration half of each negative pool was half v8's size; 2000 puts
+  it back to roughly v8's whole pool. mazG's override goes 3000 -> 6000
+  for the same reason.
+- **opuAA/opuBA/opuCA `max_negative_override: 5000`.** Their PF00571 (CBS)
+  pool is mostly proteins that never score against the ATPase HMMs; only
+  28/12/8 calibration negatives scored, under the 30-negative guard, so
+  all three fell back to max_negative+1 (opuCA in 0.80 -> 0.11 of BacDive
+  genomes). The population-wide sampling also draws fewer close relatives
+  than v8's accession-sorted sample did (opuAA: 184 of 708 scored in v8,
+  28 of 343 in v9).
+- **gshA restricted to PF04262.** The gshA symbol covers three unrelated
+  glutamate-cysteine ligase families (PF04262 72%, PF08886 15%, PF04107
+  10%); the mixed model only fit PF04262, a quarter of calibration
+  positives scored level with the negatives, and the F1 sweep flipped from
+  GA 263.9 (v8) to 11.3 (v9; gshA in 73% of BacDive genomes). A separate
+  PF08886 family is a possible follow-up.
+
 ### Status
 
-Code and offline checks done. Needs the combined rebuild with
-`marker-normalization`'s markers and teaA.
+Needs a v9 rebuild (main release, markers can be repackaged as is) and a
+rerun of the phenotype validation.
 

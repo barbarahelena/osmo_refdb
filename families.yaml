@@ -41,12 +41,17 @@
 #                     discriminating signal might sit outside the most
 #                     conserved core (see ectA/ectB below).
 #   max_negative_override  optional int; per-family override for
-#                     01_fetch_refs.py's --max-negative cap (default 1000),
-#                     same mechanism as max_positive_override but for the
-#                     negative fetch. Only meaningful paired with
-#                     negative_median_override below -- fixing the median
-#                     alone doesn't help if the small capped sample barely
-#                     contains anything near the true center.
+#                     01_fetch_refs.py's --max-negative cap (default 2000;
+#                     1000 before 2026-11-06), same mechanism as
+#                     max_positive_override but for the negative fetch.
+#                     Two uses: (1) paired with negative_median_override
+#                     below (mazG) -- fixing the median alone doesn't help
+#                     if the small capped sample barely contains anything
+#                     near the true center; (2) a pool where most sampled
+#                     negatives never score against the family HMM, so the
+#                     calibration half would otherwise fall under
+#                     06_calibrate_cutoffs.py's MIN_NEG_FOR_RELIABLE_F1=30
+#                     scored negatives (opuAA/opuBA/opuCA).
 #   negative_median_override  optional int (aa); use this fixed value as
 #                     the negative set's median length in
 #                     01c_check_length_outliers.py instead of computing it
@@ -633,7 +638,10 @@ families:
     # triphosphate pyrophosphohydrolase". Strongest case in the panel.
     refseq_gene_symbols: [mazG, mazG1, mazG2]
     negative_pfam: PF03819   # MazG family (Pfam name is gene-specific, likely narrower than galE's)
-    max_negative_override: 3000
+    # 6000 since 2026-11-06 (was 3000): negatives are now split in half
+    # between calibration and benchmark, so this keeps the calibration half
+    # at the old 3000-fetch size.
+    max_negative_override: 6000
     negative_median_override: 116
 
   - name: murB
@@ -705,6 +713,15 @@ families:
       murB1/murB2 -- see issue #8).
     positive_query: "(gene:opuAA OR gene:opuAA1 OR gene:opuAA2) AND taxonomy_id:2"
     negative_query: "xref:pfam-PF00571 NOT (gene:opuAA OR gene:opuAA1 OR gene:opuAA2 OR gene:opuBA OR gene:opuBA1 OR gene:opuBA2 OR gene:opuCA OR gene:opuCA1 OR gene:opuCA2) AND taxonomy_id:2"
+    # max_negative_override 5000 (2026-11-06): PF00571 is a CBS-domain
+    # pool, and most sampled CBS proteins (IMPDH and the like) never score
+    # against an OpuA/B/C ATPase HMM. In v9 (1000 fetched, half to
+    # calibration) only 28/12/8 calibration negatives scored for opuAA/
+    # opuBA/opuCA, under 06_calibrate_cutoffs.py's 30-negative guard, so
+    # all three fell back to max_negative+1 and genome prevalence dropped
+    # (opuCA 0.80 -> 0.11 in the BacDive phenotype run). 5000 should give
+    # roughly 60-400 scored calibration negatives per family.
+    max_negative_override: 5000
     negative_pfam: PF00571   # CBS domain pair, co-occurring with ABC_tran in this transporter class
 
   - name: opuBA
@@ -763,6 +780,15 @@ families:
       build_query() output directly, not an approximation of it.
     positive_query: "(gene:opuBA OR gene:opuBA1 OR gene:opuBA2) AND taxonomy_id:2"
     negative_query: "xref:pfam-PF00571 NOT (gene:opuAA OR gene:opuAA1 OR gene:opuAA2 OR gene:opuBA OR gene:opuBA1 OR gene:opuBA2 OR gene:opuCA OR gene:opuCA1 OR gene:opuCA2) AND taxonomy_id:2"
+    # max_negative_override 5000 (2026-11-06): PF00571 is a CBS-domain
+    # pool, and most sampled CBS proteins (IMPDH and the like) never score
+    # against an OpuA/B/C ATPase HMM. In v9 (1000 fetched, half to
+    # calibration) only 28/12/8 calibration negatives scored for opuAA/
+    # opuBA/opuCA, under 06_calibrate_cutoffs.py's 30-negative guard, so
+    # all three fell back to max_negative+1 and genome prevalence dropped
+    # (opuCA 0.80 -> 0.11 in the BacDive phenotype run). 5000 should give
+    # roughly 60-400 scored calibration negatives per family.
+    max_negative_override: 5000
     negative_pfam: PF00571
 
   - name: opuCA
@@ -779,6 +805,15 @@ families:
       several other families in this rebuild (see ectA's entry).
     positive_query: "(gene:opuCA OR gene:opuCA1 OR gene:opuCA2) AND taxonomy_id:2"
     negative_query: "xref:pfam-PF00571 NOT (gene:opuAA OR gene:opuAA1 OR gene:opuAA2 OR gene:opuBA OR gene:opuBA1 OR gene:opuBA2 OR gene:opuCA OR gene:opuCA1 OR gene:opuCA2) AND taxonomy_id:2"
+    # max_negative_override 5000 (2026-11-06): PF00571 is a CBS-domain
+    # pool, and most sampled CBS proteins (IMPDH and the like) never score
+    # against an OpuA/B/C ATPase HMM. In v9 (1000 fetched, half to
+    # calibration) only 28/12/8 calibration negatives scored for opuAA/
+    # opuBA/opuCA, under 06_calibrate_cutoffs.py's 30-negative guard, so
+    # all three fell back to max_negative+1 and genome prevalence dropped
+    # (opuCA 0.80 -> 0.11 in the BacDive phenotype run). 5000 should give
+    # roughly 60-400 scored calibration negatives per family.
+    max_negative_override: 5000
     negative_pfam: PF00571
 
   - name: opuAB
@@ -1449,7 +1484,21 @@ families:
       is fine in practice -- calibration still found a workable separating
       cutoff despite the noisy pool -- so no scope change. See README's
       "Structural negative-pool contamination" section.
-    positive_query: "(gene:gshA OR gene:gshA1 OR gene:gshA2) AND taxonomy_id:2"
+    # Restricted to PF04262 on 2026-11-06. The gshA gene symbol covers three
+    # unrelated glutamate-cysteine ligase families in UniProt (2026_04,
+    # bacteria): PF04262 Glu_cys_ligase 3,443 entries (72%), PF08886 GshA
+    # 721 (15%), PF04107 GCS2 489 (10%), no Pfam 103 (2%); no entry has
+    # PF04262 plus either other domain. Trained on the mix, the HMM fit only
+    # the PF04262 majority: 125 of 497 calibration positives scored < 150
+    # bits (sampled: PF04107 33/60, PF08886 22/60), level with the PF04262
+    # negatives (median ~120), so the F1 sweep flipped between "drop a
+    # quarter of positives" (v8, GA 263.9) and "accept everything" (v9, GA
+    # 11.3 -> gshA in 73% of BacDive genomes). gshA now means the PF04262
+    # (E. coli-type) enzyme, matching its negative_pfam. PF08886-type GCLs
+    # are a candidate separate family; GCS2 (PF04107) includes YbdK-like
+    # ligases of doubtful glutathione function and needs a literature check
+    # before it is modelled.
+    positive_query: "(gene:gshA OR gene:gshA1 OR gene:gshA2) AND xref:pfam-PF04262 AND taxonomy_id:2"
     negative_query: "xref:pfam-PF04262 NOT (gene:gshA OR gene:gshA1 OR gene:gshA2 OR gene:gshF OR gene:gshAB OR gene:gshAB1 OR gene:gshAB2) AND taxonomy_id:2"
     negative_pfam: PF04262
 

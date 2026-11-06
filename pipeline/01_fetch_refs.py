@@ -762,8 +762,12 @@ def main() -> None:
     ap.add_argument("--out", type=Path, default=Path("refs"))
     ap.add_argument("--max-positive", type=int, default=None,
                     help="Cap on number of positive sequences fetched per family.")
-    ap.add_argument("--max-negative", type=int, default=1000,
-                    help="Cap on number of hard-negative sequences fetched per family.")
+    # 2000 since 2026-11-06 (was 1000): 03_split_train_test.py now halves
+    # each negative pool into calibration (train) and benchmark (test), so
+    # 2000 keeps the calibration half about as large as v8's whole pool.
+    ap.add_argument("--max-negative", type=int, default=2000,
+                    help="Cap on number of hard-negative sequences fetched per family "
+                         "(before purity/length QC, CD-HIT and the calibration/benchmark split).")
     ap.add_argument("--cache-dir", type=Path, default=DEFAULT_CACHE_DIR,
                     help="Per-UniProt-release cache of accession lists and strata "
                          "for capped fetches (default: <repo>/cache/uniprot).")

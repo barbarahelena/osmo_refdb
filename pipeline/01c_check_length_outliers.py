@@ -28,7 +28,8 @@ from that snapshot, so re-running with a different --max-ratio is safe.
 
 families.yaml: `negative_median_override: <aa>` -- for a family whose own
 negative-set median is confirmed UNSTABLE under the default capped fetch
-(01_fetch_refs.py's --max-negative, 1000 by default): use this fixed value
+(01_fetch_refs.py's --max-negative, 1000 by default when this was
+established; 2000 since 2026-11-06): use this fixed value
 instead of recomputing the median from whatever the capped fetch happens
 to contain this run. Confirmed via a systematic sweep of every capped
 family in the panel (2026-07-29): only mazG showed this (negative median
