@@ -3,4 +3,5 @@ __pycache__/
 *.pyc
 .DS_Store
 osmotool_src/
-extra_sequences/cache/
+extra_sequences/
+cache/
