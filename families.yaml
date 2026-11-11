@@ -712,7 +712,7 @@ families:
       reviewed numbered-paralog gene symbols, same class of gap as
       murB1/murB2 -- see issue #8).
     positive_query: "(gene:opuAA OR gene:opuAA1 OR gene:opuAA2) AND taxonomy_id:2"
-    negative_query: "xref:pfam-PF00571 NOT (gene:opuAA OR gene:opuAA1 OR gene:opuAA2 OR gene:opuBA OR gene:opuBA1 OR gene:opuBA2 OR gene:opuCA OR gene:opuCA1 OR gene:opuCA2) AND taxonomy_id:2"
+    negative_query: "(xref:pfam-PF00571 OR xref:pfam-PF08352) NOT (gene:opuAA OR gene:opuAA1 OR gene:opuAA2 OR gene:opuBA OR gene:opuBA1 OR gene:opuBA2 OR gene:opuCA OR gene:opuCA1 OR gene:opuCA2) AND taxonomy_id:2"
     # max_negative_override 5000 (2026-11-06): PF00571 is a CBS-domain
     # pool, and most sampled CBS proteins (IMPDH and the like) never score
     # against an OpuA/B/C ATPase HMM. In v9 (1000 fetched, half to
@@ -721,8 +721,20 @@ families:
     # all three fell back to max_negative+1 and genome prevalence dropped
     # (opuCA 0.80 -> 0.11 in the BacDive phenotype run). 5000 should give
     # roughly 60-400 scored calibration negatives per family.
+    # PF08352 added to the negative pool (2026-11-11). The v9 BacDive run
+    # (calibrated on PF00571 alone) called opuBA in 64% of genomes and 48%
+    # of salt-in strains. Pfam-scanning the 1548 proteins that passed an
+    # opuAA/BA/CA cutoff in a 484-genome sample: 739 carry oligo_HPY
+    # (PF08352, the C-terminal domain of OppD/OppF/DppD-type peptide ABC
+    # ATPases), including 245/413 opuBA calls and 104/144 hits in salt-in
+    # strains. None of the 656 opuAA/BA/CA positives carries PF08352 (and
+    # UniProt has 0 opu-named PF08352 entries), so it is a clean confuser
+    # class; PF00571 stays in for the CBS-bearing relatives (ProV etc.).
+    # CBS presence itself can't be used as the rule: 42-75% of positives
+    # have no CBS hit at Pfam GA. The remaining off-target hits (mostly
+    # opuCA) are bare ABC_tran with no distinguishing domain.
     max_negative_override: 5000
-    negative_pfam: PF00571   # CBS domain pair, co-occurring with ABC_tran in this transporter class
+    negative_pfam: PF00571 + PF08352   # CBS domain pair (co-occurs with ABC_tran here) + oligo_HPY (peptide ABC ATPases, the main genome-level confuser)
 
   - name: opuBA
     paralog_group: opu_atpase
@@ -779,7 +791,7 @@ families:
       unsolved. If revisited, verify novelty against 01e's own
       build_query() output directly, not an approximation of it.
     positive_query: "(gene:opuBA OR gene:opuBA1 OR gene:opuBA2) AND taxonomy_id:2"
-    negative_query: "xref:pfam-PF00571 NOT (gene:opuAA OR gene:opuAA1 OR gene:opuAA2 OR gene:opuBA OR gene:opuBA1 OR gene:opuBA2 OR gene:opuCA OR gene:opuCA1 OR gene:opuCA2) AND taxonomy_id:2"
+    negative_query: "(xref:pfam-PF00571 OR xref:pfam-PF08352) NOT (gene:opuAA OR gene:opuAA1 OR gene:opuAA2 OR gene:opuBA OR gene:opuBA1 OR gene:opuBA2 OR gene:opuCA OR gene:opuCA1 OR gene:opuCA2) AND taxonomy_id:2"
     # max_negative_override 5000 (2026-11-06): PF00571 is a CBS-domain
     # pool, and most sampled CBS proteins (IMPDH and the like) never score
     # against an OpuA/B/C ATPase HMM. In v9 (1000 fetched, half to
@@ -789,7 +801,7 @@ families:
     # (opuCA 0.80 -> 0.11 in the BacDive phenotype run). 5000 should give
     # roughly 60-400 scored calibration negatives per family.
     max_negative_override: 5000
-    negative_pfam: PF00571
+    negative_pfam: PF00571 + PF08352   # see opuAA
 
   - name: opuCA
     paralog_group: opu_atpase
@@ -804,7 +816,7 @@ families:
       0.541->0.490) -- same full-panel db-composition effect noted on
       several other families in this rebuild (see ectA's entry).
     positive_query: "(gene:opuCA OR gene:opuCA1 OR gene:opuCA2) AND taxonomy_id:2"
-    negative_query: "xref:pfam-PF00571 NOT (gene:opuAA OR gene:opuAA1 OR gene:opuAA2 OR gene:opuBA OR gene:opuBA1 OR gene:opuBA2 OR gene:opuCA OR gene:opuCA1 OR gene:opuCA2) AND taxonomy_id:2"
+    negative_query: "(xref:pfam-PF00571 OR xref:pfam-PF08352) NOT (gene:opuAA OR gene:opuAA1 OR gene:opuAA2 OR gene:opuBA OR gene:opuBA1 OR gene:opuBA2 OR gene:opuCA OR gene:opuCA1 OR gene:opuCA2) AND taxonomy_id:2"
     # max_negative_override 5000 (2026-11-06): PF00571 is a CBS-domain
     # pool, and most sampled CBS proteins (IMPDH and the like) never score
     # against an OpuA/B/C ATPase HMM. In v9 (1000 fetched, half to
@@ -814,7 +826,7 @@ families:
     # (opuCA 0.80 -> 0.11 in the BacDive phenotype run). 5000 should give
     # roughly 60-400 scored calibration negatives per family.
     max_negative_override: 5000
-    negative_pfam: PF00571
+    negative_pfam: PF00571 + PF08352   # see opuAA
 
   - name: opuAB
     paralog_group: opu_permease

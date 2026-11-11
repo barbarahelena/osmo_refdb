@@ -1671,8 +1671,29 @@ HMM cutoffs shifting for reasons that weren't biology:
   GA 263.9 (v8) to 11.3 (v9; gshA in 73% of BacDive genomes). A separate
   PF08886 family is a possible follow-up.
 
+### Second v9 build (v9-r1, 2026-11-10) and the opu ATPase negative pool
+
+With those three fixes, opuAA/BA/CA calibrated again (132/78/73 scored
+calibration negatives) and gshA came back to 18% of BacDive genomes (v8:
+18%), with HMM gshA<->gshF swaps in the benchmark down from 1436 to 118.
+Benchmark precision fell back to v8's level now that the test half holds
+v8-sized negative pools (DIAMOND micro-precision 0.831, v8 0.818), so
+removing the calibration/benchmark overlap cost nothing measurable.
+
+The opu ATPases were the remaining problem: opuBA was called in 64% of
+BacDive genomes and 48% of salt-in strains (v8: 20% / 16%), and the
+salt-in compatible-solute fraction rose 0.07 -> 0.13. Pfam-scanning the
+proteins that passed an opu ATPase cutoff in a 484-genome sample showed
+most were peptide ABC ATPases (OppD/OppF/DppD-type, C-terminal oligo_HPY
+domain PF08352), which no opu ATPase positive carries:
+
+- **opuAA/opuBA/opuCA negative pool: PF00571 OR PF08352.** Adds the
+  peptide ABC ATPases to the CBS-domain pool (301k UniProt entries, about
+  39% PF08352). PF08352 is also excluded from the random background now,
+  like every other panel Pfam, so background FP rates shift slightly.
+
 ### Status
 
-Needs a v9 rebuild (main release, markers can be repackaged as is) and a
-rerun of the phenotype validation.
+Needs a third v9 build and a rerun of the phenotype validation; v9-r1 is
+kept under `releases/v9-r1` for comparison.
 
