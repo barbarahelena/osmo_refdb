@@ -1717,8 +1717,52 @@ the peptide ATPases in score, so no GA separates them.
   calls on background reads), but every peptide-ATPase read in the random
   background would have counted once the HMM decoy existed.
 
+v9-r2's phenotype run (before the decoy) confirmed the split: opuCA in
+salt-in strains fell 0.65 -> 0.15 (family rank 24 -> 20), but opuBA rose
+to 0.73 in both salt-out and salt-in strains. The peptide ATPases that
+opuCA's higher GA released went to opuBA's unchanged one.
+
+### Fourth v9 build (`releases/v9`, 2026-11-11, `05d7595`) -- decoy verified
+
+`pepABC_decoy`: 1500 fetched, 79 dropped as already in another refs set,
+1364 clusters, LENG 287, GA 100. Calibration is unchanged (GA opuAA 413.1,
+opuBA 294.6, opuCA 326.1); the decoy acts only in best-hit selection.
+
+Genomes with a call (all / salt-out / salt-in, BacDive panel):
+
+| | v9-r1 | v9-r2 | v9 |
+|---|---|---|---|
+| opuAA | 0.47 / 0.47 / 0.02 | 0.45 / 0.46 / 0.02 | 0.45 / 0.46 / 0.02 |
+| opuBA | 0.65 / 0.65 / 0.48 | 0.73 / 0.73 / 0.73 | 0.41 / 0.41 / 0.20 |
+| opuCA | 0.60 / 0.60 / 0.65 | 0.45 / 0.46 / 0.15 | 0.43 / 0.43 / 0.14 |
+| any opu ATPase, salt-in | 0.77 | 0.77 | 0.31 |
+
+Benchmark, HMM, `opu_atpase` paralog group (v9-r2 -> v9): FP 17985 ->
+2254, precision 0.07 -> 0.38, F1 0.13 -> 0.49, TP 1358 -> 1358. opuBA
+hard-negative FP 2827 -> 36 (precision 0.015 -> 0.53) for a loss of 2 TP
+reads (43 -> 41); opuCA TP 259 -> 282. HMM random-background FP rate 9936
+-> 8864 per million. DIAMOND rows are identical.
+
+Phenotype validation (v9-r2 -> v9): breadth rho 0.367 -> 0.373, copies
+0.272 -> 0.291, copies | size 0.459 -> 0.483; genus-blocked ridge CV,
+osmo vs random panel, 0.643 vs 0.408; salt-in compatible solutes 0.12 ->
+0.09 (salt-out archaea 0.08); opuCA rank 20 -> 15 (rho | base 0.18 ->
+0.22). Median within-genus rho fell 0.185 -> 0.145, but the pooled
+within-genus partial r is unchanged (0.117 -> 0.116) and v9-r1 had 0.159;
+it is a median over 311 small genera.
+
+**opuBA is still a weak marker.** With the peptide ATPases gone, its own
+limits show: HMM recall 0.13 on held-out reads (0.14 in v9-r2; a GA
+calibrated on 23 positives, F1 0.46), ~4100 random-background FP per
+million reads, and presence rho -0.02 (rank 40 of 45). Its remaining
+genome calls are likely other ABC ATPases without a peptide C-terminal
+domain (bare ABC_tran), which a second decoy can't separate. Treat opuBA
+calls with caution until it has more positives or a narrower definition.
+
 ### Status
 
-Needs a fourth v9 build and a rerun of the phenotype validation; v9-r1 and
-v9-r2 are kept under `releases/` for comparison.
+`releases/v9` is the current build (v9-r1 and v9-r2 kept for comparison).
+Open: opuBA (above); the profile cascade's precision criterion is
+mix-dependent; the mrpB DIAMOND cutoff; positive-side leakage; the PF08886
+gshA family; an osmotool release tag and Dockerfile pin bump.
 
