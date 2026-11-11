@@ -139,6 +139,11 @@ do_build() {
     THREADS="${THREADS}" bash pipeline/05_build_hmms.sh "${REFS_DIR}" "${ALN_DIR}" "${HMM_DIR}" "${FAMILIES_FILE}"
 
     echo ""
+    echo "--- 5b. Build HMM decoys (confuser-class models, e.g. peptide ABC ATPases vs opuBA) ---"
+    python pipeline/05b_build_hmm_decoys.py --refs "${REFS_DIR}" --aln "${ALN_DIR}" \
+        --hmms "${HMM_DIR}" --families "${FAMILIES_FILE}" --threads "${THREADS}"
+
+    echo ""
     echo "--- 6. Calibrate GA cutoffs ---"
     python pipeline/06_calibrate_cutoffs.py --hmms "${HMM_DIR}" --families "${FAMILIES_FILE}"
 

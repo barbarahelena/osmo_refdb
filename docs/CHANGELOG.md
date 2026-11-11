@@ -1692,8 +1692,33 @@ domain PF08352), which no opu ATPase positive carries:
   39% PF08352). PF08352 is also excluded from the random background now,
   like every other panel Pfam, so background FP rates shift slightly.
 
+### Third v9 build (v9-r2, 2026-11-11) and an HMM decoy for opuBA
+
+The wider pool did reach calibration (853/767/750 scored negatives) and
+raised opuAA's GA (381.5 -> 413.4) and opuCA's (291.5 -> 325.3), but not
+opuBA's (291.8 -> 295.1, F1 0.46): its 23 calibration positives overlap
+the peptide ATPases in score, so no GA separates them.
+
+- **HMM decoys** (`hmm_decoys` in families.yaml, new step
+  `05b_build_hmm_decoys.py`). A decoy is an HMM of a confuser class. It
+  goes into the pressed db, competes in osmotool annotate's best-hit
+  contest, and is dropped from output through the exclusion lists (08c), so
+  osmotool needs no change. Accessions already in any other refs set are
+  dropped before building, so no benchmark read comes from a decoy
+  training sequence.
+- **`pepABC_decoy`**: 1500 sampled PF08352 proteins. On a 484-genome
+  sample, scored with v9-r2's opu HMMs, it took all 744 PF08352 proteins
+  and none of the 100 correctly called held-out opu positives (each
+  >= 53 bits higher on its own model). opuBA prevalence went 0.72 -> 0.39
+  (salt-out) and 0.73 -> 0.20 (salt-in); opuAA/opuCA barely changed.
+- **11_compute_metrics.py**: a read whose best hit is a `*_decoy` label is
+  now NO_CALL. Before, a background read best-hitting a decoy counted as a
+  false positive. That didn't change v9-r2's tables (no DIAMOND decoy
+  calls on background reads), but every peptide-ATPase read in the random
+  background would have counted once the HMM decoy existed.
+
 ### Status
 
-Needs a third v9 build and a rerun of the phenotype validation; v9-r1 is
-kept under `releases/v9-r1` for comparison.
+Needs a fourth v9 build and a rerun of the phenotype validation; v9-r1 and
+v9-r2 are kept under `releases/` for comparison.
 

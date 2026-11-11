@@ -89,6 +89,14 @@
 #                     (and 01d's _study ones) from the DIAMOND reference
 #                     specifically, even though HMM's alignment keeps them --
 #                     see that script's header comment.
+#
+# Top-level `hmm_decoys` (after `families`) lists HMM models of a confuser
+# class, built by 05b_build_hmm_decoys.py from `query` (sampled to
+# `max_seqs`, default 1500) and given the fixed GA `ga`. They compete in
+# osmotool annotate's best-hit contest and are excluded from output (08c),
+# and a benchmark read best-hitting one counts as no call (11). `ga` only
+# has to sit below the competing families' own cutoffs. Names must end in
+# "_decoy". `competes_with` is documentation only.
 
 families:
   - name: ectA
@@ -1910,3 +1918,23 @@ families:
 # hand-pick a small set of functionally-distinct negatives, or accept
 # that proV/proW/gbsA/gbsB can only be called at low confidence and scope
 # the tool's output accordingly.
+
+hmm_decoys:
+  - name: pepABC_decoy
+    description: >
+      Peptide ABC-transporter ATPases (OppD/OppF/DppD/DppF-type; ABC_tran
+      + C-terminal oligo_HPY, PF08352). In the v9 BacDive run (2026-11-11)
+      they made up most opuBA calls (245/413 in a 484-genome sample) and
+      104/144 opu ATPase calls in salt-in strains. Adding them to the opu
+      ATPase negative pool raised opuAA/opuCA's GA but not opuBA's (295
+      bits, F1 0.46: its 23 calibration positives overlap them in score).
+      None of the 656 opuAA/BA/CA positives carries PF08352. Prototype on
+      the same sample: this model took all 744 PF08352 proteins and none of
+      the 128 held-out opu positives (each >= 57 bits higher on its own
+      model); opuBA fell from 0.72 to 0.39 of salt-out and 0.73 to 0.20 of
+      salt-in genomes. The remaining opuBA/opuCA confusers are bare ABC_tran
+      proteins with no distinguishing domain.
+    query: "xref:pfam-PF08352 AND taxonomy_id:2 NOT (gene:opuAA OR gene:opuAA1 OR gene:opuAA2 OR gene:opuBA OR gene:opuBA1 OR gene:opuBA2 OR gene:opuCA OR gene:opuCA1 OR gene:opuCA2)"
+    max_seqs: 1500
+    ga: 100
+    competes_with: [opuAA, opuBA, opuCA]

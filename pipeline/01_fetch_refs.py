@@ -29,6 +29,9 @@ Output: refs/<family>.positive.faa
                                             (declared fusion_partner pairs
                                             only -- see fetch_fusion_pair_
                                             candidates)
+        refs/<decoy>.hmm_decoy.raw.faa      (families.yaml top-level
+                                            `hmm_decoys` entries; built into
+                                            HMMs by 05b_build_hmm_decoys.py)
         refs/manifest.tsv
 """
 
@@ -128,6 +131,13 @@ def load_families(path: Path) -> list[dict]:
     with open(path) as fh:
         data = yaml.safe_load(fh)
     return data["families"]
+
+
+def load_hmm_decoys(path: Path) -> list[dict]:
+    """families.yaml's optional top-level `hmm_decoys` list (see its header)."""
+    with open(path) as fh:
+        data = yaml.safe_load(fh)
+    return data.get("hmm_decoys") or []
 
 
 def get_uniprot_release() -> str:
@@ -942,6 +952,21 @@ def main() -> None:
     print("Fetching dedicated fusion-pair candidates (comprehensive, uncapped)...")
     fetch_fusion_pair_candidates(families, args.out)
     print()
+
+    # HMM decoys: models of a confuser class that compete in osmotool
+    # annotate's best-hit contest and are then dropped from output (see
+    # 05b_build_hmm_decoys.py). Same seeded, capped sampling as the
+    # family fetches above.
+    for decoy in load_hmm_decoys(args.families):
+        dname = decoy["name"]
+        print(f"[{dname}] (HMM decoy)")
+        dec_fasta, n_dec, _ = fetch_set(
+            decoy["query"], dname, "HMM decoy", max_seqs=decoy.get("max_seqs", 1500),
+            rng=random.Random(f"{FETCH_RANDOM_SEED}:{dname}:hmm_decoy"))
+        if n_dec == 0:
+            raise SystemExit(f"ERROR: [{dname}] HMM decoy query returned no sequences")
+        (args.out / f"{dname}.hmm_decoy.raw.faa").write_text(dec_fasta)
+        print()
 
     manifest_path = args.out / "manifest.tsv"
     with open(manifest_path, "w", newline="") as fh:

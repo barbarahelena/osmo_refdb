@@ -205,6 +205,12 @@ def label_reads(calls: pd.DataFrame, truth: pd.DataFrame) -> pd.DataFrame:
     was supposed to recall.
     """
     calls = best_hit_per_read(calls)
+    if not calls.empty:
+        # A read whose best hit is a decoy (DIAMOND "<family>_decoy" refs,
+        # 08a; HMM decoy models, 05b) was won away from every real family:
+        # osmotool drops these labels from output, so score it as no call.
+        # Done after best_hit_per_read so the decoy still competes.
+        calls = calls[~calls["family"].astype(str).str.endswith("_decoy")]
     merged = truth.merge(calls, on="read_id", how="left", suffixes=("_true", "_called"))
     merged["family_called"] = merged["family_called"].fillna("NO_CALL")
     # sklearn's roc_curve/precision_recall_curve reject +/-inf, so use a
