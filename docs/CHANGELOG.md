@@ -1759,10 +1759,44 @@ genome calls are likely other ABC ATPases without a peptide C-terminal
 domain (bare ABC_tran), which a second decoy can't separate. Treat opuBA
 calls with caution until it has more positives or a narrower definition.
 
+### ktrB and opuAC: real recall gains since v9-pre
+
+Two families gained genome calls with the new negative sampling, and
+neither gain has been undone since. ktrB went from 0.18 of BacDive
+genomes (v8) to 0.42 (v9-pre) and 0.43 (v9). opuAC went from 0.03 to
+0.20 and then 0.15. Both jumps came with lower GA cutoffs at v9-pre:
+ktrB 462.6 -> 327.0 (v9: 326.6) and opuAC 241.4 -> 189.4 (v9: 198.2).
+That fits the whole-population negative sample drawing fewer close
+relatives than v8's accession-sorted one, and v8's known unlabelled real
+ktrB sequences in its negative pool.
+
+The newly called genomes carry the operon partners, so the new calls are
+real (v9 calls, 6634 shared strains):
+
+| | newly called vs v8 | partner in new calls | partner where family absent |
+|---|---|---|---|
+| ktrB | 1643 (0 lost) | ktrA 0.96 | ktrA 0.03 |
+| opuAC | 868 (36 lost) | opuAA 0.97, opuAB 0.99 | opuAA 0.36, opuAB 0.37 |
+
+### Caveat: the salt-in control mostly measures archaea vs bacteria
+
+80 of the 84 salt-in strains are haloarchaea. Non-salt-in archaea (n=29)
+look the same on the panel: compatible-solute families are present at
+0.09 in salt-in strains and 0.08 in salt-out archaea (0.33 across all
+salt-out strains). Random Pfam families show the same drop (0.24 and
+0.18 vs 0.43). So "solutes are low in salt-in strains" does not separate
+the salt-in strategy from the panel's mostly bacterial references; the
+salt-in numbers in this section should be read that way. Two families
+keep firing in haloarchaea and have done so since v8: betB 0.56 and otsB
+0.46, vs 0.03 in salt-out archaea. Both belong to large enzyme families
+(aldehyde dehydrogenases, HAD phosphatases), so they are plausible false
+positives. This hasn't been checked.
+
 ### Status
 
 `releases/v9` is the current build (v9-r1 and v9-r2 kept for comparison).
 Open: opuBA (above); the profile cascade's precision criterion is
 mix-dependent; the mrpB DIAMOND cutoff; positive-side leakage; the PF08886
-gshA family; an osmotool release tag and Dockerfile pin bump.
+gshA family; betB/otsB calls in haloarchaea; an osmotool release tag and
+Dockerfile pin bump.
 
