@@ -1560,3 +1560,243 @@ wanted.
   murB/mrpG/otsA/mscS/otsB single-family test releases are local builds
   only (`releases/` is gitignored) -- no further action needed to
   preserve any of them beyond this changelog entry.
+
+## This branch (`fix-negative-sampling`) -- benchmark negatives: leakage, sampling, and what counts as a false positive
+
+Stacked on `marker-normalization` so one rebuild benchmarks both.
+
+### Benchmark negatives held out from calibration (`9683622`)
+
+Only decoy families (betL) split their negatives. Every other family set its
+HMM GA and DIAMOND bitscore cutoffs on the full `negative.faa` and then
+simulated benchmark negative reads from the same file, and `osmotool
+profile` applies the 08b cutoffs during the benchmark. `03_split_train_test.py`
+now splits every family's negatives: `negative.train` for calibration (05/06,
+08b) and decoys (08a), `negative.test` for benchmark reads (09). Non-decoy
+families hold out half (`--negative-test-fraction 0.5`); decoy families keep
+`--test-fraction`. Checked against `releases/v8/refs`: all positive splits and
+betL's negative split are byte-identical to v8's. Benchmark negative read
+volume per family roughly halves, so `precision` is not directly comparable
+to v8's.
+
+### Capped fetches sampled from the whole population (`69ed10e`)
+
+The old sampler drew from the first 5x cap accessions in accession order:
+ectA's 1000 negatives came from the first 5000 of ~320k, and the
+random-background negatives of mrpB/mrpE/mrpF/mrpG from the first 5000 of
+~75.5 million. Populations up to 2M are now listed in full (cached per
+release) and sampled uniformly; larger ones get a proportional stratified
+sample over creation-year x length strata. Accession wildcard/range queries
+don't exist in UniProt's API, so the stratified path is approximate within
+each stratum.
+
+### Cross-family and random-background false positives (this commit)
+
+- `11_compute_metrics.py` only counted reads from a family's own constructs as
+  its false positives; another panel gene's read called as this family was
+  dropped. New `fp_cross` (other panel genes' real reads), `precision_panel`
+  and `f1_panel`, as a diagnostic. The cascade flag stays on `precision`:
+  osmotool's cascade only checks a read against the HMM of the family
+  DIAMOND called, so a close paralog's read (same domain) passes it anyway.
+  Flagging from `precision_panel` would have added opuBA and ktrA to the
+  cascade for an error it can't fix. `--cascade-precision-metric
+  precision_panel` is available but off.
+- A first version counted every other-family read, which was misleading: on
+  v8, ~99% of trkH's 12,191 cross-family calls were ktrB/ktrD *hard
+  negatives*, draws from the same PF02386 pool as trkH's own (the three share
+  one `negative_query`; so do proX/opuAC/opuBC/opuCC, trkA/ktrA, gshA/gshF).
+  Those are reported as `fp_other_negatives` and kept out of precision.
+- Re-scoring v8's own benchmark output with the new script reproduces v8's
+  `tp/fp/fn/precision/recall/f1` exactly. The largest real drops (DIAMOND):
+  opuBA 0.990 -> 0.375 (166 opuAA/opuCA reads against 100 TPs), opuBB 0.894
+  -> 0.464, opuCB 0.849 -> 0.602, opuCA 0.896 -> 0.726, ktrA 1.000 -> 0.843
+  (trkA reads). Almost all of this is confusion between close paralogs.
+- New step 1f, `01f_build_random_background.py`: 5000 random bacterial
+  proteins without any of the panel's Pfam domains, minus any >= 70%
+  identical to a panel positive (01b's rule). Step 9 simulates them as
+  family `random_bg`; step 11 reports `fp_background` and
+  `background_fp_per_million` per family plus `background_fpr.tsv` /
+  `background_fpr_by_family.tsv`. Background reads are kept out of every
+  precision and out of the best-threshold sweep, since their volume is
+  arbitrary. Tested live: 5000 sampled over 74 strata of a 72.7M population,
+  9 dropped, ~7 min first run; 09/09b produce ~100k labelled background reads.
+
+### Paralog groups and a mix-independent hard-negative rate
+
+- New optional `paralog_group` in `families.yaml`, set on 19 families in 7
+  groups: opu substrate-binding (proX, opuAC/BC/CC), opu ATPase
+  (opuAA/BA/CA), opu permease (opuAB/BB/CB), Trk/Ktr channel
+  (trkH, ktrB, ktrD), Trk/Ktr regulatory (trkA, ktrA), glutathione step 1
+  (gshA, gshF), Mrp large subunit (mrpA, mrpD; the least certain grouping).
+  `summary_by_group.tsv` scores each group as one unit with the same
+  columns as `summary.tsv`, plus `within_group_swaps`.
+- New `n_hard_negative_reads` and `hard_negative_fp_per_million`: precision
+  depends on how many negatives are mixed in (fetch caps, split fractions),
+  this rate doesn't. It also exposes something per-gene precision hides for
+  sibling families: a hard negative from opuBA's sample called opuAA is
+  neither opuBA's error nor opuAA's own negative, so no gene counts it.
+- Re-scored v8 (DIAMOND): the opu ATPase group catches 3% of its hard
+  negatives, so its gene-level weakness is mostly paralog confusion. The
+  Trk/Ktr channel group catches 63% and glutathione step 1 37%: the
+  documented negative-pool label noise (real unlabelled orthologs in the
+  PF02386 / PF04262 pools), the situation mrpE was in before its
+  random-background redesign. Grouping can't fix those; worth trying the
+  mrpE-style redesign on them next.
+
+### v9 build and follow-up fixes
+
+The combined v9 build (with `marker-normalization`'s markers and teaA) ran
+on 2026-11-06. Benchmark precision and F1 rose (DIAMOND median F1
+0.732 -> 0.784), but mostly because half as many negative reads are mixed
+in; the per-million hard-negative rates of the hard groups barely moved.
+Rerunning the BacDive phenotype validation on v9 kept the headline result
+(panel breadth vs NaCl max rho +0.364 -> +0.371) but showed genome-level
+HMM cutoffs shifting for reasons that weren't biology:
+
+- **Negative fetch cap 1000 -> 2000** (`01_fetch_refs.py --max-negative`).
+  The calibration half of each negative pool was half v8's size; 2000 puts
+  it back to roughly v8's whole pool. mazG's override goes 3000 -> 6000
+  for the same reason.
+- **opuAA/opuBA/opuCA `max_negative_override: 5000`.** Their PF00571 (CBS)
+  pool is mostly proteins that never score against the ATPase HMMs; only
+  28/12/8 calibration negatives scored, under the 30-negative guard, so
+  all three fell back to max_negative+1 (opuCA in 0.80 -> 0.11 of BacDive
+  genomes). The population-wide sampling also draws fewer close relatives
+  than v8's accession-sorted sample did (opuAA: 184 of 708 scored in v8,
+  28 of 343 in v9).
+- **gshA restricted to PF04262.** The gshA symbol covers three unrelated
+  glutamate-cysteine ligase families (PF04262 72%, PF08886 15%, PF04107
+  10%); the mixed model only fit PF04262, a quarter of calibration
+  positives scored level with the negatives, and the F1 sweep flipped from
+  GA 263.9 (v8) to 11.3 (v9; gshA in 73% of BacDive genomes). A separate
+  PF08886 family is a possible follow-up.
+
+### Second v9 build (v9-r1, 2026-11-10) and the opu ATPase negative pool
+
+With those three fixes, opuAA/BA/CA calibrated again (132/78/73 scored
+calibration negatives) and gshA came back to 18% of BacDive genomes (v8:
+18%), with HMM gshA<->gshF swaps in the benchmark down from 1436 to 118.
+Benchmark precision fell back to v8's level now that the test half holds
+v8-sized negative pools (DIAMOND micro-precision 0.831, v8 0.818), so
+removing the calibration/benchmark overlap cost nothing measurable.
+
+The opu ATPases were the remaining problem: opuBA was called in 64% of
+BacDive genomes and 48% of salt-in strains (v8: 20% / 16%), and the
+salt-in compatible-solute fraction rose 0.07 -> 0.13. Pfam-scanning the
+proteins that passed an opu ATPase cutoff in a 484-genome sample showed
+most were peptide ABC ATPases (OppD/OppF/DppD-type, C-terminal oligo_HPY
+domain PF08352), which no opu ATPase positive carries:
+
+- **opuAA/opuBA/opuCA negative pool: PF00571 OR PF08352.** Adds the
+  peptide ABC ATPases to the CBS-domain pool (301k UniProt entries, about
+  39% PF08352). PF08352 is also excluded from the random background now,
+  like every other panel Pfam, so background FP rates shift slightly.
+
+### Third v9 build (v9-r2, 2026-11-11) and an HMM decoy for opuBA
+
+The wider pool did reach calibration (853/767/750 scored negatives) and
+raised opuAA's GA (381.5 -> 413.4) and opuCA's (291.5 -> 325.3), but not
+opuBA's (291.8 -> 295.1, F1 0.46): its 23 calibration positives overlap
+the peptide ATPases in score, so no GA separates them.
+
+- **HMM decoys** (`hmm_decoys` in families.yaml, new step
+  `05b_build_hmm_decoys.py`). A decoy is an HMM of a confuser class. It
+  goes into the pressed db, competes in osmotool annotate's best-hit
+  contest, and is dropped from output through the exclusion lists (08c), so
+  osmotool needs no change. Accessions already in any other refs set are
+  dropped before building, so no benchmark read comes from a decoy
+  training sequence.
+- **`pepABC_decoy`**: 1500 sampled PF08352 proteins. On a 484-genome
+  sample, scored with v9-r2's opu HMMs, it took all 744 PF08352 proteins
+  and none of the 100 correctly called held-out opu positives (each
+  >= 53 bits higher on its own model). opuBA prevalence went 0.72 -> 0.39
+  (salt-out) and 0.73 -> 0.20 (salt-in); opuAA/opuCA barely changed.
+- **11_compute_metrics.py**: a read whose best hit is a `*_decoy` label is
+  now NO_CALL. Before, a background read best-hitting a decoy counted as a
+  false positive. That didn't change v9-r2's tables (no DIAMOND decoy
+  calls on background reads), but every peptide-ATPase read in the random
+  background would have counted once the HMM decoy existed.
+
+v9-r2's phenotype run (before the decoy) confirmed the split: opuCA in
+salt-in strains fell 0.65 -> 0.15 (family rank 24 -> 20), but opuBA rose
+to 0.73 in both salt-out and salt-in strains. The peptide ATPases that
+opuCA's higher GA released went to opuBA's unchanged one.
+
+### Fourth v9 build (`releases/v9`, 2026-11-11, `05d7595`) -- decoy verified
+
+`pepABC_decoy`: 1500 fetched, 79 dropped as already in another refs set,
+1364 clusters, LENG 287, GA 100. Calibration is unchanged (GA opuAA 413.1,
+opuBA 294.6, opuCA 326.1); the decoy acts only in best-hit selection.
+
+Genomes with a call (all / salt-out / salt-in, BacDive panel):
+
+| | v9-r1 | v9-r2 | v9 |
+|---|---|---|---|
+| opuAA | 0.47 / 0.47 / 0.02 | 0.45 / 0.46 / 0.02 | 0.45 / 0.46 / 0.02 |
+| opuBA | 0.65 / 0.65 / 0.48 | 0.73 / 0.73 / 0.73 | 0.41 / 0.41 / 0.20 |
+| opuCA | 0.60 / 0.60 / 0.65 | 0.45 / 0.46 / 0.15 | 0.43 / 0.43 / 0.14 |
+| any opu ATPase, salt-in | 0.77 | 0.77 | 0.31 |
+
+Benchmark, HMM, `opu_atpase` paralog group (v9-r2 -> v9): FP 17985 ->
+2254, precision 0.07 -> 0.38, F1 0.13 -> 0.49, TP 1358 -> 1358. opuBA
+hard-negative FP 2827 -> 36 (precision 0.015 -> 0.53) for a loss of 2 TP
+reads (43 -> 41); opuCA TP 259 -> 282. HMM random-background FP rate 9936
+-> 8864 per million. DIAMOND rows are identical.
+
+Phenotype validation (v9-r2 -> v9): breadth rho 0.367 -> 0.373, copies
+0.272 -> 0.291, copies | size 0.459 -> 0.483; genus-blocked ridge CV,
+osmo vs random panel, 0.643 vs 0.408; salt-in compatible solutes 0.12 ->
+0.09 (salt-out archaea 0.08); opuCA rank 20 -> 15 (rho | base 0.18 ->
+0.22). Median within-genus rho fell 0.185 -> 0.145, but the pooled
+within-genus partial r is unchanged (0.117 -> 0.116) and v9-r1 had 0.159;
+it is a median over 311 small genera.
+
+**opuBA is still a weak marker.** With the peptide ATPases gone, its own
+limits show: HMM recall 0.13 on held-out reads (0.14 in v9-r2; a GA
+calibrated on 23 positives, F1 0.46), ~4100 random-background FP per
+million reads, and presence rho -0.02 (rank 40 of 45). Its remaining
+genome calls are likely other ABC ATPases without a peptide C-terminal
+domain (bare ABC_tran), which a second decoy can't separate. Treat opuBA
+calls with caution until it has more positives or a narrower definition.
+
+### ktrB and opuAC: real recall gains since v9-pre
+
+Two families gained genome calls with the new negative sampling, and
+neither gain has been undone since. ktrB went from 0.18 of BacDive
+genomes (v8) to 0.42 (v9-pre) and 0.43 (v9). opuAC went from 0.03 to
+0.20 and then 0.15. Both jumps came with lower GA cutoffs at v9-pre:
+ktrB 462.6 -> 327.0 (v9: 326.6) and opuAC 241.4 -> 189.4 (v9: 198.2).
+That fits the whole-population negative sample drawing fewer close
+relatives than v8's accession-sorted one, and v8's known unlabelled real
+ktrB sequences in its negative pool.
+
+The newly called genomes carry the operon partners, so the new calls are
+real (v9 calls, 6634 shared strains):
+
+| | newly called vs v8 | partner in new calls | partner where family absent |
+|---|---|---|---|
+| ktrB | 1643 (0 lost) | ktrA 0.96 | ktrA 0.03 |
+| opuAC | 868 (36 lost) | opuAA 0.97, opuAB 0.99 | opuAA 0.36, opuAB 0.37 |
+
+### Caveat: the salt-in control mostly measures archaea vs bacteria
+
+80 of the 84 salt-in strains are haloarchaea. Non-salt-in archaea (n=29)
+look the same on the panel: compatible-solute families are present at
+0.09 in salt-in strains and 0.08 in salt-out archaea (0.33 across all
+salt-out strains). Random Pfam families show the same drop (0.24 and
+0.18 vs 0.43). So "solutes are low in salt-in strains" does not separate
+the salt-in strategy from the panel's mostly bacterial references; the
+salt-in numbers in this section should be read that way. Two families
+keep firing in haloarchaea and have done so since v8: betB 0.56 and otsB
+0.46, vs 0.03 in salt-out archaea. Both belong to large enzyme families
+(aldehyde dehydrogenases, HAD phosphatases), so they are plausible false
+positives. This hasn't been checked.
+
+### Status
+
+`releases/v9` is the current build (v9-r1 and v9-r2 kept for comparison).
+Open: opuBA (above); the profile cascade's precision criterion is
+mix-dependent; the mrpB DIAMOND cutoff; positive-side leakage; the PF08886
+gshA family; betB/otsB calls in haloarchaea; an osmotool release tag and
+Dockerfile pin bump.
+

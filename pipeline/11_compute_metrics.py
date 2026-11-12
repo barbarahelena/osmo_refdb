@@ -14,6 +14,51 @@ that one read can only ever count as one false positive, not once per
 spurious model hit -- important for promiscuous domains (e.g. ectB, betL)
 that legitimately score weakly against many unrelated HMMs/DIAMOND targets.
 
+False positives are counted three ways for family F (summary.tsv):
+  fp            reads from F's OWN constructs called F: its held-out hard
+                negatives (same Pfam domain, different gene) and flanking
+                DNA. precision / f1 use only these -- the definition every
+                release up to v8 reported, kept for comparison.
+  fp_cross      genuine gene reads of any OTHER family called F: real
+                confusion between panel genes (e.g. a ktrB read called
+                trkH). Before 2026-11-04 these were silently dropped: a
+                misassigned read only counted as a miss for its own family.
+                precision_panel / f1_panel count fp + fp_cross. A
+                diagnostic, not a decision input: close paralogs in the
+                panel (opu ATPases/permeases, trkH/ktrB/ktrD, ...) are
+                expected to confuse each other, and whether that matters
+                depends on whether a result is read per gene or per system.
+  fp_other_negatives
+                OTHER families' hard-negative and flank reads called F.
+                Reported, but in no precision: sibling families share one
+                negative_query (trkH/ktrB/ktrD, proX/opuAC/opuBC/opuCC,
+                trkA/ktrA, gshA/gshF), so their hard negatives are further
+                draws from F's own hard-negative pool, and counting them
+                would weight F's hard negatives by how many siblings it
+                has. On v8 they were ~99% of all cross-family calls (trkH:
+                12,097 of 12,191), real-gene confusion ~1%.
+  fp_background reads from the shared random bacterial background
+                (01f_build_random_background.py, family "random_bg") called
+                F, also as background_fp_per_million. Kept out of every
+                precision: how many unrelated reads to mix in is arbitrary,
+                so the rate per million unrelated reads is the number to
+                read (it scales directly to a real metagenome).
+
+summary_by_group.tsv repeats these metrics per families.yaml
+`paralog_group`, scoring a group's members as one unit: a read called as
+any member of its true family's group is a hit (within_group_swaps counts
+how many of those were gene-level misses).
+
+Precision depends on how many negative reads are mixed in, which is set by
+fetch caps and split fractions, not biology. hard_negative_fp_per_million
+(hard-negative reads called as the family, per million hard-negative reads)
+and background_fp_per_million don't: read those two side by side to compare
+families, groups or releases. At group level the hard-negative rate is the
+chance a hard-negative read lands on ANY member, so it also catches negatives
+"claimed" by a sibling, which per-gene precision never counts (a negative
+from opuBA's sample called opuAA is neither opuBA's error nor opuAA's own
+negative).
+
 Also sweeps DIAMOND's/HMM's bit-score thresholds to produce ROC/PR-style
 curves (saved as PNGs) plus two summary tables:
   - summary.tsv: precision/recall/F1 accepting every best-hit call as-is
@@ -38,6 +83,11 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import yaml
 from sklearn.metrics import precision_recall_curve, roc_curve, auc
+
+
+RANDOM_BG_FAMILY = "random_bg"             # must match 01f / 09
+REAL_BG_FAMILY = "background"              # --background real metagenome (09)
+BACKGROUND_SOURCES = (RANDOM_BG_FAMILY, REAL_BG_FAMILY)
 
 
 def load_family_names(path: Path) -> list[str]:
@@ -155,6 +205,12 @@ def label_reads(calls: pd.DataFrame, truth: pd.DataFrame) -> pd.DataFrame:
     was supposed to recall.
     """
     calls = best_hit_per_read(calls)
+    if not calls.empty:
+        # A read whose best hit is a decoy (DIAMOND "<family>_decoy" refs,
+        # 08a; HMM decoy models, 05b) was won away from every real family:
+        # osmotool drops these labels from output, so score it as no call.
+        # Done after best_hit_per_read so the decoy still competes.
+        calls = calls[~calls["family"].astype(str).str.endswith("_decoy")]
     merged = truth.merge(calls, on="read_id", how="left", suffixes=("_true", "_called"))
     merged["family_called"] = merged["family_called"].fillna("NO_CALL")
     # sklearn's roc_curve/precision_recall_curve reject +/-inf, so use a
@@ -169,6 +225,13 @@ def label_reads(calls: pd.DataFrame, truth: pd.DataFrame) -> pd.DataFrame:
     merged["correct"] = merged["is_genuine_positive"] & (
         merged["family_called"] == merged["family_true"]
     )
+    # Masks _metrics() needs for every family/group/length bucket, computed
+    # once here instead of rescanning the string columns each call.
+    merged["_bg_source"] = merged["family_true"].isin(BACKGROUND_SOURCES)
+    merged["_random_bg"] = merged["family_true"] == RANDOM_BG_FAMILY
+    merged["_hard_neg"] = merged["label"] == "negative"
+    merged["family_true"] = merged["family_true"].astype("category")
+    merged["family_called"] = merged["family_called"].astype("category")
     return merged
 
 
@@ -217,6 +280,11 @@ def summarize_best_threshold(merged: pd.DataFrame, method: str, score_col: str,
     accepting every best-hit call regardless of score.
     """
     rows = []
+    # Background reads are left out of the sweep: their volume is arbitrary,
+    # and including them would let it move the threshold the profile-mode
+    # cascade ships with. Cross-family reads stay in (they were always
+    # counted here, unlike in summary.tsv before fp_cross existed).
+    merged = merged[~merged["family_true"].isin(BACKGROUND_SOURCES)]
     for family in families:
         fam_calls = merged[merged["family_called"] == family]
         if fam_calls.empty:
@@ -252,26 +320,110 @@ def summarize_best_threshold(merged: pd.DataFrame, method: str, score_col: str,
     return rows
 
 
-def summarize(merged: pd.DataFrame, method: str, families: list[str]) -> list[dict]:
+def _ratio(num: int, den: int) -> float:
+    return num / den if den else float("nan")
+
+
+def _f1(precision: float, recall: float) -> float:
+    if precision != precision or recall != recall or not (precision + recall):
+        return float("nan")
+    return 2 * precision * recall / (precision + recall)
+
+
+def _r3(x: float):
+    return round(x, 3) if x == x else ""
+
+
+def _metrics(merged: pd.DataFrame, members: set[str], n_random_bg: int) -> dict | None:
+    """Counts and metrics for a set of families scored as one unit: a single
+    family (summary.tsv) or a paralog group (summary_by_group.tsv). A read
+    from a member's construct called as any member counts as a hit, so at
+    group level confusion between siblings is not an error. See the module
+    docstring for the false-positive columns."""
+    own = merged["family_true"].isin(members)
+    if not own.any():
+        return None
+    called = merged["family_called"].isin(members)
+    genuine = merged["is_genuine_positive"]
+    other = ~own & ~merged["_bg_source"] & called
+    tp = int((own & called & genuine).sum())
+    fn = int((own & genuine & ~called).sum())
+    fp = int((own & called & ~genuine).sum())
+    fp_cross = int((other & genuine).sum())
+    fp_other_neg = int((other & ~genuine).sum())
+    fp_bg = int((merged["_random_bg"] & called).sum())
+    hard_neg = own & merged["_hard_neg"]
+    n_hard_neg = int(hard_neg.sum())
+    fp_hard_neg = int((hard_neg & called).sum())
+    precision = _ratio(tp, tp + fp)
+    recall = _ratio(tp, tp + fn)
+    precision_panel = _ratio(tp, tp + fp + fp_cross)
+    return {
+        "tp": tp, "fp": fp, "fn": fn,
+        "precision": _r3(precision),
+        "recall": _r3(recall),
+        "f1": _r3(_f1(precision, recall)),
+        "fp_cross": fp_cross,
+        "fp_other_negatives": fp_other_neg,
+        "precision_panel": _r3(precision_panel),
+        "f1_panel": _r3(_f1(precision_panel, recall)),
+        "n_hard_negative_reads": n_hard_neg,
+        "hard_negative_fp_per_million": (round(fp_hard_neg / n_hard_neg * 1e6, 1)
+                                         if n_hard_neg else ""),
+        "fp_background": fp_bg if n_random_bg else "",
+        "background_fp_per_million": (round(fp_bg / n_random_bg * 1e6, 1)
+                                      if n_random_bg else ""),
+        # genuine member reads called as a DIFFERENT member: a miss at gene
+        # level, a hit at group level (always 0 for a single family)
+        "within_group_swaps": (int((own & genuine & called & (
+            merged["family_called"].astype(str) != merged["family_true"].astype(str))).sum())
+            if len(members) > 1 else 0),
+    }
+
+
+def summarize(merged: pd.DataFrame, method: str, families: list[str],
+              groups: dict[str, str] | None = None) -> list[dict]:
+    """Per-family counts and metrics; see the module docstring for the three
+    false-positive columns."""
+    groups = groups or {}
+    n_random_bg = int(merged["_random_bg"].sum())
     rows = []
     for family in families:
-        fam_calls = merged[merged["family_true"] == family]
-        if fam_calls.empty:
+        m = _metrics(merged, {family}, n_random_bg)
+        if m is None:
             continue
-        tp = ((fam_calls["family_called"] == family) & fam_calls["is_genuine_positive"]).sum()
-        fn = (fam_calls["is_genuine_positive"] & (fam_calls["family_called"] != family)).sum()
-        fp = ((fam_calls["family_called"] == family) & ~fam_calls["is_genuine_positive"]).sum()
-        precision = tp / (tp + fp) if (tp + fp) else float("nan")
-        recall = tp / (tp + fn) if (tp + fn) else float("nan")
-        f1 = (2 * precision * recall / (precision + recall)
-              if precision and recall and (precision + recall) else float("nan"))
-        rows.append({
-            "method": method, "family": family, "tp": tp, "fp": fp, "fn": fn,
-            "precision": round(precision, 3) if precision == precision else "",
-            "recall": round(recall, 3) if recall == recall else "",
-            "f1": round(f1, 3) if f1 == f1 else "",
-        })
+        del m["within_group_swaps"]
+        rows.append({"method": method, "family": family, **m,
+                     "paralog_group": groups.get(family, "")})
     return rows
+
+
+def summarize_groups(merged: pd.DataFrame, method: str, families: list[str],
+                     groups: dict[str, str]) -> list[dict]:
+    """Per paralog group (families.yaml paralog_group): the same metrics as
+    summary.tsv with the group's members scored as one unit. Next to each
+    row, the members' summed per-gene tp so the gain from not counting
+    sibling swaps is visible."""
+    n_random_bg = int(merged["_random_bg"].sum())
+    members_by_group: dict[str, list[str]] = {}
+    for family in families:
+        if family in groups:
+            members_by_group.setdefault(groups[family], []).append(family)
+    rows = []
+    for group, members in members_by_group.items():
+        m = _metrics(merged, set(members), n_random_bg)
+        if m is None:
+            continue
+        rows.append({"method": method, "paralog_group": group,
+                     "members": ",".join(members), **m})
+    return rows
+
+
+def load_paralog_groups(path: Path) -> dict[str, str]:
+    with open(path) as fh:
+        data = yaml.safe_load(fh)
+    return {fam["name"]: fam["paralog_group"] for fam in data["families"]
+            if fam.get("paralog_group")}
 
 
 def summarize_by_length(merged: pd.DataFrame, method: str, families: list[str],
@@ -289,27 +441,40 @@ def summarize_by_length(merged: pd.DataFrame, method: str, families: list[str],
     return rows
 
 
-def summarize_background_fpr(merged: pd.DataFrame, method: str) -> dict | None:
-    """Real background reads (family == 'background') carry no osmoadaptation
-    gene content at all -- any call made on one is a false positive, and
-    this can't be folded into summarize()'s per-family tables since
-    'background' isn't a real gene family."""
-    bg = merged[merged["family_true"] == "background"]
-    if bg.empty:
-        return None
-    n_reads = len(bg)
-    n_false_positive = (bg["family_called"] != "NO_CALL").sum()
-    return {
-        "method": method,
-        "n_background_reads": n_reads,
-        "n_false_positive_calls": int(n_false_positive),
-        "background_fpr": round(n_false_positive / n_reads, 4),
-    }
+def summarize_background_fpr(merged: pd.DataFrame, method: str) -> tuple[list[dict], list[dict]]:
+    """Background reads -- the shared random bacterial background
+    ("random_bg") and an optional real metagenome ("background") -- carry no
+    panel gene, so any call on one is a false positive. Returns
+    (one row per source, one row per source x called family)."""
+    overall, by_family = [], []
+    for source in BACKGROUND_SOURCES:
+        bg = merged[merged["family_true"] == source]
+        if bg.empty:
+            continue
+        n_reads = len(bg)
+        called = bg[bg["family_called"] != "NO_CALL"]
+        overall.append({
+            "method": method,
+            "source": source,
+            "n_background_reads": n_reads,
+            "n_false_positive_calls": len(called),
+            "background_fpr": round(len(called) / n_reads, 6),
+            "fp_per_million": round(len(called) / n_reads * 1e6, 1),
+        })
+        for family, n in called["family_called"].value_counts().items():
+            if n == 0:   # categorical dtype lists every category
+                continue
+            by_family.append({
+                "method": method, "source": source, "family_called": family,
+                "n_false_positive_calls": int(n), "n_background_reads": n_reads,
+                "fp_per_million": round(n / n_reads * 1e6, 1),
+            })
+    return overall, by_family
 
 
 def build_profile_cascade_config(
     summary_rows: list[dict], best_threshold_rows: list[dict],
-    precision_threshold: float,
+    precision_threshold: float, precision_column: str = "precision",
 ) -> list[dict]:
     """
     For each family, pair DIAMOND's benchmark precision (accept-every-
@@ -327,8 +492,17 @@ def build_profile_cascade_config(
     unflagged so the cascade only costs extra hmmscan time where DIAMOND
     has a demonstrated real specificity problem, not on every read.
     """
+    # precision_column defaults to "precision" (own hard negatives), which
+    # measures the one error the cascade can fix: osmotool's check only asks
+    # whether a read scores above threshold against the HMM of the family
+    # DIAMOND called (quantifier.apply_cascade_check), so it rejects reads
+    # that aren't that gene at all (betL vs betT/caiT) but not a close
+    # paralog's read, which carries the same domain and passes. Flagging
+    # from "precision_panel", which adds paralog confusion (fp_cross), would
+    # cascade families like opuBA/ktrA where it costs HMM time and recall
+    # without resolving anything.
     diamond_precision = {
-        r["family"]: r["precision"] for r in summary_rows if r["method"] == "diamond"
+        r["family"]: r[precision_column] for r in summary_rows if r["method"] == "diamond"
     }
     hmm_threshold = {
         r["family"]: r["best_threshold"] for r in best_threshold_rows if r["method"] == "hmm"
@@ -345,6 +519,7 @@ def build_profile_cascade_config(
         rows.append({
             "family": family,
             "diamond_precision": precision_val,
+            "precision_metric": precision_column,
             "needs_cascade_check": "yes" if needs_cascade else "no",
             "hmm_short_read_threshold": hmm_threshold.get(family, "") if needs_cascade else "",
         })
@@ -360,12 +535,19 @@ def main() -> None:
                      help="Where to write profile_cascade.tsv (osmotool's "
                           "profile-mode DIAMOND+HMM cascade config). "
                           "Defaults to <out>/profile_cascade.tsv.")
+    ap.add_argument("--cascade-precision-metric", choices=["precision_panel", "precision"],
+                     default="precision",
+                     help="summary.tsv column the cascade flag is decided on: "
+                          "precision (own hard negatives; default, what the "
+                          "cascade's same-family HMM check can fix) or "
+                          "precision_panel (also other panel genes' reads).")
     ap.add_argument("--cascade-precision-threshold", type=float, default=0.95,
                      help="Families with DIAMOND precision below this are "
                           "flagged for the profile-mode cascade check.")
     args = ap.parse_args()
 
     families = load_family_names(args.families)
+    groups = load_paralog_groups(args.families)
     args.out.mkdir(parents=True, exist_ok=True)
     truth = load_read_truth(args.results / "reads")
 
@@ -373,19 +555,22 @@ def main() -> None:
     hmm_calls = load_hmm_calls(args.results / "hmm")
 
     summary_rows = []
+    group_rows = []
     best_threshold_rows = []
     length_stratified_rows = []
     background_fpr_rows = []
+    background_by_family_rows = []
     all_curve_stats = {}
 
     if not diamond_calls.empty:
         diamond_merged = label_reads(diamond_calls, truth)
-        summary_rows += summarize(diamond_merged, "diamond", families)
+        summary_rows += summarize(diamond_merged, "diamond", families, groups)
+        group_rows += summarize_groups(diamond_merged, "diamond", families, groups)
         best_threshold_rows += summarize_best_threshold(diamond_merged, "diamond", "bitscore", families)
         length_stratified_rows += summarize_by_length(diamond_merged, "diamond", families)
-        bg_row = summarize_background_fpr(diamond_merged, "diamond")
-        if bg_row:
-            background_fpr_rows.append(bg_row)
+        bg_overall, bg_by_family = summarize_background_fpr(diamond_merged, "diamond")
+        background_fpr_rows += bg_overall
+        background_by_family_rows += bg_by_family
         all_curve_stats["diamond"] = plot_curves(
             diamond_merged, "diamond", "bitscore", args.out, higher_is_better=True)
     else:
@@ -393,12 +578,13 @@ def main() -> None:
 
     if not hmm_calls.empty:
         hmm_merged = label_reads(hmm_calls, truth)
-        summary_rows += summarize(hmm_merged, "hmm", families)
+        summary_rows += summarize(hmm_merged, "hmm", families, groups)
+        group_rows += summarize_groups(hmm_merged, "hmm", families, groups)
         best_threshold_rows += summarize_best_threshold(hmm_merged, "hmm", "bitscore", families)
         length_stratified_rows += summarize_by_length(hmm_merged, "hmm", families)
-        bg_row = summarize_background_fpr(hmm_merged, "hmm")
-        if bg_row:
-            background_fpr_rows.append(bg_row)
+        bg_overall, bg_by_family = summarize_background_fpr(hmm_merged, "hmm")
+        background_fpr_rows += bg_overall
+        background_by_family_rows += bg_by_family
         all_curve_stats["hmm"] = plot_curves(
             hmm_merged, "hmm", "bitscore", args.out, higher_is_better=True)
     else:
@@ -411,6 +597,14 @@ def main() -> None:
             writer.writeheader()
             writer.writerows(summary_rows)
         print(f"Per-family precision/recall/F1 written to {summary_path}")
+
+    if group_rows:
+        group_path = args.out / "summary_by_group.tsv"
+        with open(group_path, "w", newline="") as fh:
+            writer = csv.DictWriter(fh, fieldnames=list(group_rows[0].keys()), delimiter="\t")
+            writer.writeheader()
+            writer.writerows(group_rows)
+        print(f"Per-paralog-group precision/recall/F1 written to {group_path}")
 
     best_threshold_path = args.out / "best_threshold_summary.tsv"
     if best_threshold_rows:
@@ -435,6 +629,14 @@ def main() -> None:
             writer.writeheader()
             writer.writerows(background_fpr_rows)
         print(f"Background false-positive rate written to {background_path}")
+    if background_by_family_rows:
+        by_family_path = args.out / "background_fpr_by_family.tsv"
+        with open(by_family_path, "w", newline="") as fh:
+            writer = csv.DictWriter(fh, fieldnames=list(background_by_family_rows[0].keys()),
+                                    delimiter="\t")
+            writer.writeheader()
+            writer.writerows(background_by_family_rows)
+        print(f"Background false positives by called family written to {by_family_path}")
 
     if all_curve_stats:
         print("\nOverall ROC/PR AUC by method:")
@@ -442,7 +644,8 @@ def main() -> None:
             print(f"  {method}: {stats}")
 
     cascade_rows = build_profile_cascade_config(
-        summary_rows, best_threshold_rows, args.cascade_precision_threshold)
+        summary_rows, best_threshold_rows, args.cascade_precision_threshold,
+        args.cascade_precision_metric)
     if cascade_rows:
         cascade_path = args.cascade_out or (args.out / "profile_cascade.tsv")
         with open(cascade_path, "w", newline="") as fh:
@@ -452,7 +655,7 @@ def main() -> None:
         n_flagged = sum(1 for r in cascade_rows if r["needs_cascade_check"] == "yes")
         print(f"\nProfile-mode DIAMOND+HMM cascade config written to {cascade_path} "
               f"({n_flagged}/{len(cascade_rows)} families flagged, "
-              f"precision threshold {args.cascade_precision_threshold})")
+              f"{args.cascade_precision_metric} < {args.cascade_precision_threshold})")
 
 
 if __name__ == "__main__":

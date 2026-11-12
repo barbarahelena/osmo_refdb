@@ -21,20 +21,28 @@ Output: refs/<family>.positive.faa
                                             06_calibrate_cutoffs.py. DIAMOND
                                             calibration and the benchmark's
                                             own ground truth keep using the
-                                            main negative.faa above)
+                                            main negative.faa above, split
+                                            by 03_split_train_test.py)
         refs/<family>.positive.domains.tsv, refs/<family>.negative.domains.tsv
                                             (fusion_partner families only)
         refs/<famA>_<famB>.dedicated_fusion_fetch.faa
                                             (declared fusion_partner pairs
                                             only -- see fetch_fusion_pair_
                                             candidates)
+        refs/<decoy>.hmm_decoy.raw.faa      (families.yaml top-level
+                                            `hmm_decoys` entries; built into
+                                            HMMs by 05b_build_hmm_decoys.py)
         refs/manifest.tsv
 """
 
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 import csv
+import hashlib
+import json
+import os
 import statistics
 import random
 import re
@@ -51,6 +59,57 @@ ACCESSION_BATCH_SIZE = 100   # UniProt REST hard-caps OR queries at 100 conditio
                               # conditions in query. Maximum allowed is 100." for 200) -- not a URL-length limit
 SLEEP_BETWEEN_PAGES = 0.5
 FETCH_RANDOM_SEED = 42
+RETRY_ATTEMPTS = 8            # per request, for transient failures only
+RETRY_BACKOFF_SECONDS = 5     # doubled after each failed attempt ...
+RETRY_BACKOFF_MAX = 300       # ... capped here: ~10 min total wait before giving up.
+                              # Sized for UniProt load spikes, not just blips: on
+                              # 2026-11-04 the accession-sorted listing of a ~38k-entry
+                              # Pfam family (PF00749) returned 503 from UniProt's ~60 s
+                              # server-side timeout for several minutes in a row, while
+                              # small queries still answered in <1 s.
+RETRY_STATUS = {429, 500, 502, 503, 504}
+
+# Capped-fetch sampling (see resolve_accessions).
+FULL_LIST_MAX = 2_000_000     # list every accession up to this population size
+LIST_SLEEP = 0.2              # between pages of an accession-only listing (~0.5 s/page itself)
+STRATA_TARGET = 50            # split a year stratum by length once it holds > total/STRATA_TARGET
+LENGTH_BINS = [(1, 100), (101, 200), (201, 350), (351, 600), (601, None)]
+FIRST_YEAR = 1986             # first UniProtKB/Swiss-Prot entries
+COUNT_WORKERS = 4             # concurrent count queries; big-stratum counts take up to ~30 s
+DEFAULT_CACHE_DIR = Path(__file__).resolve().parent.parent / "cache" / "uniprot"
+
+# Set by main(): accession lists and strata are cached per UniProt release,
+# since a release is the only unit within which a population is fixed.
+CACHE_DIR: Path | None = None
+UNIPROT_RELEASE: str | None = None
+
+
+def get_with_retry(url: str, **kwargs) -> requests.Response:
+    """requests.get with retry + exponential backoff on transient failures
+    (connection errors, timeouts, HTTP 429/5xx). Anything else -- or a
+    transient failure that outlasts every retry -- raises.
+
+    Motivating bug (2026-11-04, markers.yaml build): one transient failure
+    mid-fetch was caught by fetch_set's blanket RequestException handler,
+    which returned an empty set; main() then wrote a 0-byte
+    tsaD.positive.faa and the build carried on with that family silently
+    missing."""
+    delay = RETRY_BACKOFF_SECONDS
+    for attempt in range(1, RETRY_ATTEMPTS + 1):
+        try:
+            r = requests.get(url, **kwargs)
+            if r.status_code not in RETRY_STATUS:
+                r.raise_for_status()
+                return r
+            err: Exception = requests.HTTPError(f"HTTP {r.status_code}", response=r)
+        except (requests.ConnectionError, requests.Timeout) as e:
+            err = e
+        if attempt == RETRY_ATTEMPTS:
+            raise err
+        print(f"  transient UniProt error ({err}); retry {attempt}/{RETRY_ATTEMPTS - 1} in {delay}s")
+        time.sleep(delay)
+        delay = min(delay * 2, RETRY_BACKOFF_MAX)
+    raise AssertionError("unreachable")
 
 
 def next_page_url(link_header: str) -> str | None:
@@ -72,6 +131,13 @@ def load_families(path: Path) -> list[dict]:
     with open(path) as fh:
         data = yaml.safe_load(fh)
     return data["families"]
+
+
+def load_hmm_decoys(path: Path) -> list[dict]:
+    """families.yaml's optional top-level `hmm_decoys` list (see its header)."""
+    with open(path) as fh:
+        data = yaml.safe_load(fh)
+    return data.get("hmm_decoys") or []
 
 
 def get_uniprot_release() -> str:
@@ -101,7 +167,7 @@ def fetch_all_sequences(query: str) -> str:
     page = 1
 
     while url:
-        r = requests.get(url, params=params if page == 1 else None, timeout=60)
+        r = get_with_retry(url, params=params if page == 1 else None, timeout=60)
         r.raise_for_status()
         all_fasta.append(r.text)
 
@@ -113,7 +179,9 @@ def fetch_all_sequences(query: str) -> str:
     return "".join(all_fasta)
 
 
-def fetch_all_accessions(query: str, sort: str | None = None, stop_after: int | None = None) -> list[str]:
+def fetch_all_accessions(query: str, sort: str | None = None, stop_after: int | None = None,
+                         sleep: float = SLEEP_BETWEEN_PAGES, progress_every: int = 0,
+                         plain_list: bool = False) -> list[str]:
     """Paginate through matching accessions (lightweight: accession field
     only, no sequence data). With stop_after=None, fetches the ENTIRE
     population -- used as the shared basis for both the FASTA and (for
@@ -121,7 +189,13 @@ def fetch_all_accessions(query: str, sort: str | None = None, stop_after: int | 
     the same sequences, for queries small enough that's practical. With
     stop_after set, stops once at least that many accessions are
     collected -- see resolve_accessions() for why/when that matters."""
-    params = {"query": query, "format": "tsv", "fields": "accession", "size": BATCH_SIZE}
+    # plain_list: format=list (one accession per line, no header) answers
+    # several times faster than tsv+fields (~0.5 vs ~4.5 s per 500, measured
+    # 2026-11-04), which matters when listing a whole population.
+    if plain_list:
+        params = {"query": query, "format": "list", "size": BATCH_SIZE}
+    else:
+        params = {"query": query, "format": "tsv", "fields": "accession", "size": BATCH_SIZE}
     if sort:
         params["sort"] = sort
     accessions: list[str] = []
@@ -129,17 +203,20 @@ def fetch_all_accessions(query: str, sort: str | None = None, stop_after: int | 
     page = 1
 
     while url:
-        r = requests.get(url, params=params if page == 1 else None, timeout=60)
+        r = get_with_retry(url, params=params if page == 1 else None, timeout=60)
         r.raise_for_status()
-        accessions.extend(line for line in r.text.strip().split("\n")[1:] if line)
+        lines = r.text.strip().split("\n")
+        accessions.extend(line for line in (lines if plain_list else lines[1:]) if line)
 
         if stop_after is not None and len(accessions) >= stop_after:
             break
 
+        if progress_every and page % progress_every == 0:
+            print(f"    ... {len(accessions):,} accessions listed", flush=True)
         url = next_page_url(r.headers.get("Link", ""))
         page += 1
         if url:
-            time.sleep(SLEEP_BETWEEN_PAGES)
+            time.sleep(sleep)
 
     return accessions
 
@@ -152,7 +229,7 @@ def fetch_fasta_by_accessions(accessions: list[str]) -> str:
     for i in range(0, len(accessions), ACCESSION_BATCH_SIZE):
         batch = accessions[i:i + ACCESSION_BATCH_SIZE]
         query = "accession:(" + " OR ".join(batch) + ")"
-        r = requests.get(UNIPROT_API, params={"query": query, "format": "fasta", "size": ACCESSION_BATCH_SIZE},
+        r = get_with_retry(UNIPROT_API, params={"query": query, "format": "fasta", "size": ACCESSION_BATCH_SIZE},
                           timeout=60)
         r.raise_for_status()
         chunks.append(r.text)
@@ -161,46 +238,181 @@ def fetch_fasta_by_accessions(accessions: list[str]) -> str:
     return "".join(chunks)
 
 
-OVERSAMPLE_FACTOR = 5   # how many candidates to page through per accession actually wanted, before sampling
+OVERSAMPLE_FACTOR = 5   # stratified path: candidates per accession wanted, within one stratum
+
+
+def count_results(query: str) -> int:
+    """Population size of a query (X-Total-Results on a size=0 search)."""
+    r = get_with_retry(UNIPROT_API, params={"query": query, "size": 0}, timeout=180)
+    return int(r.headers["X-Total-Results"])
+
+
+def _cache_path(query: str, suffix: str) -> Path | None:
+    """Per-release cache file for a query, or None when caching is off or
+    the release is unknown (a cache keyed on "unknown" could silently
+    serve a stale population after UniProt updates)."""
+    if CACHE_DIR is None or not UNIPROT_RELEASE or UNIPROT_RELEASE == "unknown":
+        return None
+    digest = hashlib.sha256(query.encode()).hexdigest()[:20]
+    return CACHE_DIR / UNIPROT_RELEASE / f"{digest}.{suffix}"
+
+
+def _write_atomic(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + f".tmp{os.getpid()}")
+    tmp.write_text(text)
+    tmp.replace(path)
+
+
+def list_all_accessions(query: str) -> list[str]:
+    """Every accession matching query, sorted and deduplicated, cached per
+    UniProt release. Unsorted cursor pagination of format=list (~0.5 s per
+    500): asking
+    UniProt to sort a large result set is what times out (see RETRY_*),
+    so sorting happens here."""
+    path = _cache_path(query, "accessions.txt")
+    if path is not None and path.exists():
+        lines = path.read_text().splitlines()
+        if lines and lines[0] == f"# query: {query}":
+            accessions = [line for line in lines[1:] if line and not line.startswith("#")]
+            print(f"  cached accession list ({UNIPROT_RELEASE}): {len(accessions):,}")
+            return accessions
+    expected = count_results(query)
+    print(f"  listing all {expected:,} matching accessions (cached afterwards)...", flush=True)
+    t0 = time.time()
+    accessions = sorted(set(fetch_all_accessions(query, sleep=LIST_SLEEP, progress_every=200,
+                                                    plain_list=True)))
+    print(f"  listed {len(accessions):,} accessions in {time.time() - t0:.0f}s")
+    if len(accessions) != expected:
+        print(f"  WARNING: listed {len(accessions):,} accessions but UniProt reported "
+              f"{expected:,} -- not caching this list")
+        return accessions
+    if path is not None:
+        _write_atomic(path, f"# query: {query}\n# release: {UNIPROT_RELEASE}\n"
+                            + "\n".join(accessions) + "\n")
+    return accessions
+
+
+def _length_clause(lo: int, hi: int | None) -> str:
+    return f"length:[{lo} TO {hi if hi is not None else '*'}]"
+
+
+def _count_many(queries: list[str]) -> list[int]:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=COUNT_WORKERS) as pool:
+        return list(pool.map(count_results, queries))
+
+
+def _build_strata(query: str, total: int) -> list[dict]:
+    """Partition a population into creation-year strata, splitting any year
+    holding more than total/STRATA_TARGET into LENGTH_BINS. Strata are
+    disjoint and exhaustive (checked: the counts must sum to total)."""
+    years = range(FIRST_YEAR, date.today().year + 1)
+    year_queries = [f"({query}) AND date_created:[{y}-01-01 TO {y}-12-31]" for y in years]
+    print(f"  counting {len(year_queries)} creation-year strata...", flush=True)
+    year_counts = _count_many(year_queries)
+    strata = []
+    split_queries = []
+    threshold = total / STRATA_TARGET
+    for yq, c in zip(year_queries, year_counts):
+        if c == 0:
+            continue
+        if c > threshold:
+            split_queries.extend(f"{yq} AND {_length_clause(lo, hi)}" for lo, hi in LENGTH_BINS)
+        else:
+            strata.append({"query": yq, "count": c})
+    if split_queries:
+        print(f"  counting {len(split_queries)} year x length strata...", flush=True)
+        for q, c in zip(split_queries, _count_many(split_queries)):
+            if c:
+                strata.append({"query": q, "count": c})
+    n = sum(st["count"] for st in strata)
+    if n != total:
+        raise SystemExit(f"ERROR: strata for ({query}) sum to {n:,}, not {total:,}; "
+                         f"the population changed mid-count or a stratum query is wrong")
+    return strata
+
+
+def _allocate(n: int, counts: list[int]) -> list[int]:
+    """Largest-remainder proportional allocation of n draws across strata."""
+    total = sum(counts)
+    exact = [n * c / total for c in counts]
+    alloc = [int(x) for x in exact]
+    order = sorted(range(len(counts)), key=lambda i: (exact[i] - alloc[i], counts[i]), reverse=True)
+    for i in order[:n - sum(alloc)]:
+        alloc[i] += 1
+    return alloc
+
+
+def stratified_accessions(query: str, total: int, max_seqs: int, rng: random.Random) -> list[str]:
+    """Sample for a population too large to list (> FULL_LIST_MAX): draws
+    are allocated across creation-year (x length) strata in proportion to
+    their size, then taken at random from the first OVERSAMPLE_FACTOR x
+    allocation accessions of each stratum (at least one 500-entry page).
+    Approximate: within a stratum the candidates are still the lowest
+    accessions, i.e. the earliest-integrated entries of that year and
+    length band. Strata counts and candidate lists are cached per release."""
+    path = _cache_path(query, "strata.json")
+    cache = None
+    if path is not None and path.exists():
+        cache = json.loads(path.read_text())
+        if cache.get("query") != query or cache.get("total") != total:
+            cache = None
+    if cache is None:
+        cache = {"query": query, "total": total, "strata": _build_strata(query, total)}
+    strata = cache["strata"]
+    alloc = _allocate(max_seqs, [st["count"] for st in strata])
+    print(f"  stratified sample: {max_seqs} draws over {sum(a > 0 for a in alloc)} of "
+          f"{len(strata)} strata (population {total:,})", flush=True)
+    picked: list[str] = []
+    for st, n in zip(strata, alloc):
+        if n == 0:
+            continue
+        want = n * OVERSAMPLE_FACTOR
+        if len(st.get("candidates", [])) < min(want, st["count"]):
+            st["candidates"] = fetch_all_accessions(st["query"], sort="accession asc",
+                                                    stop_after=want, plain_list=True)
+        candidates = st["candidates"]
+        picked.extend(rng.sample(candidates, n) if len(candidates) > n else candidates)
+    if path is not None:
+        _write_atomic(path, json.dumps(cache))
+    return picked
 
 
 def resolve_accessions(query: str, max_seqs: int | None, rng: random.Random) -> list[str]:
     """All matching accessions for query, or -- if max_seqs is set -- a
-    random sample of that size drawn from a bounded oversample.
+    random sample of max_seqs.
 
-    UniProt's default result order (no explicit sort param) is NOT
-    representative: it's heavily biased toward reviewed/well-studied model
-    organisms -- confirmed directly (a plain cspA-style Pfam query put E.
-    coli/B. subtilis in 8 of its first 10 hits). Simply stopping pagination
-    early once max_seqs results have been SEEN (the original approach here)
-    silently inherited that bias, which would undercut exactly the
-    "diverse gut taxa" goal a capped family like cspA exists for -- and,
-    since every family's negative fetch is capped by --max-negative
-    (default 1000) too, was quietly affecting hard-negative diversity
-    panel-wide, not just cspA's positives.
+    UniProt's default result order is heavily biased toward reviewed,
+    well-studied model organisms (a plain cspA-style Pfam query put E.
+    coli/B. subtilis in 8 of its first 10 hits), so the first N results are
+    not a sample. Until 2026-11-04 this paged through `sort=accession asc`
+    results until 5 x max_seqs were collected and sampled from those. That
+    is a sample of the lowest accessions, not of the population: for ectA's
+    negative pool (~320k) it drew 1000 of the first 5000, and for the
+    random-background pools of mrpB/mrpE/mrpF/mrpG (~75.5 million bacterial
+    proteins each) 1000 of the first 5000 of 75 million.
 
-    Enumerating the ENTIRE population first (the first fix attempted here)
-    is unbiased but was found to be impractically slow for a broad Pfam
-    family's negative pool: ectA's alone (PF00583) has 311,116 UniProt
-    members, which at 500 accessions/page with rate-limit-friendly
-    pagination is 15-25+ minutes just to LIST -- before any sequences are
-    even fetched -- multiplied across every broad-domain family in the
-    panel. Confirmed via direct testing that `sort=accession asc` alone
-    (no exhaustive enumeration needed) already fixes the actual bias
-    cheaply: a 200-accession sample under that sort spanned dozens of
-    genera with no single genus over 12/200, vastly better than the
-    default order's 8/10 in two species, without needing to know the
-    population size at all. So: page through accession-sorted results
-    until OVERSAMPLE_FACTOR * max_seqs candidates are collected (bounded,
-    cheap, independent of true population size), then randomly sample
-    max_seqs from that oversample -- unbiased order + genuine random draw,
-    without ever needing to enumerate a 300k-member pool in full."""
+    Now:
+      * population <= FULL_LIST_MAX (every family pool except those four):
+        list every accession once per UniProt release (cached under
+        CACHE_DIR/<release>/), then draw a uniform random sample. Exact.
+        The first listing of the whole panel takes on the order of an hour;
+        later builds against the same release reuse the cache.
+      * larger populations: proportional stratified sample by creation year
+        x length (see stratified_accessions). Listing 75 million accessions
+        at ~1,000/s is not practical, and UniProt supports no wildcard or
+        range queries on accession, so this is the closest cheap
+        approximation.
+    """
     if max_seqs is None:
         return fetch_all_accessions(query)
-    accessions = fetch_all_accessions(query, sort="accession asc", stop_after=max_seqs * OVERSAMPLE_FACTOR)
-    if len(accessions) > max_seqs:
-        accessions = rng.sample(accessions, max_seqs)
-    return accessions
+    total = count_results(query)
+    if total <= FULL_LIST_MAX:
+        population = list_all_accessions(query)
+        if len(population) <= max_seqs:
+            return population
+        return rng.sample(population, max_seqs)
+    return stratified_accessions(query, total, max_seqs, rng)
 
 
 def retag_fasta(fasta_text: str, tag: str) -> str:
@@ -285,8 +497,11 @@ def fetch_set(query: str, tag: str, label: str, max_seqs: int | None = None,
         print(f"  Retrieved: {n} sequences")
         return fasta_retagged, n, accessions
     except requests.RequestException as e:
-        print(f"  ERROR fetching {label}: {e}")
-        return "", 0, []
+        # Fatal, not an empty set: get_with_retry has already retried any
+        # transient failure, and silently writing an empty FASTA here is how
+        # a whole family once went missing from a build (see
+        # get_with_retry's docstring).
+        raise SystemExit(f"ERROR fetching {label} ({query}): {e}") from e
 
 
 def fetch_pfam_domains(accessions: list[str]) -> dict[str, list[str]]:
@@ -306,7 +521,7 @@ def fetch_pfam_domains(accessions: list[str]) -> dict[str, list[str]]:
     for i in range(0, len(accessions), ACCESSION_BATCH_SIZE):
         batch = accessions[i:i + ACCESSION_BATCH_SIZE]
         query = "accession:(" + " OR ".join(batch) + ")"
-        r = requests.get(UNIPROT_API,
+        r = get_with_retry(UNIPROT_API,
                           params={"query": query, "format": "tsv", "fields": "accession,xref_pfam",
                                   "size": ACCESSION_BATCH_SIZE},
                           timeout=60)
@@ -557,8 +772,17 @@ def main() -> None:
     ap.add_argument("--out", type=Path, default=Path("refs"))
     ap.add_argument("--max-positive", type=int, default=None,
                     help="Cap on number of positive sequences fetched per family.")
-    ap.add_argument("--max-negative", type=int, default=1000,
-                    help="Cap on number of hard-negative sequences fetched per family.")
+    # 2000 since 2026-11-06 (was 1000): 03_split_train_test.py now halves
+    # each negative pool into calibration (train) and benchmark (test), so
+    # 2000 keeps the calibration half about as large as v8's whole pool.
+    ap.add_argument("--max-negative", type=int, default=2000,
+                    help="Cap on number of hard-negative sequences fetched per family "
+                         "(before purity/length QC, CD-HIT and the calibration/benchmark split).")
+    ap.add_argument("--cache-dir", type=Path, default=DEFAULT_CACHE_DIR,
+                    help="Per-UniProt-release cache of accession lists and strata "
+                         "for capped fetches (default: <repo>/cache/uniprot).")
+    ap.add_argument("--no-cache", action="store_true",
+                    help="Re-list every capped population instead of using the cache.")
     args = ap.parse_args()
 
     families = load_families(args.families)
@@ -569,6 +793,11 @@ def main() -> None:
     print("Fetching UniProt release info...")
     uniprot_release = get_uniprot_release()
     print(f"UniProt release: {uniprot_release}")
+    global CACHE_DIR, UNIPROT_RELEASE
+    UNIPROT_RELEASE = uniprot_release
+    CACHE_DIR = None if args.no_cache else args.cache_dir
+    if CACHE_DIR is not None and uniprot_release == "unknown":
+        print("WARNING: UniProt release unknown -- sampling caches disabled for this run")
     print(f"Fetch date:      {fetch_date}\n")
 
     manifest_rows = []
@@ -623,6 +852,9 @@ def main() -> None:
         pos_fasta, n_pos, pos_accessions = fetch_set(
             pos_query, name, "positive", max_seqs=max_pos,
             rng=random.Random(f"{FETCH_RANDOM_SEED}:{name}:positive"))
+        if n_pos == 0:
+            raise SystemExit(f"ERROR: [{name}] positive query returned no sequences -- a family "
+                             f"with no positives can't be built; fix its positive_query")
         (args.out / f"{name}.positive.faa").write_text(pos_fasta)
         n_pos_orgs, n_pos_genera = diversity_stats(pos_fasta)
         print(f"  Diversity: {n_pos_orgs} organisms / {n_pos_genera} genera")
@@ -720,6 +952,21 @@ def main() -> None:
     print("Fetching dedicated fusion-pair candidates (comprehensive, uncapped)...")
     fetch_fusion_pair_candidates(families, args.out)
     print()
+
+    # HMM decoys: models of a confuser class that compete in osmotool
+    # annotate's best-hit contest and are then dropped from output (see
+    # 05b_build_hmm_decoys.py). Same seeded, capped sampling as the
+    # family fetches above.
+    for decoy in load_hmm_decoys(args.families):
+        dname = decoy["name"]
+        print(f"[{dname}] (HMM decoy)")
+        dec_fasta, n_dec, _ = fetch_set(
+            decoy["query"], dname, "HMM decoy", max_seqs=decoy.get("max_seqs", 1500),
+            rng=random.Random(f"{FETCH_RANDOM_SEED}:{dname}:hmm_decoy"))
+        if n_dec == 0:
+            raise SystemExit(f"ERROR: [{dname}] HMM decoy query returned no sequences")
+        (args.out / f"{dname}.hmm_decoy.raw.faa").write_text(dec_fasta)
+        print()
 
     manifest_path = args.out / "manifest.tsv"
     with open(manifest_path, "w", newline="") as fh:

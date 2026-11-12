@@ -6,7 +6,8 @@ hard negatives, for benchmarking DIAMOND vs HMM.
 Steps:
   1. Load each family's held-out positive test set (refs/<family>.positive.test.faa,
      produced upstream by 03_split_train_test.py so it was never used to
-     build the HMM or DIAMOND db) and hard-negative set (refs/<family>.negative.faa).
+     build the HMM or DIAMOND db) and held-out hard-negative set
+     (refs/<family>.negative.test.faa, never used for cutoff calibration).
   2. Optionally mix in real background metagenome reads (--background) that
      contain no known osmoadaptation genes, to estimate a realistic
      false-positive rate in community context.
@@ -44,6 +45,8 @@ from pathlib import Path
 import yaml
 
 RANDOM_SEED = 42
+RANDOM_BG_FAMILY = "random_bg"          # must match 01f / 11
+RANDOM_BG_FASTA = "random_background.faa"
 FLANK_LEN = 300  # bp of random flanking DNA on each side of the CDS
 
 
@@ -51,12 +54,6 @@ def load_family_names(path: Path) -> list[str]:
     with open(path) as fh:
         data = yaml.safe_load(fh)
     return [fam["name"] for fam in data["families"]]
-
-
-def load_decoy_family_names(path: Path) -> set[str]:
-    with open(path) as fh:
-        data = yaml.safe_load(fh)
-    return {fam["name"] for fam in data["families"] if fam.get("decoy_from_negatives")}
 
 
 def parse_fasta(path: Path) -> list[tuple[str, str]]:
@@ -160,7 +157,6 @@ def main() -> None:
 
     rng = random.Random(RANDOM_SEED)
     families = load_family_names(args.families)
-    decoy_families = load_decoy_family_names(args.families)
     args.out.mkdir(parents=True, exist_ok=True)
     read_lengths = ([int(x) for x in args.read_lengths.split(",")]
                      if args.read_lengths else None)
@@ -170,72 +166,84 @@ def main() -> None:
     simulator = which_simulator()
 
     truth_rows = []
+    jobs: list[tuple[str, str, str]] = []
 
     for family in families:
-        # Decoy families (families.yaml: decoy_from_negatives) ship part of
-        # their negative pool into the searchable DIAMOND db as decoy refs
-        # (08a_build_decoy_refs.py, from negative.train.faa) -- simulating
-        # benchmark negative reads from that same pool would let a read
-        # trivially "recognize" its own literal source sequence sitting in
-        # the db, inflating precision rather than testing genuine
-        # discrimination. Use the disjoint negative.test.faa split instead.
-        # Non-decoy families are unaffected (their negatives are never in
-        # the db), so they keep using the full negative.faa as before.
-        neg_fname = (f"{family}.negative.test.faa" if family in decoy_families
-                     else f"{family}.negative.faa")
-        for label, fname in (("positive", f"{family}.positive.test.faa"),
-                              ("negative", neg_fname)):
-            records = parse_fasta(args.refs / fname)
-            if not records:
-                continue
+        # Benchmark negatives come from the held-out negative.test split
+        # (03_split_train_test.py), for every family: negative.train sets the
+        # HMM/DIAMOND cutoffs (05/06, 08b) and, for decoy families, becomes
+        # the decoy refs in the DIAMOND db (08a). Simulating from it would
+        # score reads against thresholds -- or literal db entries -- built
+        # from their own source sequences. A family too small to split falls
+        # back to the full negative.faa.
+        neg_fname = f"{family}.negative.test.faa"
+        if not (args.refs / neg_fname).exists():
+            neg_fname = f"{family}.negative.faa"
+            if (args.refs / neg_fname).exists():
+                print(f"[{family}] WARNING: no negative.test split, simulating "
+                      f"benchmark negatives from the full negative.faa")
+        jobs += [(family, "positive", f"{family}.positive.test.faa"),
+                 (family, "negative", neg_fname)]
 
-            rng.shuffle(records)
-            held_out = records  # positive.test.faa is already held-out;
-                                 # negatives use all hard negatives (or, for
-                                 # decoy families, the held-out negative.test
-                                 # split disjoint from what became decoys)
+    # Shared random bacterial background (01f_build_random_background.py):
+    # unrelated proteins, scored in 11_compute_metrics.py as off-target
+    # false positives per family. Appended last so every family's rng draws
+    # above are identical whether or not the background exists.
+    if (args.refs / RANDOM_BG_FASTA).exists():
+        jobs.append((RANDOM_BG_FAMILY, "negative", RANDOM_BG_FASTA))
+    else:
+        print(f"NOTE: no {RANDOM_BG_FASTA} in {args.refs} -- benchmark has no "
+              f"random background (run 01f_build_random_background.py)")
 
-            genome_fasta = genome_dir / f"{family}.{label}.fasta"
-            with open(genome_fasta, "w") as fh:
-                for header, protein in held_out:
-                    context = build_genomic_context(protein, rng)
-                    fh.write(f">{header}\n{context}\n")
-                    truth_rows.append({
-                        "source_header": header,
-                        "family": family,
-                        "label": label,
-                    })
+    for family, label, fname in jobs:
+        records = parse_fasta(args.refs / fname)
+        if not records:
+            continue
 
-            n_reads = len(held_out) * args.reads_per_sequence
+        rng.shuffle(records)
+        held_out = records  # both files are already held-out splits
 
-            if read_lengths:
-                # Exact length control needed for stratification -- wgsim
-                # respects -1/-2 exactly, iss's named models don't let you
-                # dial in an arbitrary bp length. Fresh seed per length (not
-                # just per family/label) so multiple lengths of the same
-                # sample don't draw identical read starting positions.
-                for length in read_lengths:
-                    out_prefix = args.out / f"{family}.{label}.rl{length}"
-                    sim_seed = rng.randint(0, 2**31 - 1)
-                    print(f"[{family}/{label}] {len(held_out)} sequences -> "
-                          f"~{n_reads} simulated read pairs (wgsim, {length}bp, seed={sim_seed})")
-                    simulate_with_wgsim(genome_fasta, out_prefix, n_reads, sim_seed, read_length=length)
-            else:
-                out_prefix = args.out / f"{family}.{label}"
-                # Deterministic per-(family, label) seed, drawn from the
-                # module's own seeded rng -- reproducible given the same
-                # RANDOM_SEED and families.yaml iteration order, without
-                # wgsim/iss's own internal RNGs (which neither tool seeds
-                # by default) silently making every run's actual simulated
-                # reads different even when the held-out input sequences
-                # are identical.
+        genome_fasta = genome_dir / f"{family}.{label}.fasta"
+        with open(genome_fasta, "w") as fh:
+            for header, protein in held_out:
+                context = build_genomic_context(protein, rng)
+                fh.write(f">{header}\n{context}\n")
+                truth_rows.append({
+                    "source_header": header,
+                    "family": family,
+                    "label": label,
+                })
+
+        n_reads = len(held_out) * args.reads_per_sequence
+
+        if read_lengths:
+            # Exact length control needed for stratification -- wgsim
+            # respects -1/-2 exactly, iss's named models don't let you
+            # dial in an arbitrary bp length. Fresh seed per length (not
+            # just per family/label) so multiple lengths of the same
+            # sample don't draw identical read starting positions.
+            for length in read_lengths:
+                out_prefix = args.out / f"{family}.{label}.rl{length}"
                 sim_seed = rng.randint(0, 2**31 - 1)
                 print(f"[{family}/{label}] {len(held_out)} sequences -> "
-                      f"~{n_reads} simulated read pairs ({simulator}, seed={sim_seed})")
-                if simulator == "iss":
-                    simulate_with_iss(genome_fasta, out_prefix, n_reads, sim_seed)
-                else:
-                    simulate_with_wgsim(genome_fasta, out_prefix, n_reads, sim_seed)
+                      f"~{n_reads} simulated read pairs (wgsim, {length}bp, seed={sim_seed})")
+                simulate_with_wgsim(genome_fasta, out_prefix, n_reads, sim_seed, read_length=length)
+        else:
+            out_prefix = args.out / f"{family}.{label}"
+            # Deterministic per-(family, label) seed, drawn from the
+            # module's own seeded rng -- reproducible given the same
+            # RANDOM_SEED and families.yaml iteration order, without
+            # wgsim/iss's own internal RNGs (which neither tool seeds
+            # by default) silently making every run's actual simulated
+            # reads different even when the held-out input sequences
+            # are identical.
+            sim_seed = rng.randint(0, 2**31 - 1)
+            print(f"[{family}/{label}] {len(held_out)} sequences -> "
+                  f"~{n_reads} simulated read pairs ({simulator}, seed={sim_seed})")
+            if simulator == "iss":
+                simulate_with_iss(genome_fasta, out_prefix, n_reads, sim_seed)
+            else:
+                simulate_with_wgsim(genome_fasta, out_prefix, n_reads, sim_seed)
 
     if args.background:
         bg_r1, bg_r2 = args.background

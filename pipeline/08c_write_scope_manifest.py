@@ -17,6 +17,9 @@ families.yaml can mark a family:
                                mislabeled call, not to be counted as a gene
                                family themselves.
 
+and its top-level `hmm_decoys` list names HMM decoy models (see
+05b_build_hmm_decoys.py), excluded from both modes the same way.
+
 Both kinds of family are still built into the combined DIAMOND/HMM
 databases as normal -- they're harmless (or actively useful, for decoys)
 to search against. This writes the flat, dependency-free lists `osmotool
@@ -50,6 +53,7 @@ def main() -> None:
 
     annotate_only = [fam["name"] for fam in data["families"] if fam.get("scope") == "annotate_only"]
     decoy_labels = [f"{fam['name']}_decoy" for fam in data["families"] if fam.get("decoy_from_negatives")]
+    decoy_labels += [d["name"] for d in data.get("hmm_decoys") or []]
 
     profile_excluded = annotate_only + decoy_labels
     annotate_excluded = decoy_labels

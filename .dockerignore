@@ -5,3 +5,4 @@ __pycache__/
 .DS_Store
 osmotool_src/
 extra_sequences/
+cache/

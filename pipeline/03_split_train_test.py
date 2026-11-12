@@ -8,20 +8,32 @@ Reads refs/<family>.positive.faa and writes:
   refs/<family>.positive.train.faa   (used to build HMM + DIAMOND db)
   refs/<family>.positive.test.faa    (held out, used only for benchmarking)
 
-For families marked `decoy_from_negatives: true` (see
-08a_build_decoy_refs.py), also splits refs/<family>.negative.faa the same
-way, writing refs/<family>.negative.train.faa /
-refs/<family>.negative.test.faa. This matters once negatives can end up
-inside the shipped DIAMOND db as decoys: without a split, the exact same
-sequences used to build a decoy would also be the ones benchmark negative
-reads get simulated from, so a read would trivially "recognize" its own
-literal source sequence sitting in the db rather than genuinely testing
-whether a *different*, unseen paralog gets siphoned away correctly --
-inflated precision, not a real result. Non-decoy families are unaffected:
-their negatives were never added to the searchable db (only used for
-calibration), so this split isn't needed and isn't written for them --
-09_simulate_reads.py keeps drawing from the full negative.faa for those,
-exactly as before.
+Also splits every family's refs/<family>.negative.faa, writing
+refs/<family>.negative.train.faa / refs/<family>.negative.test.faa:
+
+  negative.train -> cutoff calibration (05/06 HMM GA, 08b DIAMOND bitscore)
+                    and, for `decoy_from_negatives` families, the decoy refs
+                    built by 08a_build_decoy_refs.py
+  negative.test  -> benchmark negative reads (09_simulate_reads.py), never
+                    seen by calibration or the db
+
+Before this, only decoy families split their negatives; every other family
+calibrated its cutoffs on the full negative.faa and then simulated its
+benchmark negative reads from that same file. `osmotool profile` applies
+the 08b DIAMOND cutoffs during the benchmark, so DIAMOND precision was
+measured partly on the negatives that had set the cutoff.
+
+Decoy families keep --test-fraction (0.2): their negative.train becomes the
+decoy reference set, so it stays large. Other families use
+--negative-test-fraction (default 0.5): their negative.train only feeds
+calibration, and the benchmark's false-positive estimate needs enough
+negative reads. Families with fewer than MIN_NEG_FOR_SPLIT negatives are not
+split: no split files are written (stale ones are removed), and downstream
+steps fall back to the full negative.faa with a warning, i.e. the old
+behaviour.
+
+Negatives are always split at random, also under --split-mode taxonomy:
+they are other genes, so holding out genera tests nothing extra there.
 
 Two split modes:
   random (default) -- shuffle all sequences and split by test-fraction.
@@ -50,6 +62,7 @@ from pathlib import Path
 import yaml
 
 RANDOM_SEED = 42
+MIN_NEG_FOR_SPLIT = 5
 
 
 def load_family_names(path: Path) -> list[str]:
@@ -141,6 +154,10 @@ def main() -> None:
     ap.add_argument("--refs", required=True, type=Path)
     ap.add_argument("--families", type=Path, default=Path("families.yaml"))
     ap.add_argument("--test-fraction", type=float, default=0.2)
+    ap.add_argument("--negative-test-fraction", type=float, default=0.5,
+                     help="Fraction of each non-decoy family's negatives held "
+                          "out for benchmark reads; the rest calibrates cutoffs. "
+                          "Decoy families use --test-fraction instead.")
     ap.add_argument("--split-mode", choices=["random", "taxonomy"], default="random",
                      help="'taxonomy' holds out whole genera instead of "
                           "individual sequences, to test detection of "
@@ -189,22 +206,34 @@ def main() -> None:
         print(f"[{family}] {len(records)} total -> "
               f"{len(train_records)} train / {len(test_records)} test")
 
-        if family in decoy_families:
-            neg_path = args.refs / f"{family}.negative.faa"
-            neg_records = parse_fasta(neg_path)
-            if len(neg_records) < 5:
-                print(f"[{family}] SKIP negative split: only {len(neg_records)} "
-                      f"negative sequences, too few for a train/test split")
-                continue
-            neg_train, neg_test = split_random(neg_records, args.test_fraction, rng)
-            write_fasta(args.refs / f"{family}.negative.train.faa", neg_train)
-            write_fasta(args.refs / f"{family}.negative.test.faa", neg_test)
-            print(f"[{family}] decoy family: {len(neg_records)} negatives -> "
-                  f"{len(neg_train)} negative.train (decoy refs) / "
-                  f"{len(neg_test)} negative.test (benchmark reads)")
+        # Negatives: every family now, not just decoy families (see module
+        # docstring). Same per-family rng, drawn after the positive split, so
+        # positive splits are unchanged by this and decoy families' negative
+        # splits are byte-identical to before.
+        neg_train_path = args.refs / f"{family}.negative.train.faa"
+        neg_test_path = args.refs / f"{family}.negative.test.faa"
+        neg_records = parse_fasta(args.refs / f"{family}.negative.faa")
+        if len(neg_records) < MIN_NEG_FOR_SPLIT:
+            for stale in (neg_train_path, neg_test_path):
+                stale.unlink(missing_ok=True)
+            print(f"[{family}] WARNING: only {len(neg_records)} negative sequences, "
+                  f"too few to split -- calibration and benchmark will both "
+                  f"use the full negative.faa")
+            continue
+        is_decoy = family in decoy_families
+        neg_fraction = args.test_fraction if is_decoy else args.negative_test_fraction
+        neg_train, neg_test = split_random(neg_records, neg_fraction, rng)
+        write_fasta(neg_train_path, neg_train)
+        write_fasta(neg_test_path, neg_test)
+        role = "decoy refs + calibration" if is_decoy else "calibration"
+        print(f"[{family}] {len(neg_records)} negatives -> "
+              f"{len(neg_train)} negative.train ({role}) / "
+              f"{len(neg_test)} negative.test (benchmark reads)")
 
     print("\nDone. Use *.positive.train.faa to build HMMs/DIAMOND db, "
-          "*.positive.test.faa as held-out benchmark positives.")
+          "*.positive.test.faa as held-out benchmark positives, "
+          "*.negative.train.faa for calibration and *.negative.test.faa "
+          "for benchmark negatives.")
 
 
 if __name__ == "__main__":

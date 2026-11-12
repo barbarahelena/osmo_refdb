@@ -140,7 +140,15 @@ def main() -> None:
         tmp_dir = Path(tmp)
         for family in families:
             pos_test = args.refs / f"{family}.positive.test.faa"
-            neg = args.refs / f"{family}.negative.faa"
+            # negative.train only (03_split_train_test.py): negative.test is
+            # what the benchmark simulates reads from, and osmotool profile
+            # applies this cutoff there, so calibrating on it would let the
+            # benchmark score negatives that set the threshold.
+            neg = args.refs / f"{family}.negative.train.faa"
+            if not neg.exists():
+                neg = args.refs / f"{family}.negative.faa"
+                print(f"[{family}] WARNING: no negative.train split, calibrating on "
+                      f"the full negative.faa (benchmark negatives overlap)")
 
             pos_scores = best_family_restricted_scores(pos_test, db, family, args.threads, tmp_dir)
             neg_scores = best_family_restricted_scores(neg, db, family, args.threads, tmp_dir)
