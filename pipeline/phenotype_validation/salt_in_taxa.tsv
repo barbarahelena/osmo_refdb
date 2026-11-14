@@ -1,0 +1,88 @@
+# salt_in_taxa.tsv -- a priori osmoadaptation strategy assignment.
+#
+# PRE-REGISTERED. Committed before the BacDive harvest; assignments are made
+# from published physiology, never from this project's panel output. Changing a
+# row after panel results are known invalidates the stratum as a negative
+# control, so amendments must be a separate commit with a stated reason.
+#
+# Why this file exists: salt-in organisms hold molar KCl in the cytoplasm and
+# run an acidic, ionic-strength-adapted proteome instead of accumulating
+# organic osmolytes. They therefore sit at MAXIMUM NaCl tolerance with the
+# panel's primary mechanism (compatible-solute synthesis/transport) ABSENT.
+# Left unlabelled they are high-phenotype/low-panel points that damage any
+# monotone model; dropped silently they are cherry-picking. Declared up front
+# they become a negative control -- see README.md for the directional
+# prediction, which is family-specific, NOT "low breadth".
+#
+# CAUTION, name prefixes do not indicate strategy:
+#   - Halomonas is salt-OUT. It is the textbook ectoine producer. Likewise
+#     Chromohalobacter, Halobacillus, Halorhodospira, Halothiobacillus.
+#   - Halophilic METHANOGENS (Methanohalophilus, Methanohalobium) are salt-OUT;
+#     they accumulate betaine. Only class Halobacteria is salt-in among archaea.
+# Anything absent from this file is treated as salt-out.
+#
+# confidence: high   = strategy directly characterised in the literature
+#             medium = assigned from a well-characterised sister taxon
+#
+genus	rank	lineage	strategy	confidence
+Halobacterium	genus	Archaea;Halobacteria	salt_in	high
+Haloferax	genus	Archaea;Halobacteria	salt_in	high
+Halorubrum	genus	Archaea;Halobacteria	salt_in	high
+Haloarcula	genus	Archaea;Halobacteria	salt_in	high
+Natrialba	genus	Archaea;Halobacteria	salt_in	high
+Natronomonas	genus	Archaea;Halobacteria	salt_in	high
+Halococcus	genus	Archaea;Halobacteria	salt_in	high
+Haloterrigena	genus	Archaea;Halobacteria	salt_in	high
+Natrinema	genus	Archaea;Halobacteria	salt_in	high
+Halogeometricum	genus	Archaea;Halobacteria	salt_in	high
+Haloquadratum	genus	Archaea;Halobacteria	salt_in	high
+Halorhabdus	genus	Archaea;Halobacteria	salt_in	high
+Natronococcus	genus	Archaea;Halobacteria	salt_in	high
+Halalkalicoccus	genus	Archaea;Halobacteria	salt_in	medium
+Halobiforma	genus	Archaea;Halobacteria	salt_in	medium
+Haloplanus	genus	Archaea;Halobacteria	salt_in	medium
+Halosimplex	genus	Archaea;Halobacteria	salt_in	medium
+Natronorubrum	genus	Archaea;Halobacteria	salt_in	medium
+Halomicrobium	genus	Archaea;Halobacteria	salt_in	medium
+Halopiger	genus	Archaea;Halobacteria	salt_in	medium
+Halovivax	genus	Archaea;Halobacteria	salt_in	medium
+Natronolimnobius	genus	Archaea;Halobacteria	salt_in	medium
+Haladaptatus	genus	Archaea;Halobacteria	salt_in	medium
+Halostagnicola	genus	Archaea;Halobacteria	salt_in	medium
+Halolamina	genus	Archaea;Halobacteria	salt_in	medium
+Halopenitus	genus	Archaea;Halobacteria	salt_in	medium
+# AMENDMENT 2026-11-06: the list named Halobacteria genera one by one and
+# missed 14 that occur in the BacDive sweep (25 strains). They were found
+# after the full analysis, by checking the family of every archaeal strain
+# labelled salt-out. Assigned from class membership (see the CAUTION note
+# above: within the archaea, class Halobacteria is the salt-in lineage),
+# so confidence is medium.
+Halarchaeum	genus	Archaea;Halobacteria	salt_in	medium
+Haloarchaeobius	genus	Archaea;Halobacteria	salt_in	medium
+Halomicrococcus	genus	Archaea;Halobacteria	salt_in	medium
+Halostella	genus	Archaea;Halobacteria	salt_in	medium
+Natronoarchaeum	genus	Archaea;Halobacteria	salt_in	medium
+Halomicroarcula	genus	Archaea;Halobacteria	salt_in	medium
+Halorientalis	genus	Archaea;Halobacteria	salt_in	medium
+Halobellus	genus	Archaea;Halobacteria	salt_in	medium
+Halogranum	genus	Archaea;Halobacteria	salt_in	medium
+Halopelagius	genus	Archaea;Halobacteria	salt_in	medium
+Halobaculum	genus	Archaea;Halobacteria	salt_in	medium
+Halonotius	genus	Archaea;Halobacteria	salt_in	medium
+Natronobacterium	genus	Archaea;Halobacteria	salt_in	medium
+Saliphagus	genus	Archaea;Halobacteria	salt_in	medium
+Halanaerobium	genus	Bacteria;Haloanaerobiales	salt_in	high
+Halothermothrix	genus	Bacteria;Haloanaerobiales	salt_in	high
+Halobacteroides	genus	Bacteria;Haloanaerobiales	salt_in	high
+Halanaerobacter	genus	Bacteria;Haloanaerobiales	salt_in	high
+Acetohalobium	genus	Bacteria;Haloanaerobiales	salt_in	high
+Halocella	genus	Bacteria;Haloanaerobiales	salt_in	medium
+Halonatronum	genus	Bacteria;Haloanaerobiales	salt_in	medium
+Natroniella	genus	Bacteria;Haloanaerobiales	salt_in	medium
+Sporohalobacter	genus	Bacteria;Haloanaerobiales	salt_in	medium
+Orenia	genus	Bacteria;Haloanaerobiales	salt_in	medium
+Selenihalanaerobacter	genus	Bacteria;Haloanaerobiales	salt_in	medium
+Fuchsiella	genus	Bacteria;Haloanaerobiales	salt_in	medium
+Halarsenatibacter	genus	Bacteria;Haloanaerobiales	salt_in	medium
+Salinibacter	genus	Bacteria;Rhodothermia	salt_in	high
+Salisaeta	genus	Bacteria;Rhodothermia	salt_in	medium
