@@ -2001,6 +2001,43 @@ shifts follow the cutoffs: ktrB 0.43 -> 0.08, betB 0.66 -> 0.34, opuCA
 0.43 -> 0.23, opuBA 0.41 -> 0.55 (opuAA/opuCA's higher cutoffs release
 ATPases to it).
 
+### NaCl-max predictor (`pipeline/nacl_model/`, `13_package_nacl_model.py`)
+
+A model that predicts a strain's BacDive NaCl max from `osmotool annotate`
+output alone, for osmotool to apply to unseen genomes. It is trained on the
+v10 annotation of the 6,264 BacDive salt-out strains. `run_pipeline.sh
+nacl_model v10` trains, explains and packages it into `releases/v10/nacl_model/`.
+
+- **Model and features.** XGBoost regression on 46 features: total_proteins,
+  GC, contig count, and 43 family copy counts.
+  - Systems calls, breadth summaries and genome_mb added nothing in the
+    ablations and were dropped.
+  - genome_mb has a second problem: osmotool counts N's in genome_bp and the
+    training data does not.
+  - The interface is a JSON model plus `feature_schema.json`.
+- **Performance.** Nested CV gives Spearman 0.686, MAE 2.52% NaCl and R²
+  0.49 blocked by genus, and 0.641 / 2.73% / 0.39 blocked by family. That is
+  level with the existing HistGradientBoosting CV and above ridge (0.639).
+  XGBoost was chosen for its built-in TreeSHAP and its portable model file,
+  not for accuracy.
+- **Compressed range.** Predictions are squeezed toward the middle: true
+  ≤1% strains average a 3.1% prediction, true >15% strains 13.2%. The
+  output is a value with an 80% split-conformal interval (coverage 80%
+  genus-blocked, 76% family-blocked) and no tolerance class.
+- **What it weighs.** By SHAP the largest contributors are betL (+),
+  total_proteins (−), kdpA (−), ectA/ectC (+), the trk/ktr K+ uptake genes
+  (+) and the mrp genes (+). The ranking is stable across genus folds (ρ
+  0.92–0.97). The full write-up is `releases/v10/nacl_model/README.md`.
+- **Salt-in strains** are out of domain: median true 29.6%, median
+  prediction 4.9%. A logistic salt-in detector flags them (genus-blocked
+  precision 0.87, recall 0.96).
+- **Parity.** osmotool 0.8.0 run from raw genomes on 20 training strains
+  reproduces the training features exactly.
+- **Reproducibility.** A refit with the same seed is byte-identical.
+- **Integration status.** osmotool support (resolver, `--predict_nacl`,
+  optional xgboost dependency) is not written yet; see
+  `pipeline/nacl_model/README.md`.
+
 ### Status
 
 `releases/v10` is a candidate, not a release: nothing is packaged or
