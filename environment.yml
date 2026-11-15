@@ -24,5 +24,8 @@ dependencies:
       - pandas
       - scikit-learn
       - matplotlib
+      - scipy
+      # NaCl-max model (pipeline/nacl_model/, run_pipeline.sh nacl_model)
+      - xgboost
       - biopython
       - insilicoseq
