@@ -1879,7 +1879,14 @@ tie-break aligned with osmotool's: bitscore, then evalue, then sseqid. 37
 cells differed by a few reads before; the calibration flags and thresholds
 are unchanged by it.) `HMM` samples can run in parallel (`JOBS`).
 
-v10, held-out test reads (osmotool v0.7.0, 112,956 positive reads):
+v10, held-out test reads (112,956 positive reads). First run with osmotool
+v0.7.0, then rerun in full with v0.8.0 after the Dockerfile pin was bumped
+(2026-11-15): simulated reads, cascade config, every metrics table and
+every annotate call are byte-identical between the two versions. The only
+differences are v0.8.0's extra output lines (a zero row for teaA in
+`gene_counts.tsv`, assembly-statistics header lines in annotate's). The
+benchmark passes `--no_markers`: the reads come from single genes, so there
+is no genome to normalise to.
 
 | | DIAMOND alone | DIAMOND + cascade (default) | HMM alone |
 |---|---|---|---|
@@ -2056,5 +2063,4 @@ uploaded. Open decisions:
   0.96) still stands, which argues the v9 cutoff was the better one and
   the F1 sweep is the problem.
 - Still open from before: opuBA; the mrpB DIAMOND cutoff; the PF08886 gshA
-  family; MAFFT reproducibility; Dockerfile pin (image has osmotool
-  v0.7.0, v0.8.0 is out).
+  family; MAFFT reproducibility. (The Dockerfile pin is now v0.8.0.)

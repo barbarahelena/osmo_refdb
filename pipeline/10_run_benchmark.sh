@@ -61,6 +61,14 @@ elif [ ! -s "${RELEASE_DIR}/osmo_refdb.profile_cascade.tsv" ]; then
     exit 1
 fi
 
+# osmotool >= 0.8.0 runs a second DIAMOND pass against <release>/markers/ for
+# copies-per-genome normalisation. The benchmark reads come from single genes,
+# not genomes, so there is nothing to normalise to, and the pass does not
+# change which reads are counted: skip it.
+if osmotool profile --help 2>/dev/null | grep -q -- "--no_markers"; then
+    CASCADE_ARGS+=(--no_markers)
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 mkdir -p "${OUT_DIR}/diamond" "${OUT_DIR}/hmm"
