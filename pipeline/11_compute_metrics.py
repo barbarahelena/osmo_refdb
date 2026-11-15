@@ -130,7 +130,11 @@ def load_diamond_calls(diamond_dir: Path) -> pd.DataFrame:
             "qseqid", "sseqid", "pident", "qcovhsp", "scovhsp", "length", "evalue", "bitscore",
         ][: df.shape[1]]
         # keep only the best (highest-bitscore) hit per read for scoring
-        df = df.sort_values("bitscore", ascending=False).drop_duplicates("qseqid")
+        # same tie-break as osmotool's quantifier.select_best_hits: higher
+        # bitscore, then lower evalue, then lexicographically smallest sseqid
+        df = (df.sort_values(["bitscore", "evalue", "sseqid"],
+                             ascending=[False, True, True], kind="mergesort")
+                .drop_duplicates("qseqid"))
         df["sample"] = sample
         df["family"] = df["sseqid"].str.split("|").str[0]
         # osmotool >= ab3fb9e appends _R1/_R2 to paired read IDs (so two
@@ -173,6 +177,80 @@ def load_hmm_calls(hmm_dir: Path) -> pd.DataFrame:
                     "bitscore": bitscore,
                 })
     return pd.DataFrame(rows)
+
+
+CASCADE_ORF_SUFFIX_RE = re.compile(r"^(.*)_\d+_\d+_\d+$")   # osmotool.functions.ORF_SUFFIX_RE
+
+
+def load_cascade_config(path: Path) -> dict[str, float]:
+    """{family: hmm_short_read_threshold} for needs_cascade_check == yes;
+    same reading as osmotool.functions.load_cascade_config."""
+    cutoffs: dict[str, float] = {}
+    with open(path) as fh:
+        for row in csv.DictReader(fh, delimiter="\t"):
+            if row["needs_cascade_check"] == "yes":
+                cutoffs[row["family"]] = float(row["hmm_short_read_threshold"])
+    return cutoffs
+
+
+def apply_profile_cascade(diamond_calls: pd.DataFrame, diamond_dir: Path,
+                          cutoffs: dict[str, float]) -> pd.DataFrame:
+    """
+    Per-read calls of `osmotool profile` with its default DIAMOND+HMM cascade.
+
+    osmotool reports only per-family counts, so the per-read outcome is
+    rebuilt from what --keep_aln leaves behind: the raw DIAMOND alignments
+    (diamond_calls, one best hit per read) and osmotool's own
+    <sample>.cascade.hmmsearch.tblout. The rule is
+    quantifier.apply_cascade_check's: a read called to a flagged family is
+    kept only if its best raw hmmsearch bitscore against THAT family's HMM
+    reaches the family's threshold; reads on unflagged families pass
+    untouched. verify_cascade_counts() checks the result against the
+    gene_counts.tsv osmotool wrote in the same run.
+    """
+    if diamond_calls.empty or not cutoffs:
+        return diamond_calls.copy()
+    score_rows = []
+    for tblout in diamond_dir.glob("*.cascade.hmmsearch.tblout"):
+        sample = tblout.name.replace(".cascade.hmmsearch.tblout", "")
+        with open(tblout) as fh:
+            for line in fh:
+                if line.startswith("#") or not line.strip():
+                    continue
+                fields = line.split()
+                m = CASCADE_ORF_SUFFIX_RE.match(fields[0])
+                score_rows.append((sample, m.group(1) if m else fields[0],
+                                   fields[2], float(fields[5])))
+    scores = pd.DataFrame(score_rows, columns=["sample", "read_id", "family", "hmm_score"])
+    scores = scores.groupby(["sample", "read_id", "family"], as_index=False)["hmm_score"].max()
+    calls = diamond_calls.merge(scores, on=["sample", "read_id", "family"], how="left")
+    calls["hmm_score"] = calls["hmm_score"].fillna(0.0)
+    threshold = calls["family"].map(cutoffs)
+    keep = threshold.isna() | (calls["hmm_score"] >= threshold)
+    return calls[keep].drop(columns="hmm_score").reset_index(drop=True)
+
+
+def verify_cascade_counts(cascade_calls: pd.DataFrame, diamond_dir: Path) -> None:
+    """Compare the rebuilt per-read cascade calls with osmotool's own
+    gene_counts.tsv (each paired read counts 0.5). Families osmotool drops
+    from its report (profile_excluded_families, decoys) are simply absent
+    there and are skipped. Prints the number of disagreeing cells."""
+    rebuilt = (cascade_calls.groupby(["sample", "family"]).size() * 0.5).to_dict()
+    n_cells = n_bad = 0
+    worst: list[tuple] = []
+    for counts_file in diamond_dir.glob("*.gene_counts.tsv"):
+        sample = counts_file.name.replace(".gene_counts.tsv", "")
+        df = pd.read_csv(counts_file, sep="\t", comment="#")
+        for family, raw in zip(df["gene"], df["raw_count"]):
+            n_cells += 1
+            mine = rebuilt.get((sample, family), 0.0)
+            if abs(mine - raw) > 1e-6:
+                n_bad += 1
+                worst.append((abs(mine - raw), sample, family, raw, mine))
+    print(f"Cascade check: rebuilt per-read calls vs osmotool gene_counts.tsv: "
+          f"{n_cells - n_bad}/{n_cells} sample x family cells agree")
+    for _, sample, family, raw, mine in sorted(worst, reverse=True)[:10]:
+        print(f"  MISMATCH {sample} {family}: osmotool {raw}, rebuilt {mine}")
 
 
 def best_hit_per_read(calls: pd.DataFrame) -> pd.DataFrame:
@@ -535,6 +613,13 @@ def main() -> None:
                      help="Where to write profile_cascade.tsv (osmotool's "
                           "profile-mode DIAMOND+HMM cascade config). "
                           "Defaults to <out>/profile_cascade.tsv.")
+    ap.add_argument("--cascade-config", type=Path, default=None,
+                     help="Benchmark (test-read) mode: an existing "
+                          "profile_cascade.tsv, written earlier from the "
+                          "calibration reads. Adds method 'diamond_cascade' "
+                          "(osmotool profile's default output) to every "
+                          "table, and no cascade config is written from "
+                          "these reads.")
     ap.add_argument("--cascade-precision-metric", choices=["precision_panel", "precision"],
                      default="precision",
                      help="summary.tsv column the cascade flag is decided on: "
@@ -573,6 +658,19 @@ def main() -> None:
         background_by_family_rows += bg_by_family
         all_curve_stats["diamond"] = plot_curves(
             diamond_merged, "diamond", "bitscore", args.out, higher_is_better=True)
+        if args.cascade_config is not None:
+            cutoffs = load_cascade_config(args.cascade_config)
+            cascade_calls = apply_profile_cascade(
+                diamond_calls, args.results / "diamond", cutoffs)
+            verify_cascade_counts(cascade_calls, args.results / "diamond")
+            cascade_merged = label_reads(cascade_calls, truth)
+            method = "diamond_cascade"
+            summary_rows += summarize(cascade_merged, method, families, groups)
+            group_rows += summarize_groups(cascade_merged, method, families, groups)
+            length_stratified_rows += summarize_by_length(cascade_merged, method, families)
+            bg_overall, bg_by_family = summarize_background_fpr(cascade_merged, method)
+            background_fpr_rows += bg_overall
+            background_by_family_rows += bg_by_family
     else:
         print("WARNING: no DIAMOND alignment files found in results/diamond")
 
@@ -642,6 +740,11 @@ def main() -> None:
         print("\nOverall ROC/PR AUC by method:")
         for method, stats in all_curve_stats.items():
             print(f"  {method}: {stats}")
+
+    if args.cascade_config is not None:
+        print(f"\nScored the cascade with {args.cascade_config}; no cascade "
+              f"config written from these reads.")
+        return
 
     cascade_rows = build_profile_cascade_config(
         summary_rows, best_threshold_rows, args.cascade_precision_threshold,

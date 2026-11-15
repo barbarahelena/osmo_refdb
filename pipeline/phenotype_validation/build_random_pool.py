@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Pick the pool of non-osmotic Pfam families for the random-panel baseline.
 
-The pre-registered plan compares the osmo panel against "a size-matched random
+The prespecified plan (README.md, "Plan provenance") compares the osmo panel against "a size-matched random
 panel of 43 non-osmotic families". One random panel is one draw, so instead
 this builds a POOL of families and analyze_extended.py draws many 43-family
 panels from it, giving a null distribution for where the real panel falls.

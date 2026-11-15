@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""Read out the phenotype validation against the pre-registered plan in README.md.
+"""Read out the phenotype validation against the prespecified plan in README.md
+(see its "Plan provenance" section: a plan committed to git before the full
+data were collected, not an externally registered protocol).
 
 Structure follows that plan rather than exploring:
 
@@ -7,7 +9,7 @@ Structure follows that plan rather than exploring:
           BOTH a strain bootstrap and a genus-cluster bootstrap. The cluster
           version is the honest one -- strains of a genus are not independent.
   Set B   within-genus contrast, the only part that controls for ancestry.
-  salt-in pre-registered negative control, with a family-specific prediction
+  salt-in prespecified negative control, with a family-specific prediction
           (K+ uptake present, compatible solutes absent) -- NOT "low breadth".
   power   from a PRE-SPECIFIED effect size. Never from an observed correlation:
           that is circular, and biased upward because a small sample that looks
@@ -26,7 +28,7 @@ import random
 import statistics
 import sys
 
-# Pre-registered family groups for the salt-in prediction (README.md).
+# Prespecified family groups for the salt-in prediction (README.md).
 # Salt-in organisms accumulate molar KCl, so bulk K+ uptake IS their mechanism
 # and should be present; the compatible-solute machinery should not be.
 K_UPTAKE = ['trkA', 'trkH', 'ktrA', 'ktrB', 'ktrD']
@@ -179,7 +181,7 @@ def main():
     genera = [r['genus'] for r in rows]
 
     print('=' * 72)
-    print('SET A -- primary, salt-out strains only (pre-registered)')
+    print('SET A -- primary, salt-out strains only (prespecified)')
     print('=' * 72)
     print(f'n strains : {len(rows)}   n genera : {len(set(genera))}')
     print(f'NaCl max  : {min(y):.1f}-{max(y):.1f} % (median {statistics.median(y):.1f})')
@@ -257,7 +259,7 @@ def main():
 
     print()
     print('=' * 72)
-    print('SALT-IN NEGATIVE CONTROL (pre-registered, family-specific)')
+    print('SALT-IN NEGATIVE CONTROL (prespecified, family-specific)')
     print('=' * 72)
     if not salt_in:
         print('  no salt-in strains present -- needs the targeted /v2/taxon harvest')

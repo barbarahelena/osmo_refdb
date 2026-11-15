@@ -8,7 +8,7 @@ growth 'no' -- an upper bound on true tolerance, which makes the endpoint
 interval-censored rather than a point value.
 
 Also stamps each strain's osmoadaptation strategy from salt_in_taxa.tsv. That
-assignment is pre-registered and taxonomy-based; see README.md.
+assignment is prespecified and taxonomy-based; see README.md.
 """
 from __future__ import annotations
 
@@ -124,7 +124,7 @@ def main():
     print(f'strains with phenotype + genome : {len(rows)}')
     print(f'  quantitative NaCl max         : {n_quant}')
     print(f'  no-growth upper bound         : {sum(1 for r in rows if r["nogrowth_at_pct"] is not None)}')
-    print(f'  salt_in (pre-registered)      : {sum(1 for r in rows if r["strategy"] == "salt_in")}')
+    print(f'  salt_in (prespecified list)   : {sum(1 for r in rows if r["strategy"] == "salt_in")}')
     print(f'  archaea                       : {sum(1 for r in rows if r["domain"] == "Archaea")}')
     print(f'  distinct genera               : {len(genera)}')
     print(f'  genera with >=3 strains (SetB): {multi}')

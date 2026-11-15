@@ -1,8 +1,8 @@
 #!/bin/bash
 # ---------------------------------------------------------------------------
 # osmo_refdb — 10_run_benchmark.sh
-# Run DIAMOND (via osmotool profile, train-only db) and HMM (translate +
-# hmmscan, train-only calibrated HMMs) on the simulated reads, for later
+# Run DIAMOND (via osmotool profile, train-only db; with the DIAMOND+HMM
+# cascade unless CASCADE=off) and HMM (translate + hmmscan, train-only HMMs) on the simulated reads, for later
 # scoring by 11_compute_metrics.py.
 #
 # Usage: bash 10_run_benchmark.sh [reads_dir] [results_dir] [release_dir] [hmm_db]
@@ -36,23 +36,36 @@ DIAMOND_MIN_QUERY_COVER="${DIAMOND_MIN_QUERY_COVER:-0.50}"
 # default: a short read is always much shorter than most full-length
 # reference proteins, so a strict threshold here also costs real recall).
 DIAMOND_MIN_SUBJECT_COVER="${DIAMOND_MIN_SUBJECT_COVER:-0.0}"
-# osmotool ab3fb9e turned the DIAMOND+HMM cascade on by default, and it
-# refuses to run without osmo_refdb.profile_cascade.tsv -- which step 11
-# only writes AFTER this benchmark, so a fresh release can't satisfy it.
-# This step benchmarks DIAMOND alone anyway (HMM is scored separately
-# below), so pass --no_cascade wherever the installed osmotool knows the
-# flag (the Dockerfile pins v0.7.0, which has it); older osmotool versions
-# (e.g. 2826ebc) predate it and already run DIAMOND-only.
+# CASCADE=on (default) runs `osmotool profile` the way users get it: with the
+# DIAMOND+HMM cascade, configured by <release>/osmo_refdb.profile_cascade.tsv.
+# That file is written by step 11 from the CALIBRATION reads (run_pipeline.sh
+# runs steps 9-11 on --split calib first), never from the reads scored here.
+# --keep_aln retains the raw DIAMOND alignments and the cascade's own
+# hmmsearch table, so 11_compute_metrics.py scores DIAMOND alone and
+# DIAMOND+cascade from this single run.
+# CASCADE=off passes --no_cascade: used for the calibration run itself (no
+# config exists yet) and for osmotool versions older than ab3fb9e, which
+# have no cascade default and no such flag.
+CASCADE="${CASCADE:-on}"
+# HMM samples run JOBS at a time, one hmmscan thread each: hmmscan against
+# this small db gets slower, not faster, with more threads per job.
+JOBS="${JOBS:-1}"
 CASCADE_ARGS=()
-if osmotool profile --help 2>/dev/null | grep -q -- "--no_cascade"; then
-    CASCADE_ARGS+=(--no_cascade)
+if [ "${CASCADE}" = "off" ]; then
+    if osmotool profile --help 2>/dev/null | grep -q -- "--no_cascade"; then
+        CASCADE_ARGS+=(--no_cascade)
+    fi
+elif [ ! -s "${RELEASE_DIR}/osmo_refdb.profile_cascade.tsv" ]; then
+    echo "ERROR: CASCADE=on but ${RELEASE_DIR}/osmo_refdb.profile_cascade.tsv is missing." >&2
+    echo "       Run the calibration benchmark first (run_pipeline.sh benchmark does)." >&2
+    exit 1
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 mkdir -p "${OUT_DIR}/diamond" "${OUT_DIR}/hmm"
 
-echo "=== DIAMOND (osmotool profile, --min_identity ${DIAMOND_MIN_IDENTITY} --min_query_cover ${DIAMOND_MIN_QUERY_COVER} --min_subject_cover ${DIAMOND_MIN_SUBJECT_COVER}) ==="
+echo "=== DIAMOND (osmotool profile, cascade ${CASCADE}, --min_identity ${DIAMOND_MIN_IDENTITY} --min_query_cover ${DIAMOND_MIN_QUERY_COVER} --min_subject_cover ${DIAMOND_MIN_SUBJECT_COVER}) ==="
 for R1 in "${READS_DIR}"/*_R1.fastq*; do
     [ -e "${R1}" ] || continue
     SAMPLE=$(basename "${R1}" | sed -E 's/_R1\.fastq(\.gz)?$//')
@@ -74,18 +87,19 @@ for R1 in "${READS_DIR}"/*_R1.fastq*; do
 done
 
 echo ""
-echo "=== HMM (6-frame translate + hmmscan) ==="
+echo "=== HMM (6-frame translate + hmmscan; ${JOBS} sample(s) at a time) ==="
+HMM_THREADS="${THREADS}"
+[ "${JOBS}" -gt 1 ] && HMM_THREADS=1
 for R1 in "${READS_DIR}"/*_R1.fastq*; do
     [ -e "${R1}" ] || continue
     SAMPLE=$(basename "${R1}" | sed -E 's/_R1\.fastq(\.gz)?$//')
     R2="${READS_DIR}/${SAMPLE}_R2.fastq"
     [ -f "${R2}.gz" ] && R2="${R2}.gz"
-    [ -f "${R2}" ] || { echo "  SKIP ${SAMPLE}: no R2 found"; continue; }
-
-    echo "  sample: ${SAMPLE}"
-    bash "${SCRIPT_DIR}/translate_and_hmmscan.sh" \
-        "${R1}" "${R2}" "${HMM_DB}" "${OUT_DIR}/hmm/${SAMPLE}" "${THREADS}"
-done
+    [ -f "${R2}" ] || { echo "  SKIP ${SAMPLE}: no R2 found" >&2; continue; }
+    printf '%s\t%s\t%s\n' "${R1}" "${R2}" "${OUT_DIR}/hmm/${SAMPLE}"
+done | xargs -P "${JOBS}" -L 1 bash -c \
+    'bash "$0" "$3" "$4" "$1" "$5" "$2"' \
+    "${SCRIPT_DIR}/translate_and_hmmscan.sh" "${HMM_DB}" "${HMM_THREADS}"
 
 echo ""
 echo "Done. Now run: python 11_compute_metrics.py --results ${OUT_DIR} --out ${OUT_DIR}/metrics"

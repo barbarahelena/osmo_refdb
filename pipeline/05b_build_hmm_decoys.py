@@ -105,6 +105,9 @@ def main() -> None:
     ap.add_argument("--hmms", type=Path, default=Path("hmms"))
     ap.add_argument("--families", type=Path, default=Path("families.yaml"))
     ap.add_argument("--threads", type=int, default=4)
+    ap.add_argument("--reuse-alignments", action="store_true",
+                    help="Keep an existing decoy clustering + alignment when the "
+                         "decoy's input sequences are unchanged.")
     args = ap.parse_args()
 
     with open(args.families) as fh:
@@ -132,16 +135,23 @@ def main() -> None:
             raise SystemExit(f"ERROR: [{name}] only {len(kept)} sequences left to build from")
 
         filtered = args.refs / f"{name}.hmm_decoy.faa"
-        filtered.write_text("".join(f">{h}\n{s}\n" for h, s in kept))
         clustered = args.refs / f"{name}.hmm_decoy.clustered.faa"
-        run(["cd-hit", "-i", str(filtered), "-o", str(clustered), "-c", "0.90", "-n", "5",
-             "-T", str(args.threads), "-M", "16000", "-d", "0"])
-        n_clu = sum(1 for h, _ in read_fasta(clustered))
-
         raw_aln = args.aln / f"{name}.aln"
         trimmed = args.aln / f"{name}.trimmed.aln"
-        run(["mafft", "--auto", "--thread", str(args.threads), str(clustered)], stdout=raw_aln)
-        run(["trimal", "-in", str(raw_aln), "-out", str(trimmed), "-gt", str(decoy.get("trim_gt", 0.8))])
+        new_filtered = "".join(f">{h}\n{s}\n" for h, s in kept)
+        if (args.reuse_alignments and trimmed.exists() and clustered.exists()
+                and filtered.exists() and filtered.read_text() == new_filtered):
+            # Same input sequences as the build these files came from:
+            # keep its clustering and alignment (multi-threaded MAFFT is
+            # not reproducible run to run).
+            print(f"[{name}] input unchanged, reusing {trimmed}")
+        else:
+            filtered.write_text(new_filtered)
+            run(["cd-hit", "-i", str(filtered), "-o", str(clustered), "-c", "0.90", "-n", "5",
+                 "-T", str(args.threads), "-M", "16000", "-d", "0"])
+            run(["mafft", "--auto", "--thread", str(args.threads), str(clustered)], stdout=raw_aln)
+            run(["trimal", "-in", str(raw_aln), "-out", str(trimmed), "-gt", str(decoy.get("trim_gt", 0.8))])
+        n_clu = sum(1 for h, _ in read_fasta(clustered))
 
         hmm = args.hmms / f"{name}.hmm"
         run(["hmmbuild", "--amino", "-n", name, "--cpu", str(args.threads), str(hmm), str(trimmed)])

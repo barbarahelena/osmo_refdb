@@ -75,3 +75,25 @@ Write everything under `releases/<release>/real_genome_validation/<organism>/`
 (git-ignored, like other release output) rather than committing one-off
 intermediate files here — only the source genome FASTAs belong in
 `test_genomes/`.
+
+## System calls on the nine reference genomes
+
+A second, fully scripted check: do the multi-subunit systems that are
+characterised in nine reference organisms (osmotool's `test_genomes/`, with
+accessions in its README) come out of `osmotool annotate`, and do the
+controls stay silent? Rerun it for every release.
+
+```bash
+docker run --rm -v "$PWD":/work -v /path/to/osmotool:/osmotool:ro -w /work \
+    -e OSMOTOOL_SRC=/osmotool/src --entrypoint bash osmo_refdb:latest \
+    pipeline/real_genome_validation/run_reference_genomes.sh releases/<release> /osmotool/test_genomes
+python pipeline/real_genome_validation/check_reference_systems.py \
+    --release releases/v9 --release releases/<release>
+```
+
+`expected_systems.tsv` holds the expectations (present, absent, or `info`
+for a call that is reported and explained but not scored) with the basis for
+each. The checker prints every expectation per release, system calls that
+have no stated expectation, and the families gained or lost per genome
+between the first and last release. It exits 1 if the last release fails an
+expectation. Output: `releases/<release>/real_genome_validation/`.

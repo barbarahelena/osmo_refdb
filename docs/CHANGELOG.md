@@ -1800,3 +1800,224 @@ mix-dependent; the mrpB DIAMOND cutoff; positive-side leakage; the PF08886
 gshA family; betB/otsB calls in haloarchaea; an osmotool release tag and
 Dockerfile pin bump.
 
+
+## This branch (`pre-submission-fixes`) -- positive-side leakage, the cascade and annotate benchmarks, and the BacDive loose ends
+
+Stacked on `fix-negative-sampling`, with `phenotype-validation` merged in.
+2026-11-14/15.
+
+### A third split: cutoffs are no longer set on benchmark positives
+
+Three things were tuned on `positive.test`, the sequences the benchmark
+scores: the HMM GA cutoffs (05/06), the DIAMOND bitscore cutoffs (08b) and
+the profile cascade config (11: which families get an HMM check, and the
+short-read HMM threshold each uses, chosen on the benchmark reads
+themselves). The read benchmark's `diamond` and `hmm` rows never applied
+any of them (best hit, raw scores), so v9's published read-level numbers
+were not inflated by this. What it left without an honest estimate were the
+two modes users run: `profile` with its default cascade, and `annotate`.
+
+- `03_split_train_test.py` now writes `positive.calib`: half of the held-out
+  20% (`--calib-fraction 0.5`), drawn with its own per-family RNG. Checked
+  against `releases/v9/refs`: every `positive.train`, `negative.train` and
+  `negative.test` is byte-identical, and calib + test equals v9's test set
+  for all 44 families. In taxonomy mode whole genera go to one side.
+- 05/06 and 08b calibrate on `positive.calib`. A family with fewer than 4
+  held-out positives would fall back to `positive.test` with a warning;
+  none does (smallest: ktrD, 4 calib / 5 test).
+- `benchmark` runs steps 9-11 twice. First on calibration reads
+  (`--split calib`: positive.calib + negative.train, output in
+  `results/calib/`), which writes the cascade config. Then on the test
+  reads, with the cascade on. Caveat: betL's negative.train is also its
+  decoy set in the DIAMOND db, so its calibration precision is optimistic;
+  it stays unflagged, as in v9.
+- `REUSE_REFS_FROM=releases/v9` rebuilds from v9's fetched and clustered
+  sequences and alignments.
+
+### `releases/v10`: v9's models, recalibrated
+
+Built with `REUSE_REFS_FROM=releases/v9`. `osmo_refdb.dmnd`,
+`train_refs.faa` and both exclusion lists are byte-identical to v9, and
+`hmms/osmo_refdb.hmm` is identical apart from GA and DATE lines. Only the
+cutoffs and the cascade config differ. v9 itself is untouched (it is the
+published release); whether v10 replaces it is open, see Status.
+
+A first attempt realigned from the same sequences and got 18 of 44 HMMs
+slightly different from v9's (model lengths off by 1 to 3 columns): MAFFT
+`--auto --thread N` is not reproducible run to run. The rebuild therefore
+reuses v9's alignments. A from-scratch build will not reproduce a release's
+HMMs exactly unless MAFFT runs single-threaded; not changed here.
+
+GA cutoffs moved for 35 of 44 families, calibrated on half as many
+positives. Most by a few bits; the large ones:
+
+| family | GA v9 | GA v10 | calib positives | why |
+|---|---|---|---|---|
+| ktrB | 326.6 | 509.8 | 95 -> 47 | F1 sweep against a negative pool with unlabelled real orthologs: no stable optimum |
+| trkH | 238.0 | 403.3 | 141 -> 70 | same pool (PF02386) |
+| gshA | 376.4 | 496.5 | 360 -> 180 | F1 sweep |
+| kdpA | 457.1 | 530.3 | 849 -> 424 | no negative scores at all, so GA = lowest positive - 1 |
+| betB | 558.0 | 629.8 | 311 -> 155 | F1 sweep |
+| mrpD | 334.3 | 380.9 | 118 -> 59 | F1 sweep |
+| galE | 232.0 | 276.4 | 1822 -> 911 | F1 sweep |
+
+DIAMOND bitscore cutoffs changed for two families (ectC 94.5 -> 106.0, gor
+252.4 -> 267.4). The cascade config flags 29 families (v9: 28; mscL is new),
+with most thresholds within 5 bits of v9's. The largest shifts: trkH
+(13.1 -> 44.0), opuAC (60.9 -> 33.8), opuCA (38.6 -> 51.5), opuCC (47.1 ->
+58.9), ktrD (40.4 -> 51.3) and opuBA (43.2 -> 53.6).
+
+### The cascade, benchmarked (`diamond_cascade`)
+
+`10_run_benchmark.sh` now runs `osmotool profile` as users get it, cascade
+on (`CASCADE=off` for the calibration pass). `--keep_aln` leaves the raw
+DIAMOND alignments and the cascade's own hmmsearch table, from which
+`11_compute_metrics.py` rebuilds the per-read cascade outcome with
+osmotool's rule. The rebuilt calls reproduce osmotool's `gene_counts.tsv`
+in all 3,388 sample x family cells. (Getting there needed step 11's best-hit
+tie-break aligned with osmotool's: bitscore, then evalue, then sseqid. 37
+cells differed by a few reads before; the calibration flags and thresholds
+are unchanged by it.) `HMM` samples can run in parallel (`JOBS`).
+
+v10, held-out test reads (osmotool v0.7.0, 112,956 positive reads):
+
+| | DIAMOND alone | DIAMOND + cascade (default) | HMM alone |
+|---|---|---|---|
+| micro precision | 0.696 | 0.844 | 0.578 |
+| micro recall | 0.841 | 0.744 | 0.744 |
+| micro F1 | 0.762 | 0.791 | 0.651 |
+| median family precision | 0.734 | 0.869 | 0.472 |
+| median family recall | 0.746 | 0.556 | 0.708 |
+| median family F1 | 0.684 | 0.675 | 0.573 |
+| random-background FP per million reads | 2,304 | 641 | 7,642 |
+
+- The cascade removes 63% of hard-negative false positives (41,428 ->
+  15,540) and 72% of background ones, for 12% of true positives.
+- The cost is uneven. In the 29 flagged families, recall goes 0.821 ->
+  0.613 and F1 falls in 21, rises in 7. Eight lose more than half their
+  recall: opuBA (0.21 -> 0.04), opuCA (0.53 -> 0.18), opuAC (0.74 -> 0.24),
+  opuBC (0.29 -> 0.02), opuCC (0.45 -> 0.02), mrpA (0.81 -> 0.28), mrpD
+  (0.86 -> 0.19), trkH (0.70 -> 0.19). The 15 unflagged families are
+  untouched (precision 0.990, recall 0.860).
+- The F1-optimal HMM threshold of a small or noisy family does not carry
+  from calibration reads to test reads. The opu substrate-binding and Mrp
+  large-subunit families would do better unflagged, or flagged with a
+  lower threshold. Not changed here: it is a design decision.
+- Precision is not comparable with v9's tables: v10 scores half as many
+  positive reads against the same negatives (v9 DIAMOND micro precision
+  0.826, recall 0.844). Recall and the per-million rates are comparable.
+
+### Annotate mode, benchmarked (`11b_benchmark_annotate.py`)
+
+New step 11b. Runs the real `osmotool annotate --proteins` on 8,495
+held-out test positives, 29,236 held-out hard negatives and 4,992 random
+background proteins, and reads per-protein calls from
+`gene_coordinates.tsv` (each protein gets a Prodigal-style header on its
+own contig, so the systems layer plays no part). Output in
+`results/annotate/`.
+
+v10, `--method hmm` (the default):
+
+| | v10 cutoffs (calibrated on calib) | v9 cutoffs, same proteins (leaky) |
+|---|---|---|
+| micro precision | 0.921 | 0.874 |
+| micro recall | 0.935 | 0.953 |
+| median family F1 | 0.935 | 0.923 |
+| median family recall | 0.927 | 0.958 |
+| macro recall | 0.803 | 0.859 |
+| hard negatives called as any family | 7.3% | 12.3% |
+| background proteins called | 2 of 4,992 | 2 of 4,992 |
+
+- 24 of 44 families have recall >= 0.9 and 25 have precision >= 0.9.
+  Recall below 0.7: betL, proP, opuBA, opuCA, opuAC, opuBC, opuCC, betB,
+  trkH, ktrB, ktrD.
+- The leak inflated recall where the cutoff sits in an overlap: ktrB 0.958
+  on the positives that set its cutoff, 0.292 on unseen ones; opuCA 0.643
+  -> 0.321; trkH 0.803 -> 0.620; otsA 0.860 -> 0.711; betB 0.833 -> 0.692;
+  opuBC 2 of 6 -> 0 of 6. For 22 families recall is identical under both
+  sets of cutoffs.
+- trkH/ktrB/ktrD precision (0.23/0.37/0.50) is against the PF02386 negative
+  pool with its known unlabelled real orthologs, so it understates them.
+- `--method diamond` with annotate's defaults: precision 1.000, recall
+  0.495 (median family recall 0.34). The flat identity filter drops
+  divergent held-out members; the HMM default is the right one.
+
+### Nine reference genomes, rerun on v8, v9 and v10
+
+`real_genome_validation/run_reference_genomes.sh` annotates osmotool's nine
+test genomes; `check_reference_systems.py` compares the system calls with
+`expected_systems.tsv` (33 expectations taken from osmotool's README, where
+the original checks were on releases before v9). Run with osmotool v0.8.0.
+All 33 hold on v8, v9 and v10: every characterised operon is called (mrp,
+opuA, opuC, ect, otsBA, galE_murB_mazG in its source organism) and no
+control fires.
+
+- New in v9 and kept in v10: `opuB` is called complete in E. coli K-12
+  (v8: three subunits found, not colocalised). The locus is yehWXYZ/osmF
+  (b2128-b2131), which RefSeq annotates as a glycine betaine ABC
+  transporter: a real OpuB/OpuC-type homologue, low-affinity and not
+  osmoprotective (Lang et al. 2015, Biochemistry 54:5735). Recorded as
+  `info`, not as a failure. osmotool's README says opuB "never resolves in
+  any species tested"; that is no longer true.
+- v10 undoes v9's ktrB gains in S. aureus, L. monocytogenes and E.
+  faecalis (GA 327 -> 510); the `ktr` system in B. subtilis is still
+  called. H. volcanii loses its betB call.
+
+### BacDive analysis: scripts, wording, and the salt-in control
+
+- `pipeline/phenotype_validation/` is on this branch (merge of
+  `phenotype-validation`, 11 commits). The scripts that produced the v9
+  logs ran from a scratch worktree; the three still on disk there are
+  identical to the branch tip. `run_annotate_cached.sh` (used for v9, kept
+  only in the release folder) is now in the repo.
+- "Pre-registered" is gone from scripts, logs and docs. The plan was
+  committed locally (`6ecb9b5`, 2026-11-04 12:15) after a 43-strain pilot
+  that already showed rho +0.38, and before the full sweep; it was never
+  pushed or registered. It is now called prespecified, and the README's
+  "Plan provenance" states what was fixed when and what the pilot had
+  shown.
+- Salt-in criteria are written down with references (README, "Salt-in
+  assignment criteria"). Assigning by lineage (class Halobacteria, order
+  Halanaerobiales, Salinibacter/Salisaeta) instead of the genus list moves
+  no strain of the primary set.
+- Within-domain control (`build_strategy_control.py`,
+  `analyze_strategy_control.py`; README test 6b): 302 Halobacteria, 299
+  other archaea, 20 salt-in bacteria, all BacDive strains with a genome
+  whether or not they have a NaCl record. K+ uptake is enriched in salt-in
+  lineages in both domains. Salt-in bacteria carry 4.9 fewer
+  compatible-solute families than salt-out bacteria tolerating >= 15% NaCl
+  and no detected synthesis gene. In archaea the solute half stays
+  untestable. Post hoc, and labelled so.
+- betB in haloarchaea (flagged as a likely false positive under v9): 0.61
+  of Halobacteria on v9, 0.06 on v10. otsB stays at 0.45, with otsA in
+  none.
+
+BacDive on v10 (Set A, 6,264 strains): breadth rho +0.379 [+0.304,
++0.453] (v9 +0.373); adjusted for baselines +0.513; no random panel of
+1,000 reaches the panel on any statistic; within-genus partial r +0.119;
+mixed model +1.01 % NaCl per SD [0.82, 1.20]; ridge CV with genera held out
+0.64 (random 0.41), families held out 0.61 (random 0.34). Prevalence
+shifts follow the cutoffs: ktrB 0.43 -> 0.08, betB 0.66 -> 0.34, opuCA
+0.43 -> 0.23, opuBA 0.41 -> 0.55 (opuAA/opuCA's higher cutoffs release
+ATPases to it).
+
+### Status
+
+`releases/v10` is a candidate, not a release: nothing is packaged or
+uploaded. Open decisions:
+
+- **Ship v10, or keep v9 and report v10 as its leak-free benchmark.** v10's
+  numbers are honest for v10's cutoffs. Its cutoffs come from half the
+  positives, and for families calibrated by F1 sweep on a noisy negative
+  pool (ktrB, trkH, gshA, betB) they moved a lot, which says those cutoffs
+  are unstable in either release.
+- **Which families the cascade should flag.** As configured it costs the
+  opu substrate-binding, opu ATPase and Mrp large-subunit families most of
+  their recall.
+- ktrB: v9's "real recall gains" rested on a cutoff that v10's calibration
+  does not reproduce. The operon-partner evidence for v9's calls (ktrA in
+  0.96) still stands, which argues the v9 cutoff was the better one and
+  the F1 sweep is the problem.
+- Still open from before: opuBA; the mrpB DIAMOND cutoff; the PF08886 gshA
+  family; MAFFT reproducibility; Dockerfile pin (image has osmotool
+  v0.7.0, v0.8.0 is out).

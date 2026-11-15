@@ -1,6 +1,8 @@
 # salt_in_taxa.tsv -- a priori osmoadaptation strategy assignment.
 #
-# PRE-REGISTERED. Committed before the BacDive harvest; assignments are made
+# PRESPECIFIED, not externally registered. First committed in 6ecb9b5
+# (2026-11-04 12:15 +0100), after a 43-strain pilot and before the full BacDive
+# sweep (15:13 the same day); amended once, see below. Assignments are made
 # from published physiology, never from this project's panel output. Changing a
 # row after panel results are known invalidates the stratum as a negative
 # control, so amendments must be a separate commit with a stated reason.

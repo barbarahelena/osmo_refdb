@@ -92,6 +92,19 @@ do_build() {
     echo "### osmo_refdb build — release '${RELEASE_NAME}' ###"
     mkdir -p "${REFS_DIR}" "${ALN_DIR}" "${HMM_DIR}"
 
+    if [ -n "${REUSE_REFS_FROM:-}" ]; then
+        # Rebuild from another release's fetched + QC'd + clustered
+        # sequences (steps 1-2), so that only the split, calibration and
+        # later steps differ and no UniProt/RefSeq drift enters. Copies the
+        # whole refs/ dir; step 3 onward overwrites every derived file.
+        echo ""
+        echo "--- 1-2. Reusing fetched and clustered refs from ${REUSE_REFS_FROM} ---"
+        [ -d "${REUSE_REFS_FROM}/refs" ] || { echo "ERROR: ${REUSE_REFS_FROM}/refs not found" >&2; exit 1; }
+        cp -R "${REUSE_REFS_FROM}/refs/." "${REFS_DIR}/"
+        rm -f "${REFS_DIR}"/*.positive.train.faa "${REFS_DIR}"/*.positive.calib.faa \
+              "${REFS_DIR}"/*.positive.test.faa "${REFS_DIR}"/*.negative.train.faa \
+              "${REFS_DIR}"/*.negative.test.faa "${REFS_DIR}"/*.decoy.faa
+    else
     echo ""
     echo "--- 1. Fetch reference sequences from UniProt ---"
     python pipeline/01_fetch_refs.py --families "${FAMILIES_FILE}" --out "${REFS_DIR}"
@@ -124,15 +137,32 @@ do_build() {
     echo ""
     echo "--- 2. CD-HIT cluster positives + negatives (remove redundancy) ---"
     bash pipeline/02_cluster_cdhit.sh "${REFS_DIR}"
+    fi
 
     echo ""
-    echo "--- 3. Train/test split (held-out benchmark set, no leakage; mode=${SPLIT_MODE}) ---"
+    echo "--- 3. Train/calib/test split (held-out benchmark set, no leakage; mode=${SPLIT_MODE}) ---"
     python pipeline/03_split_train_test.py --refs "${REFS_DIR}" --families "${FAMILIES_FILE}" \
         --split-mode "${SPLIT_MODE}"
 
+    if [ -n "${REUSE_REFS_FROM:-}" ] && [ "${REUSE_ALIGNMENTS:-1}" = "1" ]; then
+        # positive.train is unchanged (step 3 verifies nothing here, but the
+        # split is deterministic), so the source release's alignments are
+        # the alignments of these sequences. Reusing them keeps the HMMs
+        # identical to the source release's: multi-threaded MAFFT is not
+        # reproducible run to run (18 of 44 v9 models came out slightly
+        # different when realigned from identical input), hmmbuild is.
+        echo ""
+        echo "--- 4. Reusing alignments from ${REUSE_REFS_FROM} (REUSE_ALIGNMENTS=0 to realign) ---"
+        for f in "${REFS_DIR}"/*.positive.train.faa; do
+            cmp -s "${f}" "${REUSE_REFS_FROM}/refs/$(basename "${f}")" || {
+                echo "ERROR: $(basename "${f}") differs from ${REUSE_REFS_FROM}; cannot reuse alignments" >&2; exit 1; }
+        done
+        cp "${REUSE_REFS_FROM}"/alignments/* "${ALN_DIR}/"
+    else
     echo ""
     echo "--- 4. Align + trim (TRAIN positives only) ---"
     THREADS="${THREADS}" bash pipeline/04_align_trim.sh "${REFS_DIR}" "${ALN_DIR}" "${FAMILIES_FILE}"
+    fi
 
     echo ""
     echo "--- 5. hmmbuild (or fetch curated Pfam model) + score positive-test/negative sets ---"
@@ -141,7 +171,8 @@ do_build() {
     echo ""
     echo "--- 5b. Build HMM decoys (confuser-class models, e.g. peptide ABC ATPases vs opuBA) ---"
     python pipeline/05b_build_hmm_decoys.py --refs "${REFS_DIR}" --aln "${ALN_DIR}" \
-        --hmms "${HMM_DIR}" --families "${FAMILIES_FILE}" --threads "${THREADS}"
+        --hmms "${HMM_DIR}" --families "${FAMILIES_FILE}" --threads "${THREADS}" \
+        ${REUSE_REFS_FROM:+--reuse-alignments}
 
     echo ""
     echo "--- 6. Calibrate GA cutoffs ---"
@@ -204,7 +235,36 @@ do_benchmark() {
     fi
 
     mkdir -p "${RESULTS_DIR}"
+    CALIB_DIR="${RESULTS_DIR}/calib"
+    CASCADE_CONFIG="${RELEASE_DIR}/osmo_refdb.profile_cascade.tsv"
+    mkdir -p "${CALIB_DIR}"
 
+    # --- Calibration pass: writes the profile cascade config -------------
+    # The cascade config (which families get an HMM second opinion, and the
+    # short-read HMM threshold each uses) is tuned on reads. Up to v9 those
+    # were the benchmark reads themselves. It is now tuned on reads from
+    # positive.calib + negative.train, sequences the benchmark never scores.
+    echo ""
+    echo "--- 9c. Simulate CALIBRATION reads (positive.calib + negative.train) ---"
+    python pipeline/09_simulate_reads.py \
+        --refs "${REFS_DIR}" --families "${FAMILIES_FILE}" \
+        --reads-per-sequence 20 --split calib \
+        --out "${CALIB_DIR}/reads"
+    python pipeline/09b_compute_read_truth.py --reads "${CALIB_DIR}/reads"
+
+    echo ""
+    echo "--- 10c. DIAMOND (no cascade) + HMM on the calibration reads ---"
+    CASCADE=off THREADS="${THREADS}" JOBS="${JOBS:-1}" bash pipeline/10_run_benchmark.sh \
+        "${CALIB_DIR}/reads" "${CALIB_DIR}" \
+        "${RELEASE_DIR}" "${HMM_DIR}/osmo_refdb.hmm"
+
+    echo ""
+    echo "--- 11c. Calibration metrics -> profile cascade config ---"
+    python pipeline/11_compute_metrics.py \
+        --results "${CALIB_DIR}" --out "${CALIB_DIR}/metrics" --families "${FAMILIES_FILE}" \
+        --cascade-out "${CASCADE_CONFIG}"
+
+    # --- Benchmark pass: held-out test reads, cascade on (the default) ---
     echo ""
     echo "--- 9. Simulate reads from held-out test positives, hard negatives + random background ---"
     # Optional: READ_LENGTHS="100,150,250,300" for read-length-stratified
@@ -225,21 +285,28 @@ do_benchmark() {
     python pipeline/09b_compute_read_truth.py --reads "${RESULTS_DIR}/reads"
 
     echo ""
-    echo "--- 10. Run DIAMOND (train-only db) vs HMM (train-only, calibrated) ---"
-    THREADS="${THREADS}" bash pipeline/10_run_benchmark.sh \
+    echo "--- 10. osmotool profile (DIAMOND + default cascade) and HMM on the test reads ---"
+    CASCADE=on THREADS="${THREADS}" JOBS="${JOBS:-1}" bash pipeline/10_run_benchmark.sh \
         "${RESULTS_DIR}/reads" "${RESULTS_DIR}" \
         "${RELEASE_DIR}" "${HMM_DIR}/osmo_refdb.hmm"
 
     echo ""
-    echo "--- 11. Compute precision/recall/F1 + ROC/PR curves ---"
+    echo "--- 11. Precision/recall/F1 for DIAMOND, DIAMOND+cascade and HMM + ROC/PR curves ---"
     python pipeline/11_compute_metrics.py \
         --results "${RESULTS_DIR}" --out "${RESULTS_DIR}/metrics" --families "${FAMILIES_FILE}" \
-        --cascade-out "${RELEASE_DIR}/osmo_refdb.profile_cascade.tsv"
+        --cascade-config "${CASCADE_CONFIG}"
+
+    echo ""
+    echo "--- 11b. Annotate-mode benchmark on held-out full-length proteins ---"
+    python pipeline/11b_benchmark_annotate.py \
+        --refs "${REFS_DIR}" --release "${RELEASE_DIR}" --families "${FAMILIES_FILE}" \
+        --out "${RESULTS_DIR}/annotate" --threads "${THREADS}"
 
     echo ""
     echo "=== Benchmark complete. See ${RESULTS_DIR}/metrics for summary.tsv, "
     echo "    best_threshold_summary.tsv, and ROC/PR plots. ==="
-    echo "    Profile-mode DIAMOND+HMM cascade config: ${RELEASE_DIR}/osmo_refdb.profile_cascade.tsv"
+    echo "    Profile-mode DIAMOND+HMM cascade config (from calibration reads): ${CASCADE_CONFIG}"
+    echo "    Annotate-mode benchmark: ${RESULTS_DIR}/annotate/summary.tsv"
 }
 
 case "${CMD}" in

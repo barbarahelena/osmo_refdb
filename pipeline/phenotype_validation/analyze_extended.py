@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The parts of the pre-registered plan that analyze.py does not cover.
+"""The parts of the prespecified plan that analyze.py does not cover.
 
 analyze.py is the dependency-free readout written for the pilot. This adds
 what the plan in README.md commits to but analyze.py skips:

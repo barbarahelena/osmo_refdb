@@ -22,12 +22,15 @@ predictive accuracy and random panels lose most of theirs. Ectoine synthesis
 (`ectABC`) and the glycine betaine transporter `betL` carry the most signal
 within genera.
 
-The salt-in negative control could test only half of its prediction. A salt-in
-haloarchaeal genome carries on average 2.1 of the 5 potassium uptake families,
-against 0.9 in salt-out archaea, as predicted. Salt-in genomes carry few of the
-19 compatible-solute families (2.0), but salt-out archaea carry few as well
-(1.3), so
-that half cannot separate osmotic strategy from domain.
+The salt-in negative control, as planned, set 72 salt-in strains (69 of them
+archaea) against salt-out strains that are almost all bacteria, and could not
+separate osmotic strategy from domain. A post hoc comparison within each
+domain, on 621 genomes, is more informative. K⁺ uptake families are enriched
+in salt-in lineages in both domains. Salt-in bacteria carry about five fewer
+compatible-solute families than equally salt-tolerant salt-out bacteria, and
+no detected solute-synthesis gene. In archaea the compatible-solute half
+remains untestable, because the panel finds those families in few archaea of
+any kind (test 6b).
 
 ## Data
 
@@ -58,8 +61,10 @@ temperature trait) into the moderate-halophile class.
 
 ## Design and expectations
 
-The plan was written before the full data were collected (commit `6ecb9b5`).
-Amendments are listed at the end of this section.
+The plan was written before the full data were collected. It was not
+registered with a third party, so we call it prespecified, not pre-registered.
+See "Plan provenance" below for what was fixed when. Amendments are listed at
+the end of this section.
 
 Lineage is the main confounder. Genus alone explains 75% of the variance in
 NaCl max, and taxonomic family explains 46%. The panel families are also
@@ -77,6 +82,7 @@ Each test below targets one of these.
 | 4. blocked cross-validation | Does the panel predict NaCl max in lineages the model has not seen? | accuracy holds when whole genera or families are held out |
 | 5. family ranking | Which families carry the signal? | known osmotic genes at the top |
 | 6. salt-in control | Do salt-in organisms show their known gene pattern? | K⁺ uptake present, compatible solutes absent |
+| 6b. the same, within one domain (post hoc) | Does the pattern hold against organisms of the same domain? | as in 6 |
 
 **Random panels (test 2).** We drew candidate families from Pfam 39.0. We
 excluded the 44 panel accessions and 1,126 families with osmotic or cation
@@ -120,6 +126,58 @@ common in them and compatible-solute families (`ect`, `bet`, `ots`, `pro`,
 `opu`) are rare. Membership was fixed in `salt_in_taxa.tsv` before any panel
 output existed, and amended once (see below). Salt-in strains are left out of tests 1 to 5. A secondary model
 over all strains adds a strategy term and a strategy × breadth interaction.
+
+**Plan provenance.** The plan lives in this repository's history, with these
+timestamps (all 2026-11-04, +0100):
+
+| time | event | evidence |
+|---|---|---|
+| 11:22 to 12:13 | Pilot: 43 randomly sampled strains harvested, annotated and read out, to test the workflow | file times in `releases/v8/phenotype_validation/` |
+| 12:15 | Plan committed: baselines, Sets A and B, blocked cross-validation, the salt-in list and its two predictions, and how each outcome would be read | commit `6ecb9b5` (README and `salt_in_taxa.tsv`) |
+| 15:18 | Full BacDive sweep finished (about 1.5 h, with gap-fill reruns) | `harvest*.log` |
+| 2026-11-05 | First full analysis | commit `340603d` |
+
+What this does and does not show:
+
+- The plan predates the full data and every full-data result. It postdates
+  the 43-strain pilot. Its result was known when the plan was written: rho
+  +0.38 between breadth and NaCl max over 41 strains (`analysis.log` in the
+  pilot folder), close to the full-data value. The headline association was
+  therefore previewed, not predicted blind. The pilot had no salt-in strain
+  and no genus eligible for Set B, so the within-genus test, the
+  cross-validation and the salt-in control had no preview.
+- The commit sat on a local branch until 2026-11-14 and was never pushed
+  before the analysis ran. Git commit dates are set by the author's machine.
+  There is no independent timestamp, which is why the plan is not described
+  as pre-registered anywhere.
+- Deviations from the plan are the amendments below. The within-domain
+  salt-in comparison (test 6b) was designed after the results were known.
+
+**Salt-in assignment criteria.** A lineage is salt-in when direct
+measurements show that it balances external salt with molar intracellular
+KCl and holds no significant organic osmolyte pool:
+
+| lineage | rank used | evidence |
+|---|---|---|
+| Halobacteria | class (Archaea) | the classical salt-in group; reviewed in Oren 2008 (*Saline Systems* 4:2) and Oren 2013 (*Front Microbiol* 4:315) |
+| Halanaerobiales | order (Bacteria) | intracellular K⁺, Na⁺ and Cl⁻ at medium strength, no organic solutes, in *Halanaerobium praevalens* and *Halobacteroides halobius* (Oren 1986, *Can J Microbiol* 32:4-9) |
+| *Salinibacter*, *Salisaeta* | genus (Bacteria) | *S. ruber*: molar K⁺ and Cl⁻, organic solutes in low concentrations only (Oren et al. 2002, *Extremophiles* 6:491-498); *Salisaeta* assigned as its sister genus |
+
+Everything else is salt-out, including halophiles with "Halo" names that use
+compatible solutes (*Halomonas*, *Chromohalobacter*, *Halobacillus*) and the
+halophilic methanogens. `salt_in_taxa.tsv` lists the genera one by one, with
+"high" confidence where the genus itself was measured and "medium" where it
+is assigned from its lineage. The primary analysis uses that list. Applying
+the lineage rule directly to BacDive's taxonomy instead moves no strain of the
+primary set: the genera the list still misses have no strain with both a
+NaCl record and a genome.
+
+Two caveats on the criteria. The salt-in label describes the dominant
+strategy, not an absence of compatible-solute genes: 38 of 83 Halobacteria
+genomes carry the OtsAB trehalose pathway and 60 carry BCCT-type betaine
+transporters (Youssef et al. 2014, *ISME J* 8:636-649). And for the
+Halanaerobiales the acidic proteome that goes with salt-in in Halobacteria
+was not confirmed by genome analysis (Oren 2013).
 
 **Amendments.**
 - 2026-11-04. The plan expected Set B to need extra harvesting of multi-strain
@@ -182,7 +240,7 @@ with a defined rho, 192 are positive and 105 negative (two-sided sign test
 p = 5×10⁻⁷). Among the 26 genera with at least 30 strains, the split is 22 to 4.
 The partial correlation after removing genus means and baselines is +0.12. In
 the mixed model, one SD of breadth adds 1.02 percentage points of NaCl max
-[0.83, 1.21]. By the pre-committed reading, the signal survives control for
+[0.83, 1.21]. By the reading fixed in the plan, the signal survives control for
 lineage, though it is much weaker within genera than across them.
 
 **4. Blocked cross-validation** (ridge regression; out-of-fold Spearman, with
@@ -226,7 +284,7 @@ genome:
 - the 174 random pool families, as a reference for how many families of any
   kind the HMMs find in a genome
 
-The pre-registered comparison was salt-in strains against all salt-out
+The prespecified comparison was salt-in strains against all salt-out
 strains, and there the prediction holds. A salt-in genome carries 2.1 of the
 5 K⁺ uptake families, against 1.6 in salt-out genomes. It carries 2.0 of the
 19 compatible-solute families, against 6.1.
@@ -255,6 +313,57 @@ The secondary model's strategy × breadth interaction is uninformative:
 −0.96 [−4.0, +2.0]. The 72 salt-in strains fall in 36 genera, none of which
 also holds salt-out strains, so the model cannot separate strategy from genus.
 
+**6b. Salt-in control within one domain** (post hoc, added 2026-11-14).
+The comparison above sets archaea against bacteria. The gene-pattern
+prediction needs a genome and a lineage, not a NaCl measurement, so
+`build_strategy_control.py` takes every BacDive strain with a genome from
+all archaea and from the salt-in bacterial lineages: 302 Halobacteria, 299
+other archaea and 20 salt-in bacteria after the 1 Mb filter (510 genomes
+beyond the main set; one assembly had no FASTA). Tests use genus means
+(Mann-Whitney U) and a genus-cluster bootstrap. Numbers are for v10; v9 gives
+the same reading (logs in each release's `strategy_control/`).
+
+| mean families detected per genome | n (genera) | K⁺ uptake (of 5) | compatible solutes (of 19) | random (of 174) |
+|---|---|---|---|---|
+| Halobacteria (salt-in) | 302 (70) | 1.51 | 1.07 | 41 |
+| other archaea | 299 (82) | 0.98 | 1.66 | 33 |
+| salt-in bacteria | 20 (13) | 3.30 | 3.70 | 63 |
+| salt-out bacteria, NaCl max ≥ 15% | 445 (184) | 2.00 | 8.56 | 72 |
+| all salt-out bacteria | 6,520 (1,589) | 1.46 | 5.70 | 74 |
+
+- **K⁺ uptake holds in both domains.** Halobacteria carry 0.53 more K⁺
+  uptake families than other archaea [0.28, 0.78] (p = 2×10⁻¹⁰). Salt-in
+  bacteria carry 1.30 more than equally salt-tolerant salt-out bacteria
+  [0.81, 1.88] (p = 2×10⁻⁶), and 1.04 more than salt-out Clostridia, the class
+  most of them belong to. In archaea the gain is no longer separable from
+  detectability once the random-pool count and genome size are adjusted for
+  (+0.14 [−0.20, +0.49] on v10; +0.36 [+0.05, +0.67] on v9).
+- **Compatible solutes hold in bacteria, against the right reference.**
+  Salt-in bacteria carry 4.9 fewer compatible-solute families than salt-out
+  bacteria that tolerate at least 15% NaCl [−6.0, −3.8] (p = 1×10⁻⁴). No
+  salt-in bacterium has a detected ectoine gene, `otsA`, `betA`, `betB` or
+  `proP`. They do carry the OpuA transporter (17 of 20) and `betL` (10 of 20),
+  so uptake is present and synthesis absent. Against salt-out Clostridia,
+  which carry few solute families themselves (2.3 on average), salt-in
+  strains have more (+1.4), not fewer. Lineage alone is therefore the wrong
+  reference for this half; salt tolerance has to be matched.
+- **In archaea the solute half stays untestable.** Halobacteria and other
+  archaea both carry few of the 19 families (1.07 vs 1.66; difference −0.59
+  [−1.29, +0.09]). Ectoine synthesis, `proP`, `proX`, `betA` and `otsA` are
+  detected in almost no archaeon of either group, so their absence from
+  Halobacteria says nothing about strategy. The one family that separates
+  the groups is the OpuA transporter: absent from all 302 Halobacteria,
+  present in a quarter of other archaea.
+- `otsB` is called in 45% of Halobacteria and 1% of other archaea, with
+  `otsA` in none. Youssef et al. (2014) found the OtsAB pathway in 38 of 83
+  Halobacteria genomes, so these may be real `otsB` genes whose `otsA`
+  partner the panel's bacterial model misses. This has not been checked.
+
+The control is therefore a domain-matched test for bacteria (20 strains, 13
+genera) and for K⁺ uptake in archaea. It is not a test of compatible-solute
+absence in archaea, and the panel should not be described as validated
+there.
+
 ## Conclusions
 
 The osmo panel carries information about salt tolerance beyond genome size and
@@ -279,6 +388,27 @@ In archaeal genomes the panel detects fewer families of every kind, and its
 compatible-solute families say little about archaea. Breadth is likely to
 read low for archaea-rich samples such as hypersaline brines, and archaeal
 profiles should be read separately from bacterial ones.
+
+## Results by release
+
+The Results section above reports v8. The same pipeline was rerun on v9 and
+on v10 (v9's models with cutoffs calibrated on a separate split; see
+`docs/CHANGELOG.md`). Set A is the same 6,264 strains throughout.
+
+| | v8 | v9 | v10 |
+|---|---|---|---|
+| breadth rho, Set A | +0.364 [+0.292, +0.437] | +0.373 [+0.299, +0.446] | +0.379 [+0.304, +0.453] |
+| breadth rho, adjusted for baselines | +0.508 | +0.510 | +0.513 |
+| random panels reaching the osmo panel (of 1,000, any statistic) | 0 | 0 | 0 |
+| within-genus partial r | +0.123 | +0.116 | +0.119 |
+| median within-genus rho | +0.173 | +0.145 | +0.132 |
+| mixed model, % NaCl per SD of breadth | +1.02 [0.83, 1.21] | +0.99 [0.80, 1.18] | +1.01 [0.82, 1.20] |
+| ridge CV, genera held out: baselines / + random / + osmo | 0.21 / 0.38 / 0.64 | 0.23 / 0.41 / 0.64 | 0.23 / 0.41 / 0.64 |
+| ridge CV, families held out: baselines / + random / + osmo | 0.13 / 0.32 / 0.63 | 0.15 / 0.33 / 0.61 | 0.15 / 0.34 / 0.61 |
+
+Every conclusion holds on all three. The median within-genus rho drifts
+down; it is a median over about 315 small genera, and the pooled
+within-genus partial r, which has the random-panel null, does not move.
 
 ## Limitations
 
@@ -339,6 +469,26 @@ python pipeline/phenotype_validation/analyze_extended.py --dir "$PV"
 
 Notes:
 
+- **Another release.** Genomes, Prodigal proteins and the random-pool search
+  do not depend on the release. Make `releases/<rel>/phenotype_validation/`
+  with `genomes` and `random_panel` symlinked to the v8 folder and
+  `pilot_strains.tsv` copied in, then run `run_annotate_cached.sh` (which
+  reuses the cached Prodigal proteins), `build_matrix.py`, `analyze.py` and
+  `analyze_extended.py` on it.
+- **Within-domain salt-in control (test 6b).**
+  ```bash
+  python pipeline/phenotype_validation/build_strategy_control.py --dir "$PV"
+  PAR=4 bash pipeline/phenotype_validation/fetch_genomes.sh "$PV/strategy_control"
+  docker run --rm -v "$PWD":/work -w /work --entrypoint bash osmo_refdb:latest \
+      pipeline/phenotype_validation/run_random_panel.sh "$PV/strategy_control" "$RP/pool.hmm" 3
+  # per release: symlink genomes + random_panel into
+  # releases/<rel>/phenotype_validation/strategy_control/, then
+  docker run --rm -v "$PWD":/work -w /work --entrypoint bash osmo_refdb:latest \
+      pipeline/phenotype_validation/run_annotate_cached.sh \
+      releases/<rel>/phenotype_validation/strategy_control releases/<rel> 3
+  python pipeline/phenotype_validation/analyze_strategy_control.py --dir "$PV" \
+      --osmo-dir releases/<rel>/phenotype_validation
+  ```
 - Run one thread per job and parallelise across genomes. In the pilot, extra
   threads per job made the HMM step slower (measured with hmmscan).
 - The feature matrix has 44 columns, one more than `families.yaml`. The extra
