@@ -28,7 +28,9 @@ separate osmotic strategy from domain. A post hoc comparison within each
 domain, on 621 genomes, is more informative. K⁺ uptake families are enriched
 in salt-in lineages in both domains. Salt-in bacteria carry about five fewer
 compatible-solute families than equally salt-tolerant salt-out bacteria, and
-no detected solute-synthesis gene. In archaea the compatible-solute half
+no detected ectABC, betAB or otsA (otsB is found in 9 of 20). Against
+salt-out Clostridia, their own class, the contrast reverses, so it depends on
+the reference group. In archaea the compatible-solute half
 remains untestable, because the panel finds those families in few archaea of
 any kind (test 6b).
 
@@ -343,7 +345,9 @@ the same reading (logs in each release's `strategy_control/`).
   bacteria that tolerate at least 15% NaCl [−6.0, −3.8] (p = 1×10⁻⁴). No
   salt-in bacterium has a detected ectoine gene, `otsA`, `betA`, `betB` or
   `proP`. They do carry the OpuA transporter (17 of 20) and `betL` (10 of 20),
-  so uptake is present and synthesis absent. Against salt-out Clostridia,
+  so uptake is present and the ectoine, betaine and `otsA` synthesis genes
+  are absent; `otsB` is called in 9 of 20 (as in 41% of salt-out bacteria).
+  Against salt-out Clostridia,
   which carry few solute families themselves (2.3 on average), salt-in
   strains have more (+1.4), not fewer. Lineage alone is therefore the wrong
   reference for this half; salt tolerance has to be matched.

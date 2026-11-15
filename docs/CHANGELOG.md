@@ -1959,13 +1959,15 @@ All 33 hold on v8, v9 and v10: every characterised operon is called (mrp,
 opuA, opuC, ect, otsBA, galE_murB_mazG in its source organism) and no
 control fires.
 
-- New in v9 and kept in v10: `opuB` is called complete in E. coli K-12
-  (v8: three subunits found, not colocalised). The locus is yehWXYZ/osmF
+- On v9 only: `opuB` is called complete in E. coli K-12 (v8: three
+  subunits found, not colocalised; v10: two subunits, opuBA and opuBB, not
+  called, because opuBC falls below the recalibrated cutoff). The locus is
+  yehWXYZ/osmF
   (b2128-b2131), which RefSeq annotates as a glycine betaine ABC
   transporter: a real OpuB/OpuC-type homologue, low-affinity and not
   osmoprotective (Lang et al. 2015, Biochemistry 54:5735). Recorded as
   `info`, not as a failure. osmotool's README says opuB "never resolves in
-  any species tested"; that is no longer true.
+  any species tested"; that is not true on v9, and true again on v10.
 - v10 undoes v9's ktrB gains in S. aureus, L. monocytogenes and E.
   faecalis (GA 327 -> 510); the `ktr` system in B. subtilis is still
   called. H. volcanii loses its betB call.
@@ -1993,7 +1995,10 @@ control fires.
   whether or not they have a NaCl record. K+ uptake is enriched in salt-in
   lineages in both domains. Salt-in bacteria carry 4.9 fewer
   compatible-solute families than salt-out bacteria tolerating >= 15% NaCl
-  and no detected synthesis gene. In archaea the solute half stays
+  and no detected ectABC, betAB or otsA; otsB is found in 9 of the 20.
+  The contrast depends on the reference group: against salt-out Clostridia,
+  the class of 16 of the 20, Halanaerobiales carry more solute families
+  (3.75 against 2.32), not fewer. In archaea the solute half stays
   untestable. Post hoc, and labelled so.
 - betB in haloarchaea (flagged as a likely false positive under v9): 0.61
   of Halobacteria on v9, 0.06 on v10. otsB stays at 0.45, with otsA in
