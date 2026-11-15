@@ -66,7 +66,7 @@ RESULTS_DIR="${RELEASE_DIR}/results"
 SPLIT_MODE="${SPLIT_MODE:-random}"
 
 usage() {
-    echo "Usage: bash run_pipeline.sh {build|benchmark|all|markers} [release_name]"
+    echo "Usage: bash run_pipeline.sh {build|benchmark|all|markers|nacl_model} [release_name]"
     exit 1
 }
 
@@ -86,6 +86,28 @@ do_markers() {
     python pipeline/12_package_markers.py \
         --marker-release "releases/${marker_release}" --release "${RELEASE_DIR}" \
         --markers markers.yaml
+}
+
+do_nacl_model() {
+    # NaCl-max predictor, trained on the BacDive phenotype_validation set
+    # annotated with this release (pipeline/phenotype_validation/README.md).
+    # Needs xgboost, scikit-learn, pandas, scipy, matplotlib; set PYTHON to an
+    # interpreter that has them (see pipeline/nacl_model/README.md).
+    local py="${PYTHON:-python}"
+    local pv="${RELEASE_DIR}/phenotype_validation"
+    local build="${RELEASE_DIR}/nacl_model_build"
+    if [ ! -s "${pv}/feature_matrix.tsv" ]; then
+        echo "ERROR: ${pv}/feature_matrix.tsv not found. Run the phenotype validation first." >&2
+        exit 1
+    fi
+    echo "### osmo_refdb NaCl-max model — release '${RELEASE_NAME}' ###"
+    echo "--- 13a. Train (nested genus/family-blocked CV) ---"
+    "${py}" pipeline/nacl_model/train.py --pv-dir "${pv}" --release "${RELEASE_DIR}" \
+        --out "${build}" --threads "${THREADS}"
+    echo "--- 13b. Explain ---"
+    "${py}" pipeline/nacl_model/explain.py --build "${build}" --pv-dir "${pv}"
+    echo "--- 13c. Package into ${RELEASE_DIR}/nacl_model/ ---"
+    "${py}" pipeline/13_package_nacl_model.py --build "${build}" --release "${RELEASE_DIR}"
 }
 
 do_build() {
@@ -322,6 +344,9 @@ case "${CMD}" in
         ;;
     markers)
         do_markers
+        ;;
+    nacl_model)
+        do_nacl_model
         ;;
     *)
         usage
