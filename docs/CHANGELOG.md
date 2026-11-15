@@ -2046,9 +2046,17 @@ nacl_model v10` trains, explains and packages it into `releases/v10/nacl_model/`
 - **Parity.** osmotool 0.8.0 run from raw genomes on 20 training strains
   reproduces the training features exactly.
 - **Reproducibility.** A refit with the same seed is byte-identical.
-- **Integration status.** osmotool support (resolver, `--predict_nacl`,
-  optional xgboost dependency) is not written yet; see
-  `pipeline/nacl_model/README.md`.
+- **osmotool.** Branch `nacl-prediction` adds `annotate --predict_nacl` and
+  a `predict-nacl` subcommand. On 29 genomes its output is byte-identical to
+  `predict.py`.
+- **xgboost version.** xgboost < 3.1 loads the model without error but
+  misreads its base score, which shifts predictions by up to 5.4% NaCl.
+  - Both osmotool and `predict.py` now require xgboost >= 3.1.
+  - The release ships `self_check.json`, reference outputs that osmotool
+    recomputes when it loads the model.
+- **Dropped flag.** The `fragmented_systems` flag is gone. It fired on 75% of
+  training genomes, mostly from galE_murB_mazG, and those genomes show no
+  larger errors.
 
 ### Status
 

@@ -17,12 +17,14 @@ cutoffs. The current model was trained on **v10** and must be used with
 | `train.py` | Training table, hyperparameter search, nested CV, ablations, final model, intervals, salt-in detector, `feature_schema.json`. |
 | `explain.py` | SHAP importance, stability, interactions, ridge reference, plots, and the README shipped with the model. |
 | `predict.py` | Reference inference on annotate output (osmotool's test oracle). |
-| `../13_package_nacl_model.py` | Copies the build into `<release>/nacl_model/` with checksums. |
+| `../13_package_nacl_model.py` | Copies the build into `<release>/nacl_model/` with checksums and `self_check.json`: the model's raw output for 5 training genomes, which osmotool recomputes on load. |
 
 ## Running
 
 ```bash
-# environment: xgboost, scikit-learn, pandas, scipy, matplotlib (all in environment.yml)
+# environment: xgboost >= 3.1, scikit-learn, pandas, scipy, matplotlib (all in environment.yml).
+# xgboost < 3.1 loads the saved model without error but misreads its base score
+# (0.48 instead of 5.92), so every prediction is off; osmotool and predict.py refuse it.
 python3.11 -m venv .venv-nacl && .venv-nacl/bin/pip install xgboost scikit-learn pandas scipy matplotlib
 
 PYTHON=.venv-nacl/bin/python THREADS=8 bash run_pipeline.sh nacl_model v10

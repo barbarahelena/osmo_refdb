@@ -26,6 +26,6 @@ dependencies:
       - matplotlib
       - scipy
       # NaCl-max model (pipeline/nacl_model/, run_pipeline.sh nacl_model)
-      - xgboost
+      - xgboost>=3.1   # older versions misread the saved model's base score
       - biopython
       - insilicoseq

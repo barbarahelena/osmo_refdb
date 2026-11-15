@@ -24,8 +24,11 @@ Output columns, one row per genome:
                        strains. Use the value as a ranking plus interval.
   p_salt_in            salt-in detector probability
   flags                comma-separated: salt_in_like, out_of_range(<n>),
-                       many_contigs, fragmented_systems(<n>),
-                       few_proteins, missing:<feature>; 'ok' if none
+                       many_contigs (more contigs than 99% of the training
+                       genomes; contig count is not linked to larger errors
+                       in CV, so this marks the edge of the training range,
+                       not a bad prediction), few_proteins,
+                       missing:<feature>; 'ok' if none
   base_value           SHAP bias (mean training prediction)
   top_contributions    the 6 largest SHAP contributions, "feature=value:+x.xx"
   shap_<feature>       (with --all-shap) every contribution
@@ -47,6 +50,12 @@ import features as F  # noqa: E402
 
 
 def load(model_dir):
+    # xgboost < 3.1 loads 3.x models without error but misreads their base
+    # score, shifting every prediction by several % NaCl
+    if tuple(int(''.join(c for c in x if c.isdigit()) or 0)
+             for x in xgb.__version__.split('.')[:2]) < (3, 1):
+        sys.exit(f'xgboost >= 3.1 needed (found {xgb.__version__}): older versions '
+                 'misread this model')
     schema = json.load(open(os.path.join(model_dir, 'feature_schema.json')))
     booster = xgb.Booster()
     booster.load_model(os.path.join(model_dir, schema['model_file']))
@@ -96,8 +105,6 @@ def predict(schema, booster, feats, n_top=6):
             flags.append(f'out_of_range({n_out})')
         if (f.get('n_contigs') or 0) > app['n_contigs_warn']:
             flags.append('many_contigs')
-        if f.get('fragmented_systems'):
-            flags.append(f'fragmented_systems({f["fragmented_systems"]})')
         if (f.get('total_proteins') or 0) < app['min_total_proteins']:
             flags.append('few_proteins')
         flags += [f'missing:{n}' for n in names if f.get(n) is None]

@@ -21,6 +21,11 @@ Writes releases/<release>/nacl_model/:
   README.md                how the model works and what it weighs
   explain/*.png, *.tsv     the importance plots and tables behind the card
   predict.py, features.py  reference inference (osmotool's test oracle)
+  self_check.json          5 training genomes' features and the model's raw
+                           output for them, computed here; osmotool
+                           recomputes them on load and refuses the model if
+                           they differ (older xgboost versions load the
+                           model without error but misread its base score)
   SHA256SUMS               checksums of the files above
 """
 from __future__ import annotations
@@ -38,6 +43,26 @@ EXPLAIN_FILES = ['shap_importance.tsv', 'group_importance.tsv', 'importance_stab
                  'importance_bar.png', 'importance_groups.png', 'beeswarm.png',
                  'dependence_top12.png', 'interactions_top12.png', 'waterfall_examples.png']
 BUILD_FILES = ['cv_results.tsv', 'cv_by_bin.tsv', 'salt_in_predictions.tsv']
+
+
+def write_self_check(build: Path, schema: dict, model_p: Path, out: Path, n: int = 5) -> None:
+    """Raw model output for the first n training genomes, for osmotool to verify."""
+    import csv
+    import xgboost as xgb
+    names = schema['features']
+    with open(build / 'training_table.tsv') as fh:
+        rows = [r for r in csv.DictReader(fh, delimiter='\t')
+                if r['strategy'] == 'salt_out' and r['nacl_max_pct']][:n]
+    X = [[float(r[f]) for f in names] for r in rows]
+    b = xgb.Booster()
+    b.load_model(str(model_p))
+    margin = b.predict(xgb.DMatrix(X, feature_names=names), output_margin=True)
+    out.write_text(json.dumps({
+        'description': 'raw model output (output_margin) for these feature rows; '
+                       'a loader must reproduce it within tolerance',
+        'xgboost_version': xgb.__version__, 'tolerance': 1e-4,
+        'features': names, 'rows': X, 'output_margin': [float(v) for v in margin],
+    }, indent=1))
 
 
 def sha256(p: Path) -> str:
@@ -81,6 +106,7 @@ def main() -> None:
             shutil.copy2(args.build / f, dst / 'explain' / f)
     for f in ('predict.py', 'features.py'):
         shutil.copy2(HERE / 'nacl_model' / f, dst / f)
+    write_self_check(args.build, schema, model_p, dst / 'self_check.json')
 
     files = sorted(p for p in dst.rglob('*') if p.is_file())
     (dst / 'SHA256SUMS').write_text(
