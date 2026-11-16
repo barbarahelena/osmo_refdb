@@ -2115,9 +2115,12 @@ uploaded. Open decisions:
   report levels on calibration reads (above).
 - **Split stringency.** Test positives are a median 81% identical to their
   nearest training reference (CD-HIT 90%; 53% of them above 80%, 8% below
-  60%). Annotate HMM recall falls from 0.97 (80-90%) to 0.76 (40-60%). A
-  full-panel `SPLIT_MODE=taxonomy` build (`releases/v10-taxsplit`) is running
-  as a sensitivity analysis.
+  60%). Annotate HMM recall falls from 0.97 (80-90%) to 0.76 (40-60%).
+  Checked with a full-panel `SPLIT_MODE=taxonomy` build
+  (`releases/v10-taxsplit`, see `docs/taxonomy_split.md`): annotate HMM F1
+  0.928 -> 0.912, profile median f1_all 0.77 -> 0.75, with proX, gshF, betB
+  and proP below 0.5 on unseen genera. v10 stays the primary benchmark and
+  its report levels stay as decided.
 - ktrB: v9's "real recall gains" rested on a cutoff that v10's calibration
   does not reproduce. The operon-partner evidence for v9's calls (ktrA in
   0.96) still stands, which argues the v9 cutoff was the better one and
