@@ -144,6 +144,15 @@ signal — validate with the subset-testing workflow below before keeping
 it, since it doesn't always help (see ectB's `families.yaml` entry, where
 the same experiment made DIAMOND meaningfully worse and was reverted).
 
+> **Status: no family currently uses `pfam_model`.** The pipeline still
+> supports it, but all six adoptions (mrpB, mrpE, mrpF, mrpG, gshB, cspA)
+> were reverted to custom-built, locally F1-calibrated HMMs on
+> 2026-08-01 to 2026-08-04. Pfam's GA cutoffs are tuned on full-length
+> proteins and lost recall on short simulated read fragments (gshB HMM F1
+> 0.466→0.880 after removal). The trkH/ktrB/ktrD case described below was
+> reverted earlier, on 2026-07-24. The guidance below still applies if
+> you adopt it for a future family.
+
 Optional `pfam_model: PFxxxxx` field: use that Pfam family's own curated
 HMM directly — built from Pfam's hand-curated seed alignment, carrying its
 own GA/TC/NC gathering-threshold lines — instead of `hmmbuild`-ing a fresh
@@ -197,7 +206,7 @@ back to a normal custom-built model instead.
 **`domain_architectures` count is a screening heuristic, not sufficient on
 its own — `qc_scorecard.tsv` review after the first build is a required
 step before trusting a `pfam_model` adoption, not a follow-up nicety.**
-Confirmed in production: 5 of the 6 `pfam_model` families adopted in this
+Confirmed in production: 5 of the 6 `pfam_model` families once adopted in this
 panel (mrpB, mrpE, mrpF, mrpG, gshB) got flagged `pfam_ga_review_needed`
 despite each passing the InterPro domain-architecture screen beforehand —
 only cspA came back clean (`pfam_ga_clean`). A low `domain_architectures`
@@ -274,8 +283,10 @@ cold-shock-domain family itself — because the goal is to capture every csp
 paralog in a genome (cspA through cspI-type genes and organism-specific
 equivalents), not just literally-"cspA"-named orthologs. Pair this with
 `max_positive_override` (PF00313 has on the order of 80,000 UniProt member
-proteins) and `pfam_model` (Pfam's own long-established CSD gathering
-cutoff) if the same pattern is useful for a future family.
+proteins) if the same pattern is useful for a future family. cspA also
+used `pfam_model: PF00313` (Pfam's own CSD gathering cutoff) until
+2026-08-04. It was removed because the cutoff cost HMM recall on short
+reads (HMM recall 0.627 vs. 0.681 for DIAMOND), so don't copy that part.
 
 ### Structural negative-pool contamination: when more data can't fix it
 
@@ -304,6 +315,10 @@ Confirmed not fixable by adding more data, in either direction:
   real orthologs, not an artifact, but their taxonomic diversity widened
   the DIAMOND reference cloud and cost specificity (F1 0.920→0.879).
 
+*Superseded (2026-08-01 to 2026-08-04): the reasoning in this paragraph
+did not hold up. mrpB and mrpE were fixed by redesigning the negative pool
+(random bacterial background) and gshB by dropping `pfam_model`. All three
+now use custom, locally F1-calibrated HMMs. It is kept here as history.*
 For `pfam_model` families in this situation (mrpB, mrpE, gshB), this
 structural finding *validates* the `pfam_model` choice for a second,
 independent reason beyond the domain-architecture screening that

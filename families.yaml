@@ -1002,6 +1002,18 @@ families:
 #                         low architecture count + a name that matches the
 #                         gene one-to-one is a real Pfam family, not a broad
 #                         multi-substrate fold).
+#                         STATUS: still supported by 05/06, but NO family
+#                         currently sets it. Every adoption was reverted
+#                         to a custom MAFFT/trimAl/hmmbuild model:
+#                         trkH/ktrB/ktrD (2026-07-24, shared accession ->
+#                         identical HMMs), mrpE (2026-08-01), mrpB/mrpF/
+#                         mrpG (2026-08-03), gshB/cspA (2026-08-04) --
+#                         Pfam's GA cutoffs, tuned on full-length proteins,
+#                         lost recall on short read fragments, and local F1
+#                         calibration did better. Per-family entries below
+#                         that say "adopted via pfam_model" describe the
+#                         original design; each one's later dated note
+#                         records the removal.
 #   fusion_partner: name  Declares this family's gene product occurs as a
 #                         single fused ORF with the named partner family in
 #                         some lineages (only mrpA/mrpB here -- see mrpA's
@@ -1121,10 +1133,11 @@ families:
       Subunit B of the Mrp/Mnh complex (Task 1b). mrpB/mnhB synonym pair,
       same reasoning as mrpA above. PF04039 ("MnhB" in Pfam's own naming)
       checked individually via the InterPro API: 18 domain architectures
-      across 11107 proteins, name matches the gene one-to-one -- adopted
-      via pfam_model, retiring custom empirical calibration for the HMM
-      path (DIAMOND references still come from our own UniProt fetch as
-      normal).
+      across 11107 proteins, name matches the gene one-to-one -- originally
+      adopted via pfam_model, retiring custom empirical calibration for the
+      HMM path (DIAMOND references still come from our own UniProt fetch as
+      normal). pfam_model since REMOVED (2026-08-03) -- see the REDESIGNED
+      note below; the next two paragraphs describe the pfam_model era.
 
       fusion_partner/fusion_marker_pfam: mrpA is this family's confirmed
       fused-ORF partner -- see mrpA's entry above for the taxonomic
@@ -1353,7 +1366,8 @@ families:
       trio (Pfam documents PhaF as a third alias, from yet another
       organism's nomenclature for this same protein). PF04066
       ("MrpF_PhaF") checked: 9 domain architectures, name matches
-      directly -- adopted via pfam_model. The PhaF alias was documented
+      directly -- originally adopted via pfam_model (removed 2026-08-03,
+      see REDESIGNED note below). The PhaF alias was documented
       here from the start but NOT originally carried into either query --
       a real bug, confirmed via the v6 QC scorecard (42% neg_purity
       contamination) and directly verified: 142 PhaF-gene-tagged, real
@@ -1394,7 +1408,8 @@ families:
       trio (Pfam documents yufB, B. subtilis's own locus-tag-derived
       alias, as a third name for the same family). PF03334
       ("PhaG_MnhG_YufB") checked: 12 domain architectures, name matches --
-      adopted via pfam_model. yufB was documented here from the start but
+      originally adopted via pfam_model (removed 2026-08-03, see
+      REDESIGNED note below). yufB was documented here from the start but
       NOT originally carried into either query, the same gap mrpF/PhaF
       had -- added for consistency/completeness, but verified this does
       NOT explain mrpG's own 59% neg_purity contamination the way PhaF
@@ -1582,7 +1597,8 @@ families:
       unrelated ATP-grasp enzymes) -- same "prefer the narrower co-occurring
       domain over the broad catalytic fold" choice proP already makes
       elsewhere in this panel (PF08946 vs. generic MFS_1). 10 domain
-      architectures, 7964 proteins -- adopted via pfam_model. Also includes
+      architectures, 7964 proteins -- originally adopted via pfam_model
+      (removed 2026-08-04, see note below). Also includes
       gshB1/gshB2 (real, reviewed numbered-paralog gene symbols, same class
       of gap as murB1/murB2 -- see issue #8).
 
