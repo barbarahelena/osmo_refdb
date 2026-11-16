@@ -55,6 +55,10 @@ bash run_pipeline.sh all v1          # build then benchmark
 bash run_pipeline.sh markers v1      # build + package marker genes into
                                       # releases/v1/markers/ (see "Marker genes
                                       # for copies-per-genome normalisation")
+CATALOG_NAME=gmgc_gut CATALOG_GENES=genes.fna.gz \
+bash run_pipeline.sh catalog v1      # annotate + index a gene catalog into
+                                      # releases/v1/catalogs/gmgc_gut/ (see
+                                      # "Gene catalogs")
 ```
 
 Everything for a given release name is written to `releases/<name>/`
@@ -443,6 +447,47 @@ everything together.
 | 11b | `11b_benchmark_annotate.py` | Annotate-mode benchmark at protein level: runs `osmotool annotate --proteins` (HMM with GA cutoffs, and DIAMOND with its bitscore cutoffs) on the held-out test positives, test hard negatives and random background, and scores per-protein calls from `gene_coordinates.tsv`. Output in `results/annotate/` (`summary.tsv`, `summary_by_group.tsv`, `overall.tsv`) |
 
 | 12 | `12_package_markers.py` | Copy a separately-built marker release (`markers.yaml`, see below) into a main release's `markers/` subdirectory: DIAMOND db, its source FASTA (for reference lengths), decoy-label exclusion list, and a manifest with per-marker lengths and the marker build's DIAMOND benchmark precision/recall |
+| 14 | `14_package_catalog.py` (`run_pipeline.sh catalog`) | Build a gene catalog into the release as `catalogs/<name>/` with `osmotool build-catalog`: translate the catalog genes, annotate them with this release's HMMs under their gathering cutoffs (as `annotate --method hmm`), index the whole catalog with bwa-mem3. Adds provenance (source, input checksums, release) to `catalog.json`, the gzipped hmmsearch domain table, and `SHA256SUMS`. The catalog is part of the release: rebuild it for every release |
+
+### Gene catalogs
+
+`osmotool profile --catalog NAME` assigns reads to a gene catalog the
+release ships under `catalogs/NAME/` before translated search, the approach
+of catalog-based profilers such as Cayman: the family of each catalog gene is
+decided once, at full length, and reads are then matched at >= 97%
+nucleotide identity. The catalog's annotation is built into the release
+and versioned with it: it depends on this release's HMMs and cutoffs, so
+users never annotate anything themselves.
+
+```bash
+CATALOG_NAME=gmgc_gut \
+CATALOG_GENES=/data/GMGC10.human-gut.95nr.0.5.percent.prevalence.fna.gz \
+CATALOG_SOURCE="GMGC v1.0, human gut, prevalence > 0.5%" \
+CATALOG_SOURCE_URL=https://gmgc.embl.de/ THREADS=32 \
+bash run_pipeline.sh catalog v10
+```
+
+- The release ships an index of only the genes with an HMM hit
+  (`CATALOG_INDEX=hits`, the default), so it stays small and the catalog
+  works straight away. Sub-cutoff homologs and decoys are in it, so their
+  reads are recognised and dropped; reads from genes without any hit fall
+  back to translated search.
+- The full, competitive index of every catalog gene (bwa-mem3, about 3.6
+  bytes per base: tens of GB for a gut catalog) does not depend on the
+  release, only on the gene file and the aligner. It is built separately
+  and distributed on its own:
+
+  ```bash
+  osmotool index-catalog --genes GMGC10.human-gut.95nr.0.5.percent.prevalence.fna.gz \
+      -o gmgc_gut_index
+  osmotool profile releases/v10 -1 R1.fq.gz -2 R2.fq.gz \
+      --catalog gmgc_gut --catalog_index gmgc_gut_index -o sample
+  ```
+
+  osmotool checks that the index was built from the same gene file the
+  release's catalog was annotated from (`genes_sha256`).
+- The catalog is not part of the simulated-read benchmark yet, and
+  `--catalog` is not osmotool's default.
 
 Steps 4, 5 (hmmbuild) and 8 only touch the TRAIN split. Steps 5-6 and 8b
 (cutoffs) and the calibration pass 9c-11c (cascade config) only touch the

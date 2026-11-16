@@ -23,6 +23,11 @@
 #                                                   # <release_name>/markers/
 #                                                   # for osmotool profile's
 #                                                   # copies_per_genome column
+#   bash run_pipeline.sh catalog [release_name]    # build a gene catalog
+#                                                   # (CATALOG_NAME,
+#                                                   # CATALOG_GENES) into
+#                                                   # <release>/catalogs/ for
+#                                                   # osmotool profile --catalog
 #
 # All outputs for a given release_name (default: "dev") are written under
 # releases/<release_name>/ so multiple database versions can coexist and be
@@ -66,7 +71,7 @@ RESULTS_DIR="${RELEASE_DIR}/results"
 SPLIT_MODE="${SPLIT_MODE:-random}"
 
 usage() {
-    echo "Usage: bash run_pipeline.sh {build|benchmark|all|markers|nacl_model} [release_name]"
+    echo "Usage: bash run_pipeline.sh {build|benchmark|all|markers|nacl_model|catalog} [release_name]"
     exit 1
 }
 
@@ -108,6 +113,35 @@ do_nacl_model() {
     "${py}" pipeline/nacl_model/explain.py --build "${build}" --pv-dir "${pv}"
     echo "--- 13c. Package into ${RELEASE_DIR}/nacl_model/ ---"
     "${py}" pipeline/13_package_nacl_model.py --build "${build}" --release "${RELEASE_DIR}"
+}
+
+do_catalog() {
+    # Gene catalog for profile --catalog, built into the release with this
+    # release's HMMs and shipped with it as one unit (pipeline/14_package_catalog.py).
+    # CATALOG_NAME (e.g. gmgc_gut) and CATALOG_GENES (nucleotide CDS FASTA)
+    # are required; CATALOG_PROTEINS, CATALOG_SOURCE, CATALOG_SOURCE_URL and
+    # CATALOG_INDEX (hits|all|none, default hits: small enough for the
+    # release; the full index is built separately with `osmotool
+    # index-catalog`) are optional. Needs osmotool with build-catalog and
+    # bwa-mem3 on PATH.
+    if [ -z "${CATALOG_NAME:-}" ] || [ -z "${CATALOG_GENES:-}" ]; then
+        echo "ERROR: set CATALOG_NAME and CATALOG_GENES (see do_catalog in run_pipeline.sh)." >&2
+        exit 1
+    fi
+    if [ ! -s "${HMM_DIR}/osmo_refdb.hmm" ]; then
+        echo "ERROR: ${HMM_DIR}/osmo_refdb.hmm not found. Build the release first." >&2
+        exit 1
+    fi
+    echo "### osmo_refdb catalog '${CATALOG_NAME}' — release '${RELEASE_NAME}' ###"
+    echo "--- 14. Build + package ${RELEASE_DIR}/catalogs/${CATALOG_NAME}/ ---"
+    EXTRA_CATALOG_ARGS=()
+    [ -n "${CATALOG_PROTEINS:-}" ] && EXTRA_CATALOG_ARGS+=(--proteins "${CATALOG_PROTEINS}")
+    [ "${CATALOG_FORCE:-0}" = "1" ] && EXTRA_CATALOG_ARGS+=(--force)
+    python pipeline/14_package_catalog.py \
+        --release "${RELEASE_DIR}" --name "${CATALOG_NAME}" --genes "${CATALOG_GENES}" \
+        --source "${CATALOG_SOURCE:-}" --source-url "${CATALOG_SOURCE_URL:-}" \
+        --index "${CATALOG_INDEX:-hits}" --threads "${THREADS}" \
+        "${EXTRA_CATALOG_ARGS[@]+"${EXTRA_CATALOG_ARGS[@]}"}"
 }
 
 do_build() {
@@ -354,6 +388,9 @@ case "${CMD}" in
         ;;
     nacl_model)
         do_nacl_model
+        ;;
+    catalog)
+        do_catalog
         ;;
     *)
         usage
