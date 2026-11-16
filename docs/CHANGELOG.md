@@ -2113,6 +2113,12 @@ uploaded. Open decisions:
   are unstable in either release.
 - ~~Which families the cascade should flag.~~ Decided together with the
   report levels on calibration reads (above).
+- **Catalog-based profiling** (osmotool `profile --catalog`, branch
+  `catalog-profile`; `run_pipeline.sh catalog`, `11d_benchmark_catalog.py`):
+  with the strains catalogued, median f1_all of the reported units 0.770 ->
+  0.892 and background false positives 2083 -> 170 per million; without
+  them the translated fallback keeps the v10 numbers. betL regresses (its
+  full-length HMM cannot separate betT/caiT). See `docs/catalog_benchmark.md`.
 - **Split stringency.** Test positives are a median 81% identical to their
   nearest training reference (CD-HIT 90%; 53% of them above 80%, 8% below
   60%). Annotate HMM recall falls from 0.97 (80-90%) to 0.76 (40-60%).
