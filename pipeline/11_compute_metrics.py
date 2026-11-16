@@ -44,10 +44,30 @@ False positives are counted three ways for family F (summary.tsv):
                 so the rate per million unrelated reads is the number to
                 read (it scales directly to a real metagenome).
 
+  fp_all        fp + fp_cross + fp_other_negatives: every non-background
+                read called F, whatever construct it came from.
+                precision_all / f1_all use it. This is the denominator to
+                compare gene level with group level: a group's fp counts
+                every member's hard negatives and flanks, so its precision
+                charges a sibling's negatives that per-gene precision never
+                sees. With fp_all both levels count the same reads: summed
+                over a group's members, fp_all is the group's fp_all plus
+                its within_group_swaps, which the group instead counts as
+                tp. The report-level and cascade decision (below) uses f1_all.
+
 summary_by_group.tsv repeats these metrics per families.yaml
 `paralog_group`, scoring a group's members as one unit: a read called as
 any member of its true family's group is a hit (within_group_swaps counts
 how many of those were gene-level misses).
+
+Calibration mode (no --cascade-config; run on the calibration reads with
+10_run_benchmark.sh CASCADE=score) decides, per reporting unit, the report
+level and the cascade together, and writes both release manifests:
+osmo_refdb.profile_cascade.tsv (which families get the HMM second opinion)
+and osmo_refdb.profile_report_levels.tsv (what osmotool profile reports, per
+unit, with the calibration numbers each choice rests on). See decide_units.
+Benchmark mode (--cascade-config, --report-levels; the test reads) only
+scores those choices, adding summary_by_report_unit.tsv.
 
 Precision depends on how many negative reads are mixed in, which is set by
 fetch caps and split fractions, not biology. hard_negative_fp_per_million
@@ -436,6 +456,8 @@ def _metrics(merged: pd.DataFrame, members: set[str], n_random_bg: int) -> dict 
     precision = _ratio(tp, tp + fp)
     recall = _ratio(tp, tp + fn)
     precision_panel = _ratio(tp, tp + fp + fp_cross)
+    fp_all = fp + fp_cross + fp_other_neg
+    precision_all = _ratio(tp, tp + fp_all)
     return {
         "tp": tp, "fp": fp, "fn": fn,
         "precision": _r3(precision),
@@ -445,6 +467,9 @@ def _metrics(merged: pd.DataFrame, members: set[str], n_random_bg: int) -> dict 
         "fp_other_negatives": fp_other_neg,
         "precision_panel": _r3(precision_panel),
         "f1_panel": _r3(_f1(precision_panel, recall)),
+        "fp_all": fp_all,
+        "precision_all": _r3(precision_all),
+        "f1_all": _r3(_f1(precision_all, recall)),
         "n_hard_negative_reads": n_hard_neg,
         "hard_negative_fp_per_million": (round(fp_hard_neg / n_hard_neg * 1e6, 1)
                                          if n_hard_neg else ""),
@@ -497,11 +522,306 @@ def summarize_groups(merged: pd.DataFrame, method: str, families: list[str],
     return rows
 
 
-def load_paralog_groups(path: Path) -> dict[str, str]:
+REPORT_LEVELS = ("gene", "group", "none")
+
+
+def load_family_meta(path: Path) -> dict[str, dict]:
+    """{family: {"group", "report_level", "scope"}} from families.yaml, in
+    file order. report_level is checked here: one of gene/group/none,
+    "group" only for a family with a paralog_group, and "none" for
+    scope: annotate_only (those are
+    excluded from profile output whatever calibration says). A group's
+    members either all say "group" (reported as one unit) or each say gene
+    or none on their own. An unset
+    report_level means "take the calibration rule's level" (markers.yaml,
+    subset files)."""
     with open(path) as fh:
         data = yaml.safe_load(fh)
-    return {fam["name"]: fam["paralog_group"] for fam in data["families"]
-            if fam.get("paralog_group")}
+    meta: dict[str, dict] = {}
+    for fam in data["families"]:
+        meta[fam["name"]] = {"group": fam.get("paralog_group") or "",
+                             "report_level": fam.get("report_level") or "",
+                             "scope": fam.get("scope") or ""}
+    errors = []
+    levels_by_group: dict[str, set[str]] = {}
+    for name, m in meta.items():
+        level = m["report_level"]
+        if level and level not in REPORT_LEVELS:
+            errors.append(f"{name}: report_level '{level}' is not one of {', '.join(REPORT_LEVELS)}")
+        if level == "group" and not m["group"]:
+            errors.append(f"{name}: report_level group needs a paralog_group")
+        if m["scope"] == "annotate_only" and level not in ("", "none"):
+            errors.append(f"{name}: scope annotate_only needs report_level none, not {level}")
+        if m["group"]:
+            levels_by_group.setdefault(m["group"], set()).add(level)
+    for group, levels in levels_by_group.items():
+        if "group" in levels and len(levels) > 1:
+            errors.append(f"paralog_group {group}: report_level group must be set on every "
+                          f"member or none ({', '.join(sorted(lv or 'unset' for lv in levels))})")
+    if errors:
+        raise SystemExit("families.yaml report_level:\n  " + "\n  ".join(errors))
+    return meta
+
+
+def _f1_value(row: dict | None) -> float:
+    """f1_all of a summarize()/summarize_groups() row as a number; a unit
+    with no calibration reads or no calls at all counts as 0."""
+    if row is None or row["f1_all"] == "":
+        return 0.0
+    return float(row["f1_all"])
+
+
+def _best_cascade(off: dict | None, on: dict | None) -> tuple[bool, float]:
+    """(cascade on?, f1_all) for the better of the two options. The cascade
+    costs hmmsearch time and recall, so it is chosen only if it raises
+    f1_all (on the 3-decimal values in the manifest, so anyone can redo the
+    comparison from it)."""
+    f_off = _f1_value(off)
+    if on is None:
+        return False, f_off
+    f_on = _f1_value(on)
+    return (True, f_on) if f_on > f_off else (False, f_off)
+
+
+def _fmt(x) -> str:
+    return "NA" if x is None or x == "" else str(x)
+
+
+def decide_units(meta: dict[str, dict], thresholds: dict[str, float],
+                 gene_off: dict[str, dict], gene_on: dict[str, dict],
+                 group_off: dict[str, dict], group_on: dict[str, dict],
+                 min_f1: float) -> tuple[list[dict], dict[str, dict]]:
+    """
+    Decide report level and cascade together, per family or paralog group
+    (families.yaml paralog_group), on the calibration reads.
+
+    gene_off / gene_on: {family: summarize() row} on the calibration reads
+    without the cascade and with every family that has an HMM threshold
+    cascaded. group_off / group_on: {group: summarize_groups() row}, same.
+    The cascade drops reads but never moves one to another family, so a
+    family's numbers depend only on its own flag and a group's only on its
+    members': these four tables score every option.
+
+    Rule, on f1_all (see the module docstring), each level taking the
+    better of its cascade options:
+      a family without a group: gene if it reaches min_f1, else none;
+      a paralog group: gene for every member if every member reaches
+        min_f1; else group (one unit, one cascade option for all members)
+        if the group reaches min_f1; else each member on its own, gene if
+        it reaches min_f1, none if not.
+    families.yaml's report_level is what gets reported; the rule's level is
+    written next to it (calibration_level) and a mismatch is printed as a
+    warning. The cascade follows the reported level (off for none).
+
+    Returns (manifest rows: one per reporting unit, i.e. a paralog group on
+    "group" and a family otherwise; {family: cascade-config row}).
+    """
+    blocks: list[tuple[list[str], str]] = []
+    seen_groups: set[str] = set()
+    for family, m in meta.items():
+        if not m["group"]:
+            blocks.append(([family], ""))
+        elif m["group"] not in seen_groups:
+            seen_groups.add(m["group"])
+            blocks.append(([f for f, mm in meta.items() if mm["group"] == m["group"]], m["group"]))
+
+    def f1_cell(table: dict, key: str) -> str:
+        return _fmt(table.get(key, {}).get("f1_all"))
+
+    def chosen(row: dict | None) -> dict:
+        row = row or {}
+        return {k: row.get(k, "") for k in ("tp", "fp_all", "fn", "precision_all", "recall", "f1_all")}
+
+    manifest: list[dict] = []
+    cascade: dict[str, dict] = {}
+    for members, group in blocks:
+        gene_choice = {f: _best_cascade(gene_off.get(f), gene_on.get(f) if f in thresholds else None)
+                       for f in members}
+        group_has_on = any(f in thresholds for f in members)
+        group_choice = (_best_cascade(group_off.get(group), group_on.get(group) if group_has_on else None)
+                        if group else None)
+
+        weak = [f for f in members if gene_choice[f][1] < min_f1]
+        calib: dict[str, tuple[str, str]] = {}
+        for f in members:
+            f1 = gene_choice[f][1]
+            if not weak:
+                calib[f] = ("gene", f"every member of {group} reaches f1_all {min_f1} at gene level ({f} {f1:.3f})"
+                            if group else f"f1_all {f1:.3f} >= {min_f1}")
+            elif group_choice[1] >= min_f1 if group else False:
+                calib[f] = ("group", f"{', '.join(weak)} below f1_all {min_f1} at gene level; "
+                                     f"group f1_all {group_choice[1]:.3f} >= {min_f1}")
+            else:
+                tail = f"; group {group} f1_all {group_choice[1]:.3f} < {min_f1}" if group else ""
+                calib[f] = (("gene", f"f1_all {f1:.3f} >= {min_f1} at gene level{tail}") if f not in weak
+                            else ("none", f"f1_all {f1:.3f} < {min_f1} at gene level{tail}"))
+
+        level: dict[str, str] = {}
+        source: dict[str, str] = {}
+        reason: dict[str, str] = {}
+        for f in members:
+            m = meta[f]
+            calib_level, why = calib[f]
+            if m["report_level"]:
+                level[f], source[f] = m["report_level"], "families.yaml"
+            elif m["scope"] == "annotate_only":
+                level[f], source[f] = "none", "families.yaml scope"
+            else:
+                level[f], source[f] = calib_level, "calibration (report_level not set in families.yaml)"
+            if m["scope"] == "annotate_only":
+                reason[f] = f"scope: annotate_only; calibration rule: {calib_level} ({why})"
+            elif level[f] != calib_level:
+                reason[f] = f"families.yaml overrides the calibration rule, which gives {calib_level} ({why})"
+                print(f"WARNING: {f}: families.yaml report_level {level[f]}, calibration rule "
+                      f"gives {calib_level} ({why})")
+            else:
+                reason[f] = why
+
+        aggregated = any(level[f] == "group" for f in members)
+        if aggregated:
+            on = group_choice[0]
+            flags = {f: on and f in thresholds for f in members}
+        else:
+            flags = {f: level[f] == "gene" and gene_choice[f][0] for f in members}
+
+        group_cells = {"f1_all_group_off": f1_cell(group_off, group) if group else "",
+                       "f1_all_group_on": (f1_cell(group_on, group) if group_has_on else "NA") if group else ""}
+        if aggregated:
+            f0 = members[0]
+            manifest.append({
+                "unit": group, "report_level": "group", "members": ",".join(members),
+                "paralog_group": group,
+                "cascade_members": ",".join(f for f in members if flags[f]),
+                "calibration_level": calib[f0][0], "level_source": source[f0], "reason": reason[f0],
+                **chosen((group_on if group_choice[0] else group_off).get(group)),
+                "f1_all_gene_off": ",".join(f1_cell(gene_off, f) for f in members),
+                "f1_all_gene_on": ",".join(f1_cell(gene_on, f) if f in thresholds else "NA" for f in members),
+                **group_cells,
+            })
+        else:
+            for f in members:
+                manifest.append({
+                    "unit": f, "report_level": level[f], "members": f, "paralog_group": group,
+                    "cascade_members": f if flags[f] else "",
+                    "calibration_level": calib[f][0], "level_source": source[f], "reason": reason[f],
+                    **chosen((gene_on if flags[f] else gene_off).get(f) if level[f] == "gene" else None),
+                    "f1_all_gene_off": f1_cell(gene_off, f),
+                    "f1_all_gene_on": f1_cell(gene_on, f) if f in thresholds else "NA",
+                    **group_cells,
+                })
+
+        for f in members:
+            if aggregated:
+                off_cell = f1_cell(group_off, group)
+                on_cell = f1_cell(group_on, group) if group_has_on else "NA"
+            else:
+                off_cell = f1_cell(gene_off, f)
+                on_cell = f1_cell(gene_on, f) if f in thresholds else "NA"
+            cascade[f] = {
+                "family": f,
+                "report_unit": group if aggregated else f,
+                "report_level": level[f],
+                "diamond_precision": (gene_off.get(f) or {}).get("precision", ""),
+                "f1_all_cascade_off": off_cell,
+                "f1_all_cascade_on": on_cell,
+                "needs_cascade_check": "yes" if flags[f] else "no",
+                "hmm_short_read_threshold": thresholds[f] if flags[f] else "",
+            }
+    return manifest, cascade
+
+
+MANIFEST_COLUMNS = [
+    "unit", "report_level", "members", "paralog_group", "cascade_members",
+    "calibration_level", "level_source", "reason",
+    "tp", "fp_all", "fn", "precision_all", "recall", "f1_all",
+    "f1_all_gene_off", "f1_all_gene_on", "f1_all_group_off", "f1_all_group_on",
+]
+
+
+def write_report_levels(path: Path, rows: list[dict], min_f1: float) -> None:
+    header = [
+        "osmo_refdb profile report levels: one row per reporting unit (osmotool profile's unit table).",
+        "Decided on the calibration reads (positive.calib + negative.train), never on the benchmark (test) reads.",
+        f"Rule (min_f1_all = {min_f1}): gene if every member reaches f1_all >= min at gene level; else group "
+        "if the paralog group reaches it as one unit; else none.",
+        "At each level the cascade (HMM second opinion, osmo_refdb.profile_cascade.tsv) is used only where it "
+        "raises f1_all; cascade_members lists where it is on.",
+        "f1_all = F1 with every non-background read called as the unit counted as a false positive "
+        "(own hard negatives and flanks, other panel genes, other families' hard negatives); "
+        "see 11_compute_metrics.py.",
+        "report_level is families.yaml's report_level; calibration_level is the rule's. "
+        "tp..f1_all are calibration counts at the reported level and cascade (empty for none).",
+        "f1_all_gene_*: per member, in members order (NA: no HMM threshold, so no cascade option). "
+        "f1_all_group_*: the paralog group as one unit.",
+    ]
+    with open(path, "w", newline="") as fh:
+        for line in header:
+            fh.write(f"# {line}\n")
+        writer = csv.DictWriter(fh, fieldnames=MANIFEST_COLUMNS, delimiter="\t")
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def load_report_levels(path: Path) -> list[dict]:
+    """Rows of osmo_refdb.profile_report_levels.tsv (comment lines skipped)."""
+    with open(path) as fh:
+        return list(csv.DictReader((line for line in fh if not line.startswith("#")),
+                                   delimiter="\t"))
+
+
+def summarize_report_units(merged: pd.DataFrame, method: str,
+                           units: list[dict]) -> list[dict]:
+    """The metrics of summary.tsv per reporting unit of the release's
+    osmo_refdb.profile_report_levels.tsv, members scored as one unit. Units
+    on none are scored too (so the exclusion can be checked) and keep their
+    report_level."""
+    n_random_bg = int(merged["_random_bg"].sum())
+    rows = []
+    for unit in units:
+        members = unit["members"].split(",")
+        m = _metrics(merged, set(members), n_random_bg)
+        if m is None:
+            continue
+        rows.append({"method": method, "unit": unit["unit"], "report_level": unit["report_level"],
+                     "members": unit["members"], "cascade_members": unit["cascade_members"], **m})
+    return rows
+
+
+def verify_unit_counts(cascade_calls: pd.DataFrame, diamond_dir: Path,
+                       units: list[dict]) -> None:
+    """Check osmotool's <sample>.unit_counts.tsv (osmotool versions that read
+    the report-level manifest) against the rebuilt per-read calls: a
+    reported unit's raw_count is its members' summed calls (0.5 per paired
+    read), an excluded unit must carry no count."""
+    files = list(diamond_dir.glob("*.unit_counts.tsv"))
+    if not files:
+        print("Unit check: no unit_counts.tsv (osmotool without report levels); skipped")
+        return
+    per_family = (cascade_calls.groupby(["sample", "family"]).size() * 0.5).to_dict()
+    members = {u["unit"]: u["members"].split(",") for u in units}
+    n_cells = n_bad = 0
+    for counts_file in files:
+        sample = counts_file.name.replace(".unit_counts.tsv", "")
+        df = pd.read_csv(counts_file, sep="\t", comment="#", dtype=str, keep_default_na=False)
+        listed = set(df.loc[df["status"] != "not_in_manifest", "unit"])
+        if listed != set(members):
+            n_bad += 1
+            print(f"  MISMATCH {sample}: units {sorted(listed ^ set(members))} "
+                  f"not in both the table and the manifest")
+        for unit, status, raw in zip(df["unit"], df["status"], df["raw_count"]):
+            n_cells += 1
+            if status == "excluded":
+                ok = raw == "NA"
+            elif status == "not_in_manifest":     # e.g. mrpA_mrpB_fused: its own calls
+                ok = abs(float(raw) - per_family.get((sample, unit), 0.0)) < 1e-6
+            else:
+                mine = sum(per_family.get((sample, f), 0.0) for f in members.get(unit, []))
+                ok = raw != "NA" and abs(float(raw) - mine) < 1e-6
+            if not ok:
+                n_bad += 1
+                print(f"  MISMATCH {sample} {unit} ({status}): osmotool {raw}")
+    print(f"Unit check: osmotool unit_counts.tsv vs rebuilt calls: "
+          f"{n_cells - n_bad}/{n_cells} sample x unit cells agree")
 
 
 def summarize_by_length(merged: pd.DataFrame, method: str, families: list[str],
@@ -550,94 +870,60 @@ def summarize_background_fpr(merged: pd.DataFrame, method: str) -> tuple[list[di
     return overall, by_family
 
 
-def build_profile_cascade_config(
-    summary_rows: list[dict], best_threshold_rows: list[dict],
-    precision_threshold: float, precision_column: str = "precision",
-) -> list[dict]:
-    """
-    For each family, pair DIAMOND's benchmark precision (accept-every-
-    best-hit, the same operating point osmotool's `profile` actually uses
-    in production) with HMM's best short-read bitscore threshold from
-    summarize_best_threshold(). Families below precision_threshold are
-    flagged for osmotool's profile-mode DIAMOND+HMM cascade: DIAMOND stays
-    the primary caller for speed, but reads it assigns to a flagged family
-    get a second opinion from hmmscan (raw bitscore, NOT --cut_ga -- these
-    are short reads, not full-length ORFs, so the cascade needs HMM's
-    short-read-calibrated threshold here, not the GA cutoff used in
-    `annotate`) before the call is kept.
-
-    Families with perfect/near-perfect DIAMOND precision are left
-    unflagged so the cascade only costs extra hmmscan time where DIAMOND
-    has a demonstrated real specificity problem, not on every read.
-    """
-    # precision_column defaults to "precision" (own hard negatives), which
-    # measures the one error the cascade can fix: osmotool's check only asks
-    # whether a read scores above threshold against the HMM of the family
-    # DIAMOND called (quantifier.apply_cascade_check), so it rejects reads
-    # that aren't that gene at all (betL vs betT/caiT) but not a close
-    # paralog's read, which carries the same domain and passes. Flagging
-    # from "precision_panel", which adds paralog confusion (fp_cross), would
-    # cascade families like opuBA/ktrA where it costs HMM time and recall
-    # without resolving anything.
-    diamond_precision = {
-        r["family"]: r[precision_column] for r in summary_rows if r["method"] == "diamond"
-    }
-    hmm_threshold = {
-        r["family"]: r["best_threshold"] for r in best_threshold_rows if r["method"] == "hmm"
-    }
-
-    rows = []
-    for family, precision in diamond_precision.items():
-        precision_val = precision if precision != "" else float("nan")
-        needs_cascade = (
-            precision_val == precision_val  # not NaN
-            and precision_val < precision_threshold
-            and family in hmm_threshold
-        )
-        rows.append({
-            "family": family,
-            "diamond_precision": precision_val,
-            "precision_metric": precision_column,
-            "needs_cascade_check": "yes" if needs_cascade else "no",
-            "hmm_short_read_threshold": hmm_threshold.get(family, "") if needs_cascade else "",
-        })
-    return rows
+def _write_tsv(path: Path, rows: list[dict], label: str) -> None:
+    if not rows:
+        return
+    with open(path, "w", newline="") as fh:
+        writer = csv.DictWriter(fh, fieldnames=list(rows[0].keys()), delimiter="\t")
+        writer.writeheader()
+        writer.writerows(rows)
+    print(f"{label} written to {path}")
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description=__doc__)
+    ap = argparse.ArgumentParser(description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--results", required=True, type=Path)
     ap.add_argument("--out", required=True, type=Path)
     ap.add_argument("--families", type=Path, default=Path("families.yaml"))
     ap.add_argument("--cascade-out", type=Path, default=None,
-                     help="Where to write profile_cascade.tsv (osmotool's "
-                          "profile-mode DIAMOND+HMM cascade config). "
-                          "Defaults to <out>/profile_cascade.tsv.")
+                    help="Calibration mode: where to write profile_cascade.tsv "
+                         "(osmotool profile's DIAMOND+HMM cascade config). "
+                         "Defaults to <out>/profile_cascade.tsv.")
+    ap.add_argument("--report-levels-out", type=Path, default=None,
+                    help="Calibration mode: where to write profile_report_levels.tsv "
+                         "(osmotool profile's unit table). Defaults to "
+                         "<out>/profile_report_levels.tsv.")
+    ap.add_argument("--min-f1", type=float, default=0.5,
+                    help="Calibration mode: the f1_all a unit must reach on the "
+                         "calibration reads to be reported at a level (see decide_units).")
     ap.add_argument("--cascade-config", type=Path, default=None,
-                     help="Benchmark (test-read) mode: an existing "
-                          "profile_cascade.tsv, written earlier from the "
-                          "calibration reads. Adds method 'diamond_cascade' "
-                          "(osmotool profile's default output) to every "
-                          "table, and no cascade config is written from "
-                          "these reads.")
-    ap.add_argument("--cascade-precision-metric", choices=["precision_panel", "precision"],
-                     default="precision",
-                     help="summary.tsv column the cascade flag is decided on: "
-                          "precision (own hard negatives; default, what the "
-                          "cascade's same-family HMM check can fix) or "
-                          "precision_panel (also other panel genes' reads).")
-    ap.add_argument("--cascade-precision-threshold", type=float, default=0.95,
-                     help="Families with DIAMOND precision below this are "
-                          "flagged for the profile-mode cascade check.")
+                    help="Benchmark (test-read) mode: an existing "
+                         "profile_cascade.tsv, written earlier from the "
+                         "calibration reads. Adds method 'diamond_cascade' "
+                         "(osmotool profile's default output) to every "
+                         "table; nothing is decided from these reads.")
+    ap.add_argument("--report-levels", type=Path, default=None,
+                    help="Benchmark mode: the release's profile_report_levels.tsv. "
+                         "Adds summary_by_report_unit.tsv and checks osmotool's "
+                         "unit_counts.tsv against the rebuilt calls.")
     args = ap.parse_args()
 
-    families = load_family_names(args.families)
-    groups = load_paralog_groups(args.families)
+    calibration = args.cascade_config is None
+    meta = load_family_meta(args.families)
+    families = list(meta)
+    groups = {f: m["group"] for f, m in meta.items() if m["group"]}
+    report_units = load_report_levels(args.report_levels) if args.report_levels else []
     args.out.mkdir(parents=True, exist_ok=True)
     truth = load_read_truth(args.results / "reads")
+    diamond_dir = args.results / "diamond"
 
-    diamond_calls = load_diamond_calls(args.results / "diamond")
+    diamond_calls = load_diamond_calls(diamond_dir)
     hmm_calls = load_hmm_calls(args.results / "hmm")
+    if calibration and not diamond_calls.empty and not any(diamond_dir.glob("*.cascade.hmmsearch.tblout")):
+        raise SystemExit(
+            f"Calibration mode needs each DIAMOND call's HMM score: run 10_run_benchmark.sh "
+            f"with CASCADE=score on these reads (no *.cascade.hmmsearch.tblout in {diamond_dir}).")
 
     summary_rows = []
     group_rows = []
@@ -646,119 +932,102 @@ def main() -> None:
     background_fpr_rows = []
     background_by_family_rows = []
     all_curve_stats = {}
+    merged_by_method: dict[str, pd.DataFrame] = {}
+
+    def add_method(merged: pd.DataFrame, method: str) -> None:
+        nonlocal summary_rows, group_rows, length_stratified_rows
+        summary_rows += summarize(merged, method, families, groups)
+        group_rows += summarize_groups(merged, method, families, groups)
+        length_stratified_rows += summarize_by_length(merged, method, families)
+        bg_overall, bg_by_family = summarize_background_fpr(merged, method)
+        background_fpr_rows.extend(bg_overall)
+        background_by_family_rows.extend(bg_by_family)
+        merged_by_method[method] = merged
 
     if not diamond_calls.empty:
         diamond_merged = label_reads(diamond_calls, truth)
-        summary_rows += summarize(diamond_merged, "diamond", families, groups)
-        group_rows += summarize_groups(diamond_merged, "diamond", families, groups)
+        add_method(diamond_merged, "diamond")
         best_threshold_rows += summarize_best_threshold(diamond_merged, "diamond", "bitscore", families)
-        length_stratified_rows += summarize_by_length(diamond_merged, "diamond", families)
-        bg_overall, bg_by_family = summarize_background_fpr(diamond_merged, "diamond")
-        background_fpr_rows += bg_overall
-        background_by_family_rows += bg_by_family
         all_curve_stats["diamond"] = plot_curves(
             diamond_merged, "diamond", "bitscore", args.out, higher_is_better=True)
-        if args.cascade_config is not None:
+        if not calibration:
             cutoffs = load_cascade_config(args.cascade_config)
-            cascade_calls = apply_profile_cascade(
-                diamond_calls, args.results / "diamond", cutoffs)
-            verify_cascade_counts(cascade_calls, args.results / "diamond")
-            cascade_merged = label_reads(cascade_calls, truth)
-            method = "diamond_cascade"
-            summary_rows += summarize(cascade_merged, method, families, groups)
-            group_rows += summarize_groups(cascade_merged, method, families, groups)
-            length_stratified_rows += summarize_by_length(cascade_merged, method, families)
-            bg_overall, bg_by_family = summarize_background_fpr(cascade_merged, method)
-            background_fpr_rows += bg_overall
-            background_by_family_rows += bg_by_family
+            cascade_calls = apply_profile_cascade(diamond_calls, diamond_dir, cutoffs)
+            verify_cascade_counts(cascade_calls, diamond_dir)
+            if report_units:
+                verify_unit_counts(cascade_calls, diamond_dir, report_units)
+            add_method(label_reads(cascade_calls, truth), "diamond_cascade")
     else:
         print("WARNING: no DIAMOND alignment files found in results/diamond")
 
     if not hmm_calls.empty:
         hmm_merged = label_reads(hmm_calls, truth)
-        summary_rows += summarize(hmm_merged, "hmm", families, groups)
-        group_rows += summarize_groups(hmm_merged, "hmm", families, groups)
+        add_method(hmm_merged, "hmm")
         best_threshold_rows += summarize_best_threshold(hmm_merged, "hmm", "bitscore", families)
-        length_stratified_rows += summarize_by_length(hmm_merged, "hmm", families)
-        bg_overall, bg_by_family = summarize_background_fpr(hmm_merged, "hmm")
-        background_fpr_rows += bg_overall
-        background_by_family_rows += bg_by_family
         all_curve_stats["hmm"] = plot_curves(
             hmm_merged, "hmm", "bitscore", args.out, higher_is_better=True)
     else:
         print("WARNING: no HMM tblout files found in results/hmm")
 
-    summary_path = args.out / "summary.tsv"
-    if summary_rows:
-        with open(summary_path, "w", newline="") as fh:
-            writer = csv.DictWriter(fh, fieldnames=list(summary_rows[0].keys()), delimiter="\t")
-            writer.writeheader()
-            writer.writerows(summary_rows)
-        print(f"Per-family precision/recall/F1 written to {summary_path}")
+    manifest_rows: list[dict] = []
+    cascade_rows: list[dict] = []
+    if calibration and not diamond_calls.empty:
+        # Every family with an HMM short-read threshold cascaded at once:
+        # with the no-cascade tables this scores every option per unit.
+        thresholds = {r["family"]: r["best_threshold"]
+                      for r in best_threshold_rows if r["method"] == "hmm"}
+        all_on = label_reads(apply_profile_cascade(diamond_calls, diamond_dir, thresholds), truth)
+        add_method(all_on, "diamond_cascade_all")
 
-    if group_rows:
-        group_path = args.out / "summary_by_group.tsv"
-        with open(group_path, "w", newline="") as fh:
-            writer = csv.DictWriter(fh, fieldnames=list(group_rows[0].keys()), delimiter="\t")
-            writer.writeheader()
-            writer.writerows(group_rows)
-        print(f"Per-paralog-group precision/recall/F1 written to {group_path}")
+        def by(rows, method, key):
+            return {r[key]: r for r in rows if r["method"] == method}
+        manifest_rows, cascade = decide_units(
+            meta, thresholds,
+            by(summary_rows, "diamond", "family"), by(summary_rows, "diamond_cascade_all", "family"),
+            by(group_rows, "diamond", "paralog_group"), by(group_rows, "diamond_cascade_all", "paralog_group"),
+            args.min_f1)
+        cascade_rows = list(cascade.values())
 
-    best_threshold_path = args.out / "best_threshold_summary.tsv"
-    if best_threshold_rows:
-        with open(best_threshold_path, "w", newline="") as fh:
-            writer = csv.DictWriter(fh, fieldnames=list(best_threshold_rows[0].keys()), delimiter="\t")
-            writer.writeheader()
-            writer.writerows(best_threshold_rows)
-        print(f"Per-family best-F1 score-threshold summary written to {best_threshold_path}")
+    unit_rows = []
+    for method, merged in merged_by_method.items():
+        if report_units and method != "diamond_cascade_all":
+            unit_rows += summarize_report_units(merged, method, report_units)
 
-    length_path = args.out / "summary_by_read_length.tsv"
-    if length_stratified_rows:
-        with open(length_path, "w", newline="") as fh:
-            writer = csv.DictWriter(fh, fieldnames=list(length_stratified_rows[0].keys()), delimiter="\t")
-            writer.writeheader()
-            writer.writerows(length_stratified_rows)
-        print(f"Read-length-stratified precision/recall/F1 written to {length_path}")
-
-    background_path = args.out / "background_fpr.tsv"
-    if background_fpr_rows:
-        with open(background_path, "w", newline="") as fh:
-            writer = csv.DictWriter(fh, fieldnames=list(background_fpr_rows[0].keys()), delimiter="\t")
-            writer.writeheader()
-            writer.writerows(background_fpr_rows)
-        print(f"Background false-positive rate written to {background_path}")
-    if background_by_family_rows:
-        by_family_path = args.out / "background_fpr_by_family.tsv"
-        with open(by_family_path, "w", newline="") as fh:
-            writer = csv.DictWriter(fh, fieldnames=list(background_by_family_rows[0].keys()),
-                                    delimiter="\t")
-            writer.writeheader()
-            writer.writerows(background_by_family_rows)
-        print(f"Background false positives by called family written to {by_family_path}")
+    _write_tsv(args.out / "summary.tsv", summary_rows, "Per-family precision/recall/F1")
+    _write_tsv(args.out / "summary_by_group.tsv", group_rows, "Per-paralog-group precision/recall/F1")
+    _write_tsv(args.out / "summary_by_report_unit.tsv", unit_rows,
+               "Per-reporting-unit precision/recall/F1 (release report levels)")
+    _write_tsv(args.out / "best_threshold_summary.tsv", best_threshold_rows,
+               "Per-family best-F1 score-threshold summary")
+    _write_tsv(args.out / "summary_by_read_length.tsv", length_stratified_rows,
+               "Read-length-stratified precision/recall/F1")
+    _write_tsv(args.out / "background_fpr.tsv", background_fpr_rows, "Background false-positive rate")
+    _write_tsv(args.out / "background_fpr_by_family.tsv", background_by_family_rows,
+               "Background false positives by called family")
 
     if all_curve_stats:
         print("\nOverall ROC/PR AUC by method:")
         for method, stats in all_curve_stats.items():
             print(f"  {method}: {stats}")
 
-    if args.cascade_config is not None:
-        print(f"\nScored the cascade with {args.cascade_config}; no cascade "
-              f"config written from these reads.")
+    if not calibration:
+        print(f"\nScored the cascade with {args.cascade_config}"
+              + (f" and the report levels with {args.report_levels}" if args.report_levels else "")
+              + "; nothing decided from these reads.")
         return
 
-    cascade_rows = build_profile_cascade_config(
-        summary_rows, best_threshold_rows, args.cascade_precision_threshold,
-        args.cascade_precision_metric)
     if cascade_rows:
         cascade_path = args.cascade_out or (args.out / "profile_cascade.tsv")
-        with open(cascade_path, "w", newline="") as fh:
-            writer = csv.DictWriter(fh, fieldnames=list(cascade_rows[0].keys()), delimiter="\t")
-            writer.writeheader()
-            writer.writerows(cascade_rows)
-        n_flagged = sum(1 for r in cascade_rows if r["needs_cascade_check"] == "yes")
-        print(f"\nProfile-mode DIAMOND+HMM cascade config written to {cascade_path} "
-              f"({n_flagged}/{len(cascade_rows)} families flagged, "
-              f"{args.cascade_precision_metric} < {args.cascade_precision_threshold})")
+        _write_tsv(cascade_path, cascade_rows, "\nProfile-mode DIAMOND+HMM cascade config")
+        flagged = [r["family"] for r in cascade_rows if r["needs_cascade_check"] == "yes"]
+        print(f"  {len(flagged)}/{len(cascade_rows)} families cascaded: {', '.join(flagged)}")
+    if manifest_rows:
+        levels_path = args.report_levels_out or (args.out / "profile_report_levels.tsv")
+        write_report_levels(levels_path, manifest_rows, args.min_f1)
+        print(f"Profile report levels written to {levels_path}")
+        for level in REPORT_LEVELS:
+            units = [r["unit"] for r in manifest_rows if r["report_level"] == level]
+            print(f"  {level}: {len(units)} units: {', '.join(units)}")
 
 
 if __name__ == "__main__":

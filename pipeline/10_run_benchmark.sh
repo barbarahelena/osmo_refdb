@@ -43,18 +43,49 @@ DIAMOND_MIN_SUBJECT_COVER="${DIAMOND_MIN_SUBJECT_COVER:-0.0}"
 # --keep_aln retains the raw DIAMOND alignments and the cascade's own
 # hmmsearch table, so 11_compute_metrics.py scores DIAMOND alone and
 # DIAMOND+cascade from this single run.
-# CASCADE=off passes --no_cascade: used for the calibration run itself (no
-# config exists yet) and for osmotool versions older than ab3fb9e, which
-# have no cascade default and no such flag.
+# CASCADE=score is the calibration run's mode: every family in the HMM db is
+# flagged with a threshold no read can fail, so osmotool keeps every DIAMOND
+# call (gene_counts.tsv = DIAMOND-only) but its --keep_aln
+# <sample>.cascade.hmmsearch.tblout holds each call's HMM score against the
+# family it was called to. 11_compute_metrics.py replays any cascade config
+# from that, which is how report level and cascade get decided together on
+# the calibration reads. The scores are what production would see: the
+# cascade's hmmsearch fixes -Z to the number of models, so neither a score
+# nor whether it is reported depends on which reads were searched. osmotool
+# finds its cascade config by fixed name in the release dir, so this mode
+# points it at a shadow dir: symlinks to the release's files plus the
+# flag-every-family config.
+# CASCADE=off passes --no_cascade: for osmotool versions older than ab3fb9e,
+# which have no cascade default and no such flag.
 CASCADE="${CASCADE:-on}"
 # HMM samples run JOBS at a time, one hmmscan thread each: hmmscan against
 # this small db gets slower, not faster, with more threads per job.
 JOBS="${JOBS:-1}"
 CASCADE_ARGS=()
+PROFILE_DB="${RELEASE_DIR}"
 if [ "${CASCADE}" = "off" ]; then
     if osmotool profile --help 2>/dev/null | grep -q -- "--no_cascade"; then
         CASCADE_ARGS+=(--no_cascade)
     fi
+elif [ "${CASCADE}" = "score" ]; then
+    PROFILE_DB="${OUT_DIR:?}/cascade_score_db"
+    # only symlinks and one small TSV live here; rebuilt each run
+    rm -f "${PROFILE_DB}"/*
+    mkdir -p "${PROFILE_DB}"
+    release_abs="$(cd "${RELEASE_DIR}" && pwd)"
+    for f in "${release_abs}"/*; do
+        case "$(basename "${f}")" in
+            osmo_refdb.profile_cascade.tsv|osmo_refdb.profile_report_levels.tsv|results|markers) ;;
+            *) ln -s "${f}" "${PROFILE_DB}/$(basename "${f}")" ;;
+        esac
+    done
+    {
+        printf 'family\tdiamond_precision\tprecision_metric\tneeds_cascade_check\thmm_short_read_threshold\n'
+        awk '$1 == "NAME" {printf "%s\t\tscore_all\tyes\t-1000000000\n", $2}' "${HMM_DB}"
+    } > "${PROFILE_DB}/osmo_refdb.profile_cascade.tsv"
+elif [ "${CASCADE}" != "on" ]; then
+    echo "ERROR: CASCADE must be on, off or score (got '${CASCADE}')" >&2
+    exit 1
 elif [ ! -s "${RELEASE_DIR}/osmo_refdb.profile_cascade.tsv" ]; then
     echo "ERROR: CASCADE=on but ${RELEASE_DIR}/osmo_refdb.profile_cascade.tsv is missing." >&2
     echo "       Run the calibration benchmark first (run_pipeline.sh benchmark does)." >&2
@@ -83,7 +114,7 @@ for R1 in "${READS_DIR}"/*_R1.fastq*; do
 
     echo "  sample: ${SAMPLE}"
     osmotool profile \
-        "${RELEASE_DIR}" \
+        "${PROFILE_DB}" \
         -1 "${R1}" -2 "${R2}" \
         --out_prefix "${OUT_DIR}/diamond/${SAMPLE}" \
         --threads "${THREADS}" \
@@ -93,6 +124,11 @@ for R1 in "${READS_DIR}"/*_R1.fastq*; do
         --keep_aln \
         "${CASCADE_ARGS[@]+"${CASCADE_ARGS[@]}"}"
 done
+
+if [ "${SKIP_HMM:-0}" = "1" ]; then
+    echo "SKIP_HMM=1: not running the HMM pass (reusing ${OUT_DIR}/hmm as it is)"
+    exit 0
+fi
 
 echo ""
 echo "=== HMM (6-frame translate + hmmscan; ${JOBS} sample(s) at a time) ==="
