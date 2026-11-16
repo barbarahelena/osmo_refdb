@@ -3,7 +3,8 @@
 06_calibrate_cutoffs.py — set per-family HMM gathering thresholds (GA cutoffs)
 
 Reads the hmmsearch --tblout score tables produced by 05_build_hmms.sh for
-the held-out positive test set and hard-negative set, finds a score
+the positive calibration set (positive.calib: held out from the model and
+from the benchmark's positive.test) and hard-negative set, finds a score
 threshold that separates them, writes the cutoff into each .hmm file's GA
 line, and records the decision (and full score distributions) in
 hmms/cutoff_manifest.tsv.

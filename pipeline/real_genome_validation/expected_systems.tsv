@@ -1,0 +1,44 @@
+# Expected multi-subunit system calls on the nine reference genomes
+# (osmotool/test_genomes). Each row is a published or independently annotated
+# expectation, taken from osmotool's README ("Multi-subunit systems") and
+# test_genomes/README.md, where the original checks were run on osmo_refdb
+# releases before v9. expected: present | absent | info (no pass/fail: the
+# call is reported and explained in the note).
+# basis: operon = characterised operon in that organism; control = negative
+# control (system not expected there); specificity = the wide-window system
+# must not fire outside its source organism.
+genome	system	expected	basis	note
+bsubtilis_168	mrp	present	operon	mrpA-G, characterised in B. subtilis
+bsubtilis_168	opuA	present	operon	opuAA-AB-AC
+bsubtilis_168	opuC	present	operon	opuCA-CB-CC-CD
+saureus	mrp	present	operon	mnhA-G
+saureus	opuC	present	operon	opuCABCD
+lmonocytogenes	mrp	present	operon	
+lmonocytogenes	opuA	present	operon	gbuABC
+lmonocytogenes	opuC	present	operon	opuCABCD
+efaecalis	opuC	present	operon	
+helongata	mrp	present	operon	
+helongata	ect	present	operon	ectABC, the ectoine discovery organism
+ecoli_k12	ots	present	operon	otsBA
+ecoli_k12	trk	absent	control	trkA and trkH both present, hundreds of genes apart
+ecoli_k12	mrp	absent	control	Firmicutes-type system
+ecoli_k12	opuA	absent	control	ProU (proVWX) must not be reattributed to opuA
+ecoli_k12	opuB	info	homolog	yehWXYZ/osmF (b2128-b2131): RefSeq-annotated glycine betaine ABC transporter, an OpuB/OpuC-type homologue. Low affinity and not osmoprotective (Lang et al. 2015), so a call here is a true family member, not an OpuB-like osmoprotectant system
+ecoli_k12	opuC	absent	control	
+ecoli_k12	ect	absent	control	
+collinsella	galE_murB_mazG	present	operon	Culligan et al. 2012 locus
+bsubtilis_168	galE_murB_mazG	absent	specificity	
+saureus	galE_murB_mazG	absent	specificity	
+lmonocytogenes	galE_murB_mazG	absent	specificity	
+efaecalis	galE_murB_mazG	absent	specificity	
+helongata	galE_murB_mazG	absent	specificity	
+ecoli_k12	galE_murB_mazG	absent	specificity	
+hvolcanii	galE_murB_mazG	absent	specificity	
+rbaltica	galE_murB_mazG	absent	specificity	
+bsubtilis_168	ect	absent	control	only H. elongata carries ectABC in this set
+saureus	ect	absent	control	
+lmonocytogenes	ect	absent	control	
+efaecalis	ect	absent	control	
+collinsella	ect	absent	control	
+hvolcanii	ect	absent	control	
+rbaltica	ect	absent	control	

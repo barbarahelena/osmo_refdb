@@ -2,7 +2,7 @@
 # ---------------------------------------------------------------------------
 # osmo_refdb — 05_build_hmms.sh
 # hmmbuild from each family's trimmed TRAIN alignment, then score the
-# positive test set and hard-negative set against it (used by
+# positive CALIB set and the negative.train set against it (used by
 # 06_calibrate_cutoffs.py). Assumes hmmer is on PATH.
 #
 # NOTE: hmmbuild is given -n "${FAMILY}" explicitly so the resulting HMM's
@@ -110,9 +110,16 @@ for FAMILY in ${ALL_FAMILIES}; do
         hmmbuild --amino -n "${FAMILY}" --cpu "${THREADS}" "${HMM_FILE}" "${TRIMMED_ALN}" > /dev/null
     fi
 
-    # Score against the held-out positive TEST set (not train) as a sanity
-    # check of true-positive recall on unseen data.
-    if [ -s "${REFS_DIR}/${FAMILY}.positive.test.faa" ]; then
+    # Calibration positives: the positive.calib split from
+    # 03_split_train_test.py -- held out from the model, and disjoint from
+    # the positive.test set the benchmarks score, so the GA cutoff is never
+    # set on benchmark positives. Falls back to positive.test (the pre-v10
+    # behaviour) only for a family too small to have a calib set.
+    if [ -s "${REFS_DIR}/${FAMILY}.positive.calib.faa" ]; then
+        hmmsearch --cpu "${THREADS}" --tblout "${POS_SCORES}" --noali \
+            "${HMM_FILE}" "${REFS_DIR}/${FAMILY}.positive.calib.faa" > /dev/null
+    elif [ -s "${REFS_DIR}/${FAMILY}.positive.test.faa" ]; then
+        echo "[${FAMILY}] WARNING: no positive.calib split, calibrating on positive.test (benchmark positives overlap)"
         hmmsearch --cpu "${THREADS}" --tblout "${POS_SCORES}" --noali \
             "${HMM_FILE}" "${REFS_DIR}/${FAMILY}.positive.test.faa" > /dev/null
     elif [ -s "${REFS_DIR}/${FAMILY}.positive.faa" ]; then

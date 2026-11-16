@@ -20,6 +20,12 @@ RUN conda env create -f /opt/osmo_refdb/environment.yml \
 #     when osmo_refdb should pick up newer osmotool changes. Switch to
 #     `pip install osmotool==<version>` once it's on PyPI.
 #
+# Bumped v0.7.0->v0.8.0 (2026-11-15): so the benchmark and the
+# reference-genome checks run on one osmotool version. v0.8.0 adds
+# copies-per-genome marker normalisation to profile, assembly statistics to
+# annotate's output and v9 as the default download; it needs Python >=3.11
+# (the conda env has 3.11) and no new dependencies.
+#
 # Bumped 2826ebc->v0.7.0 (2026-11-04): picks up the DIAMOND+HMM cascade
 # being on by default (ab3fb9e; 10_run_benchmark.sh passes --no_cascade
 # since the cascade config is only written after the benchmark), HMM
@@ -37,7 +43,7 @@ RUN conda env create -f /opt/osmo_refdb/environment.yml \
 # current osmotool HEAD, not the stale pin -- this bump makes the Dockerfile
 # match what was actually tested, rather than the other way around.
 RUN conda run -n osmo_refdb pip install --no-deps \
-    "git+https://github.com/barbarahelena/osmotool.git@v0.7.0"
+    "git+https://github.com/barbarahelena/osmotool.git@v0.8.0"
 
 COPY . /opt/osmo_refdb/
 

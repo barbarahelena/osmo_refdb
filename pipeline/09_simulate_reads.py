@@ -152,6 +152,14 @@ def main() -> None:
                           "other sample, scored as pure false-positive risk "
                           "in background_fpr.tsv (11_compute_metrics.py), "
                           "since they don't belong to any gene family")
+    ap.add_argument("--split", choices=["test", "calib"], default="test",
+                     help="test (default): benchmark reads from positive.test "
+                          "+ negative.test + the random background. calib: "
+                          "calibration reads from positive.calib + "
+                          "negative.train, which 11_compute_metrics.py turns "
+                          "into the profile cascade config, so that config is "
+                          "never tuned on benchmark reads. No random "
+                          "background in calib (it feeds no cascade decision).")
     ap.add_argument("--out", required=True, type=Path)
     args = ap.parse_args()
 
@@ -177,19 +185,33 @@ def main() -> None:
         # from their own source sequences. A family too small to split falls
         # back to the full negative.faa.
         neg_fname = f"{family}.negative.test.faa"
+        pos_fname = f"{family}.positive.test.faa"
+        if args.split == "calib":
+            # Calibration reads: the sequences the cutoffs were set on.
+            # Caveat for decoy_from_negatives families (betL): their
+            # negative.train is also in the DIAMOND db as decoy refs, so
+            # these reads find themselves and DIAMOND's calibration
+            # precision for such a family is optimistic.
+            pos_fname = f"{family}.positive.calib.faa"
+            neg_fname = f"{family}.negative.train.faa"
+            if not (args.refs / pos_fname).exists():
+                print(f"[{family}] WARNING: no positive.calib split, family "
+                      f"has no positive calibration reads")
         if not (args.refs / neg_fname).exists():
             neg_fname = f"{family}.negative.faa"
             if (args.refs / neg_fname).exists():
-                print(f"[{family}] WARNING: no negative.test split, simulating "
-                      f"benchmark negatives from the full negative.faa")
-        jobs += [(family, "positive", f"{family}.positive.test.faa"),
+                print(f"[{family}] WARNING: no negative split, simulating "
+                      f"negatives from the full negative.faa")
+        jobs += [(family, "positive", pos_fname),
                  (family, "negative", neg_fname)]
 
     # Shared random bacterial background (01f_build_random_background.py):
     # unrelated proteins, scored in 11_compute_metrics.py as off-target
     # false positives per family. Appended last so every family's rng draws
     # above are identical whether or not the background exists.
-    if (args.refs / RANDOM_BG_FASTA).exists():
+    if args.split == "calib":
+        pass
+    elif (args.refs / RANDOM_BG_FASTA).exists():
         jobs.append((RANDOM_BG_FAMILY, "negative", RANDOM_BG_FASTA))
     else:
         print(f"NOTE: no {RANDOM_BG_FASTA} in {args.refs} -- benchmark has no "

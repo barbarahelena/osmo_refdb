@@ -5,3 +5,4 @@ __pycache__/
 osmotool_src/
 extra_sequences/
 cache/
+.venv-nacl/

@@ -16,7 +16,9 @@ to catch it.
 
 This calibrates a per-family minimum DIAMOND bitscore, mirroring how
 06_calibrate_cutoffs.py calibrates HMM's GA cutoffs: score each family's
-held-out positive TEST set and (purity+length-filtered) hard-negative set
+positive CALIB set (03_split_train_test.py: held out from the db and
+disjoint from the benchmark's positive.test) and (purity+length-filtered)
+hard-negative set
 against the built DIAMOND database with permissive settings (--id 0
 --query-cover 0, so the true score distribution isn't clipped by
 production-default filters), restricted to each query's best hit
@@ -139,7 +141,13 @@ def main() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         tmp_dir = Path(tmp)
         for family in families:
-            pos_test = args.refs / f"{family}.positive.test.faa"
+            # positive.calib, never positive.test: the benchmarks score
+            # positive.test against this cutoff (annotate --method diamond).
+            pos_test = args.refs / f"{family}.positive.calib.faa"
+            if not pos_test.exists():
+                pos_test = args.refs / f"{family}.positive.test.faa"
+                print(f"[{family}] WARNING: no positive.calib split, calibrating "
+                      f"on positive.test (benchmark positives overlap)")
             # negative.train only (03_split_train_test.py): negative.test is
             # what the benchmark simulates reads from, and osmotool profile
             # applies this cutoff there, so calibrating on it would let the
