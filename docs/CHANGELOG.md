@@ -2058,6 +2058,49 @@ nacl_model v10` trains, explains and packages it into `releases/v10/nacl_model/`
   training genomes, mostly from galE_murB_mazG, and those genomes show no
   larger errors.
 
+### Report levels, decided with the cascade on calibration reads
+
+Profile results are now reported per unit: a family on its own (`gene`), a
+paralog group summed into one row (`group`), or not at all (`none`). Before,
+every family was reported on its own, however unreliable.
+
+- **One denominator for gene and group.** Per-gene `precision` counted only
+  the family's own hard negatives, while `summary_by_group.tsv` also counted
+  the siblings'. `fp_all` = `fp` + `fp_cross` + `fp_other_negatives`, with
+  `precision_all`/`f1_all`, counts every non-background read called as the
+  unit at both levels.
+- **Decided on calibration reads only.** 10c runs osmotool with every family
+  flagged at a threshold nothing fails (`CASCADE=score`), which keeps every
+  DIAMOND call and records its HMM score. Since the cascade only drops reads,
+  a unit's numbers depend only on its own members' flags, so 11c scores every
+  option per unit and decides level and cascade together (`decide_units`):
+  the finest level reaching f1_all 0.5, each level with the better cascade
+  option. The cascade is no longer set by "DIAMOND precision < 0.95": it is
+  on only where it raises f1_all. That turned it off for otsB, mscL, galE,
+  gshA, gshF and the opu/mrp/trk families on `none`, and on for proX.
+- **Source and manifest.** `families.yaml` `report_level` holds the decision
+  (26 gene, 1 group: opu_permease, 15 none; murB, otsA, mrpC, trkH, ktrB,
+  ktrD via `scope: annotate_only`). The release ships
+  `osmo_refdb.profile_report_levels.tsv` with the calibration numbers of
+  every option per unit, next to `osmo_refdb.profile_cascade.tsv`. 11c warns
+  when the rule and `families.yaml` disagree; on v10 they agree everywhere.
+  otsA is the one case where the rule alone would report (calibration
+  f1_all 0.573) and the scope keeps it out.
+- **osmotool** (branch `report-levels`) reads the manifest and writes
+  `<prefix>.unit_counts.tsv`, listing `none` units as `excluded` with NA,
+  never 0. Step 11 checks it against the rebuilt per-read calls: 3742/3742
+  sample x unit cells agree on v10.
+- **Test split, scored once** (`results/metrics/summary_by_report_unit.tsv`,
+  `diamond_cascade`). 27 units reported, median f1_all 0.77 (0.76 with the
+  old cascade config on the same units). The gain is from the cascade being
+  switched off where it cost recall: mscL 0.566 -> 0.767, otsB 0.680 ->
+  0.795, proP 0.436 -> 0.494, gshF 0.615 -> 0.664. Two units chosen at
+  calibration f1_all just above 0.5 land just below on test: proP (0.517 ->
+  0.494) and betB (0.518 -> 0.487). Left as decided: moving them now would
+  select on the test split. opu_permease as a group: 0.509.
+- The pre-change v10 metrics are kept in
+  `releases/v10/archive_pre_report_levels/`.
+
 ### Status
 
 `releases/v10` is a candidate, not a release: nothing is packaged or
@@ -2068,9 +2111,13 @@ uploaded. Open decisions:
   positives, and for families calibrated by F1 sweep on a noisy negative
   pool (ktrB, trkH, gshA, betB) they moved a lot, which says those cutoffs
   are unstable in either release.
-- **Which families the cascade should flag.** As configured it costs the
-  opu substrate-binding, opu ATPase and Mrp large-subunit families most of
-  their recall.
+- ~~Which families the cascade should flag.~~ Decided together with the
+  report levels on calibration reads (above).
+- **Split stringency.** Test positives are a median 81% identical to their
+  nearest training reference (CD-HIT 90%; 53% of them above 80%, 8% below
+  60%). Annotate HMM recall falls from 0.97 (80-90%) to 0.76 (40-60%). A
+  full-panel `SPLIT_MODE=taxonomy` build (`releases/v10-taxsplit`) is running
+  as a sensitivity analysis.
 - ktrB: v9's "real recall gains" rested on a cutoff that v10's calibration
   does not reproduce. The operon-partner evidence for v9's calls (ktrA in
   0.96) still stands, which argues the v9 cutoff was the better one and

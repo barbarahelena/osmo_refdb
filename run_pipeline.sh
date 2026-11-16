@@ -259,13 +259,18 @@ do_benchmark() {
     mkdir -p "${RESULTS_DIR}"
     CALIB_DIR="${RESULTS_DIR}/calib"
     CASCADE_CONFIG="${RELEASE_DIR}/osmo_refdb.profile_cascade.tsv"
+    REPORT_LEVELS="${RELEASE_DIR}/osmo_refdb.profile_report_levels.tsv"
     mkdir -p "${CALIB_DIR}"
 
-    # --- Calibration pass: writes the profile cascade config -------------
-    # The cascade config (which families get an HMM second opinion, and the
-    # short-read HMM threshold each uses) is tuned on reads. Up to v9 those
-    # were the benchmark reads themselves. It is now tuned on reads from
-    # positive.calib + negative.train, sequences the benchmark never scores.
+    # --- Calibration pass: writes the cascade config and report levels ---
+    # Both profile-mode choices are made on reads from positive.calib +
+    # negative.train, sequences the benchmark never scores (up to v9 the
+    # cascade was tuned on the benchmark reads themselves): which families
+    # get an HMM second opinion and at what short-read threshold
+    # (osmo_refdb.profile_cascade.tsv), and at which level each family or
+    # paralog group is reported (osmo_refdb.profile_report_levels.tsv). The
+    # two are decided together per unit: whether a group reaches the bar
+    # can depend on whether it gets the cascade.
     echo ""
     echo "--- 9c. Simulate CALIBRATION reads (positive.calib + negative.train) ---"
     python pipeline/09_simulate_reads.py \
@@ -275,16 +280,16 @@ do_benchmark() {
     python pipeline/09b_compute_read_truth.py --reads "${CALIB_DIR}/reads"
 
     echo ""
-    echo "--- 10c. DIAMOND (no cascade) + HMM on the calibration reads ---"
-    CASCADE=off THREADS="${THREADS}" JOBS="${JOBS:-1}" bash pipeline/10_run_benchmark.sh \
+    echo "--- 10c. DIAMOND (cascade scores for every call, none dropped) + HMM on the calibration reads ---"
+    CASCADE=score THREADS="${THREADS}" JOBS="${JOBS:-1}" bash pipeline/10_run_benchmark.sh \
         "${CALIB_DIR}/reads" "${CALIB_DIR}" \
         "${RELEASE_DIR}" "${HMM_DIR}/osmo_refdb.hmm"
 
     echo ""
-    echo "--- 11c. Calibration metrics -> profile cascade config ---"
+    echo "--- 11c. Calibration metrics -> report levels + profile cascade config ---"
     python pipeline/11_compute_metrics.py \
         --results "${CALIB_DIR}" --out "${CALIB_DIR}/metrics" --families "${FAMILIES_FILE}" \
-        --cascade-out "${CASCADE_CONFIG}"
+        --cascade-out "${CASCADE_CONFIG}" --report-levels-out "${REPORT_LEVELS}"
 
     # --- Benchmark pass: held-out test reads, cascade on (the default) ---
     echo ""
@@ -316,7 +321,7 @@ do_benchmark() {
     echo "--- 11. Precision/recall/F1 for DIAMOND, DIAMOND+cascade and HMM + ROC/PR curves ---"
     python pipeline/11_compute_metrics.py \
         --results "${RESULTS_DIR}" --out "${RESULTS_DIR}/metrics" --families "${FAMILIES_FILE}" \
-        --cascade-config "${CASCADE_CONFIG}"
+        --cascade-config "${CASCADE_CONFIG}" --report-levels "${REPORT_LEVELS}"
 
     echo ""
     echo "--- 11b. Annotate-mode benchmark on held-out full-length proteins ---"
@@ -328,6 +333,8 @@ do_benchmark() {
     echo "=== Benchmark complete. See ${RESULTS_DIR}/metrics for summary.tsv, "
     echo "    best_threshold_summary.tsv, and ROC/PR plots. ==="
     echo "    Profile-mode DIAMOND+HMM cascade config (from calibration reads): ${CASCADE_CONFIG}"
+    echo "    Profile report levels (from calibration reads): ${REPORT_LEVELS}"
+    echo "    Per reporting unit on the test reads: ${RESULTS_DIR}/metrics/summary_by_report_unit.tsv"
     echo "    Annotate-mode benchmark: ${RESULTS_DIR}/annotate/summary.tsv"
 }
 

@@ -882,7 +882,7 @@ def main() -> None:
         # pure best-hit-per-read on raw bit scores and never applies the GA
         # cutoff, and osmotool's `profile`-mode cascade uses a separately-
         # swept short-read threshold instead of it too (see
-        # build_profile_cascade_config's docstring). It only changes the
+        # 11_compute_metrics.py's decide_units). It only changes the
         # cutoff osmotool's `annotate` mode applies directly (full-length
         # ORF calls) -- see mscS's own families.yaml entry for the full
         # writeup. 08b's DIAMOND calibration, 01b/01c's QC, and the
