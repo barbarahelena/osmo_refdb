@@ -2101,6 +2101,38 @@ every family was reported on its own, however unreliable.
 - The pre-change v10 metrics are kept in
   `releases/v10/archive_pre_report_levels/`.
 
+### More stable HMM cutoffs (bagged F1 optimum)
+
+The calibrated GA of overlapping families jumped between builds that differed
+by a few dozen calibration sequences: removing the study sequences moved trkH
+from 403 to 504 bits and trkA from 91 to 272, while the genes' scores hardly
+changed (on 159,560 real gut genes trkH went from 36 claimed genes to 0).
+
+- **What was measured** (`pipeline/cutoff_stability.py`, real score files of v10,
+  v10-taxsplit and v10-rebuild; 30 F1-swept families). Within one build the plain
+  sweep is already steady (median interquartile range 2 bits under 80%
+  subsampling). Between builds it is not: it moves 45.8 bits on average (median
+  16.5) between the random-split and the genus-split build, and six families move
+  more than 100. Plateau rules (the middle of the cutoffs within epsilon of the
+  best F1) were no better and cost up to 0.019 F1 at epsilon 0.05.
+- **What changed.** `06_calibrate_cutoffs.py` now takes the median over 1000
+  seeded bootstrap resamples of the F1-optimal cutoff (positives and negatives
+  resampled separately; Python's seeded `random`, so the cutoff is reproducible).
+  Across the two builds it moves 42.7 bits on average (median 13.4) at a mean F1
+  cost of 0.004 on the calibration data; on the four families the study-sequence
+  removal changed it moves less in all four (trkH 100 -> 70, trkA 181 -> 40).
+  `--cutoff-method sweep` gives the old rule. 15 of 44 GA cutoffs change on the
+  rebuild's scores (trkA 271.7 -> 131.2).
+- **What it does not fix.** Families whose F1 optimum really sits elsewhere when
+  the calibration set changes (ktrB, trkH, mrpA) stay build-dependent; only more
+  calibration positives (cross-fitted scores) would pin them. The manifest now
+  records the plain sweep's cutoff, the bootstrap 10th-90th percentile range and
+  `cutoff_range_wide` (range > a quarter of the cutoff): trkA, proX, opuAB, opuBB,
+  mrpA, mrpC and gshA are flagged on the rebuild. The DIAMOND cutoffs (08b, a
+  percentile of the negatives) are unchanged.
+- Every cutoff downstream (annotate, the catalogue, the benchmark) is recomputed by
+  the next build; v10's published numbers used the plain sweep.
+
 ### Status
 
 `releases/v10` is a candidate, not a release: nothing is packaged or

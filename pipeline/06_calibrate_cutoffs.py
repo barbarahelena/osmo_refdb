@@ -35,6 +35,33 @@ Strategy (mirrors how Pfam sets GA cutoffs):
     manual review — the benchmark (ROC/PR) remains the final word on
     whether the family is usable with an HMM.
 
+    Bagged cutoff (default; --cutoff-method sweep gives the plain sweep): on
+    overlapping pools with a few dozen true positives the F1 curve is jagged,
+    and its single best point jumps from one calibration set to the next (trkH
+    403 -> 504 bits and trkA 91 -> 272 when a rebuild changed a few dozen
+    calibration positives; the genes' scores hardly moved). The cutoff is
+    therefore the median over 1000 bootstrap resamples (positives and
+    negatives resampled separately, at their own size) of the F1-optimal
+    cutoff, which is the typical optimum under sampling variation instead of
+    one lucky point. The resampling uses Python's seeded random (seed from
+    the family name), so the cutoff itself is reproducible. The manifest keeps
+    the plain sweep's cutoff (cutoff_f1_sweep) and the 10th-90th percentile
+    range of the bootstrap optima (cutoff_p10, cutoff_p90); cutoff_range_wide
+    is "yes" when that range exceeds a quarter of the cutoff: the data then do
+    not pin the cutoff down, whatever the method.
+
+    What this buys, measured (pipeline/cutoff_stability.py) on the real score
+    files of three builds: across a random-split and a genus-split build of the
+    30 F1-swept families the cutoffs move 42.7 bits on average with the bagged
+    method vs 45.8 with the plain sweep (median 13.4 vs 16.5), at a mean F1 cost
+    of 0.004 on the calibration data; on the four families the study-sequence
+    removal changed, it moved less in all four (trkH 100 -> 70, trkA 181 -> 40
+    bits). It does not fix families whose F1 optimum really sits elsewhere
+    when the calibration sets differ (ktrB, trkH, mrpA): only more calibration
+    positives do. Within a single build the plain sweep is already steady
+    (median interquartile range 2 bits under 80% subsampling), so this is
+    about differences between builds, not noise within one.
+
 families.yaml `pfam_model: PFxxxxx` families (see 05_build_hmms.sh) are
 handled differently here: their .hmm file already carries a real GA cutoff
 -- Pfam's own, curated for that Pfam family, not computed by this script --
@@ -66,7 +93,9 @@ from __future__ import annotations
 
 import argparse
 import csv
+import random
 import re
+import zlib
 from pathlib import Path
 
 import numpy as np
@@ -156,16 +185,20 @@ MIN_NEG_FOR_RELIABLE_F1 = 30
 
 
 def choose_cutoff(pos_scores: np.ndarray, neg_scores: np.ndarray, neg_file_exists: bool,
-                  n_pos_lost: int = 0) -> tuple[float, str, float | None]:
+                  n_pos_lost: int = 0, family: str = "", method: str = "bagged",
+                  details: dict | None = None) -> tuple[float, str, float | None]:
     """n_pos_lost: positives a decoy takes (decoy-aware GA); they count as
-    misses at every cutoff, so they lower F1 but never move the cutoff."""
+    misses at every cutoff, so they lower F1 but never move the cutoff.
+    method: "bagged" (default) or "sweep" for the F1-optimal cutoff of
+    overlapping pools. details, if given, is filled with cutoff_f1_sweep,
+    cutoff_p10 and cutoff_p90 for the manifest."""
     if n_pos_lost:
         if len(pos_scores) == 0:
             return 0.0, "no_positive_scores", None
         if len(neg_scores) == 0:
             cutoff = max(float(np.min(pos_scores)) - 1.0, 0.0)
             return cutoff, "decoy_aware_clean", 2 * len(pos_scores) / (2 * len(pos_scores) + n_pos_lost)
-        cutoff, f1 = choose_cutoff_by_f1(pos_scores, neg_scores, n_pos_lost)
+        cutoff, f1 = f1_cutoff(pos_scores, neg_scores, n_pos_lost, family, method, details)
         return cutoff, "decoy_aware_f1_calibrated", f1
     if len(pos_scores) == 0:
         return 0.0, "no_positive_scores", None
@@ -206,7 +239,7 @@ def choose_cutoff(pos_scores: np.ndarray, neg_scores: np.ndarray, neg_file_exist
         cutoff = max_neg + 1.0
         return cutoff, "insufficient_negative_data", None
     else:
-        cutoff, f1 = choose_cutoff_by_f1(pos_scores, neg_scores)
+        cutoff, f1 = f1_cutoff(pos_scores, neg_scores, 0, family, method, details)
         return cutoff, "overlapping_distributions_f1_calibrated", f1
 
 
@@ -242,6 +275,76 @@ def choose_cutoff_by_f1(pos_scores: np.ndarray, neg_scores: np.ndarray,
     return best_thr, best_f1
 
 
+N_BOOTSTRAP = 1000
+
+
+def best_threshold(candidates: np.ndarray, w_pos: np.ndarray, w_neg: np.ndarray,
+                   n_pos_total: float) -> tuple[float, float]:
+    """The F1-optimal cutoff (>=) among ascending unique candidate scores,
+    given how many positives and negatives sit at each candidate; lowest
+    threshold on ties, like choose_cutoff_by_f1, but vectorised (it is called
+    once per bootstrap resample). n_pos_total counts every positive, also
+    those a decoy took, which are misses at every cutoff."""
+    tp = np.cumsum(w_pos[::-1])[::-1].astype(float)
+    fp = np.cumsum(w_neg[::-1])[::-1].astype(float)
+    denom = tp + fp
+    precision = np.divide(tp, denom, out=np.zeros_like(tp), where=denom > 0)
+    recall = tp / n_pos_total
+    s = precision + recall
+    f1 = np.divide(2 * precision * recall, s, out=np.zeros_like(s), where=s > 0)
+    j = int(np.argmax(f1))               # first maximum = lowest threshold
+    return float(candidates[j]), float(f1[j])
+
+
+def f1_at(pos_scores: np.ndarray, neg_scores: np.ndarray, cutoff: float, n_pos_lost: int = 0) -> float:
+    tp = int((pos_scores >= cutoff).sum())
+    fp = int((neg_scores >= cutoff).sum())
+    n_pos_total = len(pos_scores) + n_pos_lost
+    precision = tp / (tp + fp) if (tp + fp) else 0.0
+    recall = tp / n_pos_total if n_pos_total else 0.0
+    return 2 * precision * recall / (precision + recall) if (precision + recall) else 0.0
+
+
+def bagged_cutoff(pos_scores: np.ndarray, neg_scores: np.ndarray, n_pos_lost: int = 0,
+                  family: str = "", n_boot: int = N_BOOTSTRAP, seed: int | None = None
+                  ) -> tuple[float, float, float]:
+    """(median, 10th, 90th percentile) of the F1-optimal cutoff over n_boot
+    bootstrap resamples. Positives (plus the n_pos_lost a decoy took, which
+    are resampled with them and stay misses) and negatives are resampled
+    separately with replacement at their own size. Deterministic: Python's
+    Mersenne Twister, seeded from the family name unless seed is given."""
+    candidates = np.unique(np.concatenate([pos_scores, neg_scores]))
+    ip = np.searchsorted(candidates, pos_scores)
+    ineg = np.searchsorted(candidates, neg_scores)
+    n_pos_total = len(pos_scores) + n_pos_lost
+    rng = random.Random(zlib.crc32(f"{family}|cutoff".encode()) if seed is None else seed)
+    pos_range, neg_range = range(n_pos_total), range(len(neg_scores))
+    found = []
+    for _ in range(n_boot):
+        draw = np.array(rng.choices(pos_range, k=n_pos_total))
+        w_pos = np.bincount(ip[draw[draw < len(pos_scores)]], minlength=len(candidates))
+        w_neg = np.bincount(ineg[np.array(rng.choices(neg_range, k=len(neg_scores)))],
+                            minlength=len(candidates))
+        found.append(best_threshold(candidates, w_pos, w_neg, n_pos_total)[0])
+    found = np.array(found)
+    return float(np.median(found)), float(np.percentile(found, 10)), float(np.percentile(found, 90))
+
+
+def f1_cutoff(pos_scores: np.ndarray, neg_scores: np.ndarray, n_pos_lost: int, family: str,
+              method: str, details: dict | None) -> tuple[float, float]:
+    """The cutoff and its F1 on the calibration data, by the bagged method or
+    the plain sweep; the plain sweep's cutoff is always recorded for comparison."""
+    sweep_cutoff, sweep_f1 = choose_cutoff_by_f1(pos_scores, neg_scores, n_pos_lost)
+    if details is not None:
+        details["cutoff_f1_sweep"] = round(sweep_cutoff, 2)
+    if method == "sweep":
+        return sweep_cutoff, sweep_f1
+    cutoff, p10, p90 = bagged_cutoff(pos_scores, neg_scores, n_pos_lost, family)
+    if details is not None:
+        details.update(cutoff_p10=round(p10, 2), cutoff_p90=round(p90, 2))
+    return cutoff, f1_at(pos_scores, neg_scores, cutoff, n_pos_lost)
+
+
 def set_ga_line(hmm_path: Path, cutoff: float) -> None:
     """Insert/replace a GA (gathering threshold) line in the HMM file."""
     text = hmm_path.read_text()
@@ -258,6 +361,9 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--hmms", type=Path, default=Path("hmms"))
     ap.add_argument("--families", type=Path, default=Path("families.yaml"))
+    ap.add_argument("--cutoff-method", choices=["bagged", "sweep"], default="bagged",
+                    help="how the F1-optimal cutoff of overlapping pools is chosen: the "
+                         "median over bootstrap resamples (default) or the plain F1 sweep")
     args = ap.parse_args()
 
     hmm_dir = args.hmms
@@ -284,6 +390,7 @@ def main() -> None:
         # "ran but found nothing" from "never ran" changes the interpretation.
         neg_file_exists = neg_path.exists() and neg_path.stat().st_size > 0
         n_pos_lost = n_neg_won = 0
+        details: dict = {}
         if family in aware_decoys:
             pos_scores, neg_scores, n_pos_lost, n_neg_won = apply_decoys(
                 score_dir, family, aware_decoys[family])
@@ -314,7 +421,8 @@ def main() -> None:
                                  if (precision + recall) else None)
         else:
             cutoff, status, f1_at_cutoff = choose_cutoff(pos_scores, neg_scores, neg_file_exists,
-                                                         n_pos_lost)
+                                                         n_pos_lost, family, args.cutoff_method,
+                                                         details)
             set_ga_line(hmm_path, cutoff)
 
         f1_str = f"{f1_at_cutoff:.3f}" if f1_at_cutoff is not None else "n/a"
@@ -332,6 +440,13 @@ def main() -> None:
             "max_negative_score": round(float(np.max(neg_scores)), 2) if len(neg_scores) else "",
             "positives_lost_to_decoy": n_pos_lost,
             "negatives_won_by_decoy": n_neg_won,
+            "cutoff_method": (args.cutoff_method if "cutoff_f1_sweep" in details else "direct"),
+            "cutoff_f1_sweep": details.get("cutoff_f1_sweep", ""),
+            "cutoff_p10": details.get("cutoff_p10", ""),
+            "cutoff_p90": details.get("cutoff_p90", ""),
+            "cutoff_range_wide": ("yes" if "cutoff_p10" in details and cutoff > 0
+                                  and (details["cutoff_p90"] - details["cutoff_p10"]) > 0.25 * cutoff
+                                  else ""),
         })
 
     manifest_path = hmm_dir / "cutoff_manifest.tsv"
