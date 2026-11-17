@@ -23,9 +23,9 @@ cd "${REPO}"
 : "${SIF:?set SIF}"
 [ -e "releases/${RELEASE}" ] && { echo "ERROR: releases/${RELEASE} exists; use a new name or move it" >&2; exit 1; }
 
-# a build is only attributable to a commit if the tree is clean
+# a build can only be tied to one commit if every file matches that commit
 if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
-    echo "WARNING: the working tree is dirty; PROVENANCE.json will say so" >&2
+    echo "WARNING: some files differ from the last commit (uncommitted changes); PROVENANCE.json will list them" >&2
 fi
 echo "commit: $(git rev-parse HEAD)  node: $(hostname)  arch: $(uname -m)  AVX2 cores: $(grep -c avx2 /proc/cpuinfo || true)"
 SIF_SHA256=$(sha256sum "${SIF}" | cut -d' ' -f1)

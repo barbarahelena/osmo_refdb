@@ -3,10 +3,12 @@
 write_provenance.py -- record what produced a release, next to the release.
 
 Writes <release>/PROVENANCE.json:
-  * code: the osmo_refdb git commit (and whether the tree was dirty, with the
-    dirty files), branch; osmotool's version, git commit (from pip's
-    direct_url.json) and the path it was imported from, which shows a
-    PYTHONPATH working tree shadowing the installed one;
+  * code: the osmo_refdb git commit and branch, and whether any files had
+    been changed since that commit without being committed (and which), so a
+    build is either tied to one exact version of the code or says it is not;
+    osmotool's version, git commit (from pip's direct_url.json) and the path it
+    was imported from, which shows a PYTHONPATH working tree shadowing the
+    installed one;
   * environment: machine architecture and CPU model, host, container runtime,
     the image's SHA-256 (SIF_SHA256, set by the sbatch script), the hash of the
     explicit conda list baked into the image, the version of every tool the
@@ -83,10 +85,13 @@ def tree_hash(directory: Path, pattern: str = "*") -> dict:
     return {"n_files": len(files), "sha256": h.hexdigest()} if files else {"n_files": 0}
 
 
-def run(cmd: list[str], cwd: Path | None = None) -> str:
+def run(cmd: list[str], cwd: Path | None = None, strip: bool = True) -> str:
+    """Output of a command. strip=False keeps leading whitespace, which
+    `git status --porcelain` needs: its first column can be a space."""
     try:
         r = subprocess.run(cmd, capture_output=True, text=True, cwd=cwd, timeout=60)
-        return (r.stdout + r.stderr).strip()
+        text = r.stdout + r.stderr
+        return text.strip() if strip else text.rstrip("\n")
     except (OSError, subprocess.SubprocessError):
         return ""
 
@@ -96,12 +101,12 @@ def git_info(repo: Path) -> dict:
     commit = run(g + ["rev-parse", "HEAD"])
     if not re.fullmatch(r"[0-9a-f]{40}", commit):
         return {"commit": "unknown (not a git checkout)"}
-    dirty = [l[3:] for l in run(g + ["status", "--porcelain"]).splitlines()
-             if not l[3:].startswith(("releases/", "cache/", ".claude/"))
-             and not l[3:].endswith(".DS_Store")]
+    changed = [l[3:] for l in run(g + ["status", "--porcelain"], strip=False).splitlines()
+               if not l[3:].startswith(("releases/", "cache/", ".claude/"))
+               and not l[3:].endswith(".DS_Store")]
     return {"commit": commit, "branch": run(g + ["rev-parse", "--abbrev-ref", "HEAD"]),
             "describe": run(g + ["describe", "--tags", "--always"]),
-            "dirty": bool(dirty), "dirty_files": dirty[:50]}
+            "uncommitted_changes": bool(changed), "uncommitted_files": changed[:50]}
 
 
 def osmotool_info() -> dict:
@@ -228,7 +233,7 @@ def main() -> None:
     out.write_text(json.dumps(record, indent=2) + "\n")
     c = record["code"]["osmo_refdb"]
     print(f"Provenance written: {out}")
-    print(f"  osmo_refdb {c.get('commit', '?')[:10]}{' (DIRTY)' if c.get('dirty') else ''}, "
+    print(f"  osmo_refdb {c.get('commit', '?')[:10]}{' (UNCOMMITTED CHANGES in the code)' if c.get('uncommitted_changes') else ''}, "
           f"osmotool {record['code']['osmotool'].get('version', '?')} "
           f"{'(shadowed by PYTHONPATH!)' if record['code']['osmotool'].get('shadowed_by_pythonpath') else ''}, "
           f"{record['environment']['machine']}")
