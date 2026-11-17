@@ -766,6 +766,31 @@ def fetch_fusion_pair_candidates(families: list[dict], out_dir: Path) -> None:
         print(f"  {n} candidates -> {out_path}")
 
 
+def fetch_hmm_decoys(families_path: Path, out: Path, only_missing: bool = False) -> None:
+    """HMM decoys: models of a confuser class that compete in osmotool
+    annotate's best-hit contest and are then dropped from output (see
+    05b_build_hmm_decoys.py). Same seeded, capped sampling as the family
+    fetches. only_missing: skip a decoy whose raw file already exists (a
+    rebuild from another release's refs keeps the sequences it was built from)."""
+    for decoy in load_hmm_decoys(families_path):
+        dname = decoy["name"]
+        if decoy.get("from_negatives_of"):
+            # built from that family's negative.train (05b), nothing to fetch
+            continue
+        target = out / f"{dname}.hmm_decoy.raw.faa"
+        if only_missing and target.exists():
+            print(f"[{dname}] (HMM decoy) already in {out}, not fetched again")
+            continue
+        print(f"[{dname}] (HMM decoy)")
+        dec_fasta, n_dec, _ = fetch_set(
+            decoy["query"], dname, "HMM decoy", max_seqs=decoy.get("max_seqs", 1500),
+            rng=random.Random(f"{FETCH_RANDOM_SEED}:{dname}:hmm_decoy"))
+        if n_dec == 0:
+            raise SystemExit(f"ERROR: [{dname}] HMM decoy query returned no sequences")
+        target.write_text(dec_fasta)
+        print()
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--families", type=Path, default=Path("families.yaml"))
@@ -783,6 +808,10 @@ def main() -> None:
                          "for capped fetches (default: <repo>/cache/uniprot).")
     ap.add_argument("--no-cache", action="store_true",
                     help="Re-list every capped population instead of using the cache.")
+    ap.add_argument("--only-hmm-decoys", action="store_true",
+                    help="Fetch only the HMM decoys (families.yaml hmm_decoys) whose raw "
+                         "file is not in --out yet, and nothing else: for a rebuild from "
+                         "another release's refs that gained a decoy.")
     args = ap.parse_args()
 
     families = load_families(args.families)
@@ -798,6 +827,9 @@ def main() -> None:
     CACHE_DIR = None if args.no_cache else args.cache_dir
     if CACHE_DIR is not None and uniprot_release == "unknown":
         print("WARNING: UniProt release unknown -- sampling caches disabled for this run")
+    if args.only_hmm_decoys:
+        fetch_hmm_decoys(args.families, args.out, only_missing=True)
+        return
     print(f"Fetch date:      {fetch_date}\n")
 
     manifest_rows = []
@@ -953,23 +985,7 @@ def main() -> None:
     fetch_fusion_pair_candidates(families, args.out)
     print()
 
-    # HMM decoys: models of a confuser class that compete in osmotool
-    # annotate's best-hit contest and are then dropped from output (see
-    # 05b_build_hmm_decoys.py). Same seeded, capped sampling as the
-    # family fetches above.
-    for decoy in load_hmm_decoys(args.families):
-        dname = decoy["name"]
-        if decoy.get("from_negatives_of"):
-            # built from that family's negative.train (05b), nothing to fetch
-            continue
-        print(f"[{dname}] (HMM decoy)")
-        dec_fasta, n_dec, _ = fetch_set(
-            decoy["query"], dname, "HMM decoy", max_seqs=decoy.get("max_seqs", 1500),
-            rng=random.Random(f"{FETCH_RANDOM_SEED}:{dname}:hmm_decoy"))
-        if n_dec == 0:
-            raise SystemExit(f"ERROR: [{dname}] HMM decoy query returned no sequences")
-        (args.out / f"{dname}.hmm_decoy.raw.faa").write_text(dec_fasta)
-        print()
+    fetch_hmm_decoys(args.families, args.out)
 
     manifest_path = args.out / "manifest.tsv"
     with open(manifest_path, "w", newline="") as fh:

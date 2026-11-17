@@ -3,7 +3,9 @@ __pycache__/
 *.pyc
 .DS_Store
 osmotool_src/
-extra_sequences/
 cache/
 .venv-nacl/
 pipeline/*/archive
+
+# retired step 1d: local study data, never to be committed
+extra_sequences/
