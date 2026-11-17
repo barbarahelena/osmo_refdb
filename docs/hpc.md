@@ -3,9 +3,10 @@
 For the canonical release build, the catalog, the BacDive validation and the NaCl model, and for
 benchmarking `osmotool profile --catalog` against a full-size gut gene catalog. The workflow is at
 the repo root (nf-core layout: `main.nf`, `workflows/`, `subworkflows/local/`, `modules/local/`, `conf/`).
-It has been run in `-stub-run` mode only, under Nextflow 25.04.6 and 26.10.6, so the wiring (what runs
-when, what waits for what, the gate, storeDir) is checked; **nothing has run on a cluster**, and the
-containers do not exist yet (`containers/README.md`). Resources, bind paths and queues are meant to
+It has been run in `-stub-run` mode only (last: Nextflow 25.10.3, after the move to one container per
+step), so the wiring (what runs when, what waits for what, the gate, storeDir) is checked; **nothing has
+run on a cluster**, and the Seqera images of the build and analysis steps are still to be made
+(`containers/README.md`). Resources, bind paths and queues are meant to
 be adjusted on first contact.
 
 ## What is measured, and what is not
@@ -52,7 +53,7 @@ full catalog index   (needs only the gene file: starts at once, in parallel)
   genes it showed gor claiming 127 genes (18% of everything annotated), 86% of
   them scoring below the weakest true gor protein: lipoamide dehydrogenase and
   relatives, which the benchmark never contained. That is found in minutes by
-  `modules/local/screen/templates/15_catalog_screen.py`, before BacDive or the NaCl model are run.
+  `modules/local/catalog/screen/templates/15_catalog_screen.py`, before BacDive or the NaCl model are run.
 - **The gate** is a person reading the screen. A flagged family means "look at
   those genes" (closest relative among the family's own references and the
   suspected confusers). A real confuser class means a decoy and a rebuild; a
@@ -61,9 +62,11 @@ full catalog index   (needs only the gene file: starts at once, in parallel)
 
 ## Steps
 
-1. **Containers.** Two images, set by `image_osmotool` and `image_build` in `nextflow.config`;
-   `containers/README.md` says what each needs and which process uses which. Until they are set, the
-   parameters hold `todo.invalid/...` placeholders.
+1. **Containers.** One per step, declared in its module (nf-core style): the osmotool image, biocontainers
+   and Seqera images; `containers/README.md` lists which step uses which. The Seqera ones are
+   `TODO-seqera-...` placeholders until they are made. Apptainer runs with `--no-mount hostfs`
+   (`nextflow.config`): a site that mounts every host filesystem would hide the osmotool image's
+   `/opt/conda`. So every directory outside the repo a step reads or writes goes in `extra_binds`.
 2. **Snapshot** (not in git; about 2 GB from `releases/v10/` on the laptop): `refs/`, `alignments/`, and
    what the build reads from the source release (`osmo_refdb.train_refs.faa`, `markers/`, ...). `rsync -a`
    it to `<clone>/releases/<snapshot>/`. Also `<repo>/data/phenotype_validation/random_panel/pool.hmm`
@@ -101,15 +104,23 @@ full catalog index   (needs only the gene file: starts at once, in parallel)
   there, the task is not run at all, with or without `-resume` and even if `work/` is gone.
 
 `storeDir` is used where a task's output is a real file that is expensive, does not depend on the
-release, and is written once: `FETCH_GMGC` (the gene file, next to `catalog_genes`) and `INDEX_CATALOG`
+release, and is written once: `CATALOG_FETCH` (the gene file, next to `catalog_genes`) and `OSMOTOOL_INDEXCATALOG`
 (the full catalog index, in `full_index_dir`).
 
-Everything else is written in place by shell scripts under the clone: the BacDive genomes and proteins
-(`<data_dir>`), the release (`releases/<name>/`), the catalog annotation. Several steps modify the
-same folders, so these tasks only pass a name on and check that their product exists, and rely on
-`-resume`. The BacDive scripts skip what they already have, so rerunning them after deleting `work/` is
-cheap. If you delete a release, delete `work/` (or run without `-resume`) too. A failed `BUILD_RELEASE`
-is not retried automatically and leaves a partial `releases/<name>`; remove it before running again.
+Everything else goes from step to step as outputs and inputs; no step reads a published file or
+writes into the clone. Results are published (`publishDir`, `conf/modules.config`):
+
+- the release into `releases/<release>/`, by the steps that make its parts: refs, alignments and HMMs,
+  the DIAMOND files, the cascade config and report levels, the benchmark results, `catalogs/<name>/`,
+  `real_genome_validation/`, `phenotype_validation/`, `nacl_model/`, `PROVENANCE.json`;
+- the BacDive tables and harvested batches into `<repo>/<data_dir>` (not the genomes, which stay in
+  `work/` for `-resume`).
+
+The one directory osmotool reads (its `DATABASE`) is `RELEASE_DB`: the DIAMOND files, `hmms/` and the
+cascade, passed to every osmotool step. A release that exists is refused at the start, unless the run is
+a `-resume` (the run after the gate). The BacDive genomes and proteins are only reused through
+`-resume`: deleting `work/` means downloading them again, unless `--bacdive_snapshot` points at
+harvested batches (then only the genomes are fetched again).
 
 `pipeline_info/` gets a trace per invocation, including each task's image, peak memory and time: use
 it to tighten `conf/base.config`.
@@ -118,11 +129,11 @@ it to tighten `conf/base.config`.
 
 | input | scripted? | how |
 |---|---|---|
-| GMGC human gut catalog (2.99 GB) | yes | `FETCH_GMGC` (storeDir) -> `modules/local/fetch_gmgc/templates/fetch_zenodo_member.py`, resumable, CRC-checked |
-| BacDive strain records | yes, no credentials | `FETCH_BACDIVE` (its template) -> `harvest_bacdive.sh sweep`; batches already present are skipped, so a shipped `bacdive_raw/` snapshot reproduces the published table (BacDive itself is live) |
+| GMGC human gut catalog (2.99 GB) | yes | `CATALOG_FETCH` (storeDir) -> `modules/local/catalog/fetch/templates/fetch_zenodo_member.py`, resumable, CRC-checked |
+| BacDive strain records | yes, no credentials | `BACDIVE_FETCH` (its template) -> `harvest_bacdive.sh sweep`; with `--bacdive_snapshot <dir>/bacdive_raw` its batches are not fetched again, so a shipped snapshot reproduces the published table (BacDive itself is live). The batches are published to `<repo>/<data_dir>/bacdive_raw` |
 | BacDive genomes (about 9.4 GB), salt-in control genomes (0.7 GB) | yes | `fetch_genomes.sh` from NCBI FTP, resumable |
 | Pfam-A 39.0 | yes, added | `00_fetch_pfam.sh` (pinned URL); only needed to re-derive the random-panel pool |
-| random-panel pool (`pool.hmm`, 13 MB) | **no: a snapshot** | re-deriving it needs `screen_proteomes.faa`, which no script creates |
+| random-panel pool (`pool.hmm`, `pool_families.tsv`, 13 MB) | **no: a snapshot** (`--random_panel`, default `<repo>/<data_dir>/random_panel`) | re-deriving it needs `screen_proteomes.faa`, which no script creates |
 | release snapshot (`refs/`, `alignments/`, ...) | **no: rsync** | UniProt/RefSeq are live, so the snapshot is the input |
 | reference genomes for real-genome validation | in git | `test_genomes/` (3), osmotool's `test_genomes/` (9); validated by the workflow for every release |
 | UniProt / RefSeq (build step 1) | yes, but not used | only for a from-scratch fetch, which is a new database vintage |
@@ -137,16 +148,16 @@ margin; run once and tighten them from `pipeline_info/*.trace.tsv`.
 
 | job | cores | memory | wall | basis |
 |---|---|---|---|---|
-| `FETCH_GMGC` | 1 | - | about 20-35 min | download rate seen here 1.4-2.7 MB/s for 2.99 GB |
-| `FETCH_BACDIVE` | 8 | - | about 1.5 h + 50 min | **measured** (harvest 1.5 h; 9.4 GB genome fetch at 8 parallel) |
+| `CATALOG_FETCH` | 1 | - | about 20-35 min | download rate seen here 1.4-2.7 MB/s for 2.99 GB |
+| `BACDIVE_FETCH` | 8 | - | about 1.5 h + 50 min | **measured** (harvest 1.5 h; 9.4 GB genome fetch at 8 parallel) |
 | `BUILD_RELEASE` | 16 | 32 GB | request 8 h | **measured** 2.5 h on 10 CPUs inside 7.65 GiB |
-| `ANNOTATE_CATALOG` | 16 | 24 GB | request 6 h | **scaled**: translation 10-12 min (1 thread), hmmsearch 21-25 min at 4 threads, Python 2.4-2.8 GB |
-| `INDEX_CATALOG` (classic bwa) | 1 | 32 GB | request 6 h | **scaled**: classic bwa 92 s and 203 MB for 133 Mbp -> about 2 h and 15-17 GB |
-| `SCREEN` | 1 | 8 GB | 30 min | reads one TSV |
+| `OSMOTOOL_BUILDCATALOG` + `CATALOG_PACKAGE` | 16 | 24 GB | request 6 h | **scaled**: translation 10-12 min (1 thread), hmmsearch 21-25 min at 4 threads, Python 2.4-2.8 GB |
+| `OSMOTOOL_INDEXCATALOG` (classic bwa) | 1 | 32 GB | request 6 h | **scaled**: classic bwa 92 s and 203 MB for 133 Mbp -> about 2 h and 15-17 GB |
+| `CATALOG_SCREEN` | 1 | 8 GB | 30 min | reads one TSV |
 | `BACDIVE_PROTEINS` | 40 x 4 | 8 GB each | 2 h each | **measured** 44 core-hours in all (19,965 s at 8 jobs) |
 | `BACDIVE_ANNOTATE` | 40 x 2 | 4 GB each | 1 h each | **measured** 3.6 core-hours in all (4,365 s at 3 jobs) |
-| `ANALYZE_NACL` | 8 | 16 GB | request 3 h | **measured** about 16 min analysis + about 30 min NaCl |
-| `PROFILE_SAMPLE`, one sample of <= 20M reads | 8 | 32 GB | request 6 h | memory **scaled** (mapping loads the index, about 18-21 GB); time **not measured** at this scale |
+| `BACDIVE_ANALYZE` + `NACL_MODEL` | 8 | 16 GB | request 3 h | **measured** about 16 min analysis + about 30 min NaCl |
+| `OSMOTOOL_PROFILE`, one sample of <= 20M reads | 8 | 32 GB | request 6 h | memory **scaled** (mapping loads the index, about 18-21 GB); time **not measured** at this scale |
 
 **Why classic bwa for the full index.** On the same 133 Mbp: bwa-mem3 builds in 33 s but peaks at
 1.37 GB (10.3 bytes per base), classic bwa takes 92 s and peaks at 0.2 GB (1.5 bytes per base).
@@ -228,7 +239,7 @@ HMM that differs is betL, which was changed on purpose. **Not measured:** the
 same build on arm64 versus x86-64, and the same build twice on the cluster.
 
 **Procedure**
-1. Build the images once (`containers/README.md`), set `image_osmotool` and `image_build` (by digest) in `nextflow.config`, commit, and keep them.
+1. Fix the images once (`containers/README.md`: every module's `container` line), commit, and keep them.
 2. Clean checkout of the commit; put the snapshot at `releases/<snapshot>/`.
 3. `nextflow run main.nf --release <name>` with `reuse_refs_from`
    set; from an empty `work/` (use `-resume` only for the run after the gate).
@@ -242,7 +253,7 @@ same build on arm64 versus x86-64, and the same build twice on the cluster.
 
 ## Known gaps
 
-- The catalog benchmark (`modules/local/annotate_catalog/templates/11d_benchmark_catalog.py`) builds its catalogs
+- The catalog benchmark (`modules/local/catalog/package/templates/11d_benchmark_catalog.py`) builds its catalogs
   from the release's own sequences. Adding a real catalog as background (scenarios
   A and B) is the next change; the test reads are back-translated proteins and will
   not map to real genes, so the real catalog tests background competition and

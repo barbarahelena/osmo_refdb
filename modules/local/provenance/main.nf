@@ -1,28 +1,47 @@
 // The provenance receipt, written last, so it covers the catalog (and the BacDive and NaCl results,
-// when the gate has been passed) as well as the build. It probes the version of every tool, so it runs in
-// the image that has all of them.
+// when the gate has been passed) as well as the build. Every step runs in a container of its own, so
+// the tool versions come from the steps themselves (the `versions` topic), not from this step's image.
+// It reports none to the topic itself: it waits for the topic to close.
+// PROVENANCE.json and software_versions.yml are published into the release (conf/modules.config).
 process PROVENANCE {
-    // calls: python, git, and every tool's --version (write_provenance.py probes them)
-    // image: osmo-build (containers/README.md)
-    container 'barbarahelena/osmo-build:todo'
+    tag "${release_name}"
     label 'process_single'
+
+    // calls: python + pyyaml, git (the pipeline's own checkout, projectDir)
+    // Seqera container 'provenance' (environment.yml next to this file: its packages)
+    container "${ workflow.containerEngine == 'singularity' && !task.ext.singularity_pull_docker_container ?
+        'oras://community.wave.seqera.io/library/git_python_pyyaml:64763cd90b56dd64' :
+        'community.wave.seqera.io/library/git_python_pyyaml:241a3ffe7fa635b5' }"
+
     input:
-    val(release)
-    val(after)
+    val(release_name)
+    path(refs)                                          // BUILD_DIAMOND
+    path(alignments)                                    // BUILD_HMMS
+    path(hmms)                                          // BUILD_HMMS
+    path(release_files, stageAs: 'files/*')             // BUILD_DIAMOND: the DIAMOND database and its files
+    path(cascade, stageAs: 'files/*')                   // the calibrated cascade config and report levels
+    tuple val(meta), path(catalog)                      // CATALOG_PACKAGE
+    path(versions, stageAs: 'collected_versions.yml')   // software_versions.yml (the versions topic)
+    path(families)
+    path(pipeline)                                      // the pipeline's checkout: its git commit
+    val(after)                                          // waits for the rest of this invocation's work
 
     output:
-    val(release)
+    path('PROVENANCE.json'),                              emit: provenance
+    path('software_versions.yml'),                        emit: versions
 
     script:
     """
-    cd ${params.repo}
-    python ${moduleDir}/templates/write_provenance.py --release releases/${release} \\
-        --repo ${params.repo} --families ${params.families_file}
-    test -s releases/${release}/PROVENANCE.json
+    cp -L ${versions} software_versions.yml
+    REUSE_REFS_FROM="${params.reuse_refs_from}" SPLIT_MODE="${params.split_mode}" \\
+    python ${moduleDir}/templates/write_provenance.py --release-name ${release_name} \\
+        --refs ${refs} --alignments ${alignments} --hmms ${hmms} --files files/* --catalogs ${catalog} \\
+        --repo ${pipeline} --families ${families} --versions software_versions.yml --out PROVENANCE.json
     """
 
     stub:
     """
-    echo stub
+    echo '{}' > PROVENANCE.json
+    cp -L ${versions} software_versions.yml
     """
 }

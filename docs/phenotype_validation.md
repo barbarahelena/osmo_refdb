@@ -439,36 +439,36 @@ RP="$PV/random_panel"
 
 # 1. BacDive harvest (~1,820 calls, ~1.5 h). Cached batches are skipped, so a
 #    rerun only fetches what failed. Keep sweep and sample runs in separate dirs.
-bash  modules/local/fetch_bacdive/templates/phenotype_validation/harvest_bacdive.sh "$PV" sweep
+bash  modules/local/bacdive/fetch/templates/phenotype_validation/harvest_bacdive.sh "$PV" sweep
 
 # 2. phenotype table, one row per strain with NaCl max and a genome accession
-python modules/local/fetch_bacdive/templates/phenotype_validation/build_table.py --dir "$PV"
+python modules/local/bacdive/fetch/templates/phenotype_validation/build_table.py --dir "$PV"
 
 # 3. genomes from NCBI (kept gzipped, ~9.4 GB)
-PAR=8 bash modules/local/fetch_bacdive/templates/phenotype_validation/fetch_genomes.sh "$PV"
+PAR=8 bash modules/local/bacdive/fetch/templates/phenotype_validation/fetch_genomes.sh "$PV"
 
 # 4. osmotool annotate in the pinned image, one thread per job
 docker run --rm -v "$PWD":/work -w /work --entrypoint bash osmo_refdb:latest \
-    modules/local/bacdive_annotate/templates/phenotype_validation/run_annotate.sh "$PV" releases/v8 10 1
+    modules/local/bacdive/annotate/templates/phenotype_validation/run_annotate.sh "$PV" releases/v8 10 1
 
 # 5. feature matrix (drops assemblies under 1 Mb) and first readout
-python modules/local/analyze_nacl/templates/phenotype_validation/build_matrix.py --dir "$PV"
-python modules/local/analyze_nacl/templates/phenotype_validation/analyze.py      --dir "$PV"
+python modules/local/bacdive/matrix/templates/build_matrix.py --dir "$PV"
+python modules/local/bacdive/analyze/templates/analyze.py      --dir "$PV"
 
 # 6. random-family pool from Pfam-A.hmm.gz, screened on the 43 pilot proteomes
-python modules/local/bacdive_proteins/templates/phenotype_validation/build_random_pool.py candidates \
+python modules/local/bacdive/proteins/templates/phenotype_validation/build_random_pool.py candidates \
     --pfam "$RP/Pfam-A.hmm.gz" --families families.yaml --out-dir "$RP" --n 6000
 hmmsearch --cut_ga --cpu 8 --noali --tblout "$RP/screen.tbl" -o /dev/null \
     "$RP/candidates.hmm" "$RP/screen_proteomes.faa"
-python modules/local/bacdive_proteins/templates/phenotype_validation/build_random_pool.py pool \
+python modules/local/bacdive/proteins/templates/phenotype_validation/build_random_pool.py pool \
     --pfam "$RP/Pfam-A.hmm.gz" --out-dir "$RP" --screen "$RP/screen.tbl" \
     --osmo-matrix releases/v8/phenotype_validation/feature_matrix.tsv --n-genomes 43
 
 # 7. genome size, GC and pool search per genome (~5.5 h at 8 jobs), then
 #    tests 1-6 (needs numpy, pandas, scipy, scikit-learn, statsmodels)
 docker run --rm -v "$PWD":/work -w /work --entrypoint bash osmo_refdb:latest \
-    modules/local/bacdive_proteins/templates/phenotype_validation/run_random_panel.sh "$PV" "$RP/pool.hmm" 8
-python modules/local/analyze_nacl/templates/phenotype_validation/analyze_extended.py --dir "$PV"
+    modules/local/bacdive/proteins/templates/phenotype_validation/run_random_panel.sh "$PV/genomes" "$PV/random_panel/strains" "$RP/pool.hmm" 8
+python modules/local/bacdive/analyze/templates/analyze_extended.py --dir "$PV"
 ```
 
 Notes:
@@ -481,16 +481,17 @@ Notes:
   `analyze_extended.py` on it.
 - **Within-domain salt-in control (test 6b).**
   ```bash
-  python modules/local/fetch_bacdive/templates/phenotype_validation/build_strategy_control.py --dir "$PV"
-  PAR=4 bash modules/local/fetch_bacdive/templates/phenotype_validation/fetch_genomes.sh "$PV/strategy_control"
+  python modules/local/bacdive/fetch/templates/phenotype_validation/build_strategy_control.py --dir "$PV"
+  PAR=4 bash modules/local/bacdive/fetch/templates/phenotype_validation/fetch_genomes.sh "$PV/strategy_control"
   docker run --rm -v "$PWD":/work -w /work --entrypoint bash osmo_refdb:latest \
-      modules/local/bacdive_proteins/templates/phenotype_validation/run_random_panel.sh "$PV/strategy_control" "$RP/pool.hmm" 3
+      modules/local/bacdive/proteins/templates/phenotype_validation/run_random_panel.sh "$PV/strategy_control/genomes" "$PV/strategy_control/random_panel/strains" "$RP/pool.hmm" 3
   # per release: symlink genomes + random_panel into
   # releases/<rel>/phenotype_validation/strategy_control/, then
   docker run --rm -v "$PWD":/work -w /work --entrypoint bash osmo_refdb:latest \
-      modules/local/bacdive_annotate/templates/phenotype_validation/run_annotate_cached.sh \
-      releases/<rel>/phenotype_validation/strategy_control releases/<rel> 3
-  python modules/local/analyze_nacl/templates/phenotype_validation/analyze_strategy_control.py --dir "$PV" \
+      modules/local/bacdive/annotate/templates/phenotype_validation/run_annotate_cached.sh \
+      "$PV/strategy_control/genomes" "$PV/strategy_control/random_panel/strains" \
+      releases/<rel>/phenotype_validation/strategy_control/annotate releases/<rel> 3
+  python modules/local/bacdive/analyze/templates/analyze_strategy_control.py --dir "$PV" \
       --osmo-dir releases/<rel>/phenotype_validation
   ```
 - Run one thread per job and parallelise across genomes. In the pilot, extra

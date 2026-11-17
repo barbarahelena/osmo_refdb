@@ -2,7 +2,7 @@
 
 This model predicts the highest NaCl concentration (% w/v) at which a salt-out prokaryote grows,
 from `osmotool annotate` output alone. It is trained here on the BacDive phenotype-validation set
-(`modules/local/analyze_nacl/templates/phenotype_validation/`). It ships in the release as `nacl_model/` so that osmotool can
+(`modules/local/bacdive/analyze/templates/`). It ships in the release as `nacl_model/` so that osmotool can
 apply it to new genomes.
 
 The model is tied to the release it was trained on: family counts depend on that release's HMM
@@ -31,7 +31,7 @@ PYTHON=.venv-nacl/bin/python THREADS=8 bash run_pipeline.sh nacl_model v10
 # = train.py (~20 min) + explain.py (~10 min) + 13_package_nacl_model.py
 
 # predict, on osmotool >= 0.8.0 annotate output (header has gc and n_contigs)
-.venv-nacl/bin/python modules/local/analyze_nacl/templates/nacl_model/predict.py releases/v10/nacl_model out/genomeA out/genomeB
+.venv-nacl/bin/python modules/local/nacl/model/templates/nacl_model/predict.py releases/v10/nacl_model out/genomeA out/genomeB
 ```
 
 On macOS, set `MPLCONFIGDIR` to a writable directory if `~/.matplotlib` is not writable.

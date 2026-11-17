@@ -1,16 +1,18 @@
 //
 // The gene catalog: download it (skipped if it is already in place, storeDir) and build its
-// full competitive index. Needs no release, so it runs alongside the build.
+// full competitive index (storeDir too, conf/modules.config). Needs no release, so it runs
+// alongside the build.
 //
-include { FETCH_GMGC    } from '../../../modules/local/fetch_gmgc/main'
-include { INDEX_CATALOG } from '../../../modules/local/index_catalog/main'
+include { CATALOG_FETCH         } from '../../../modules/local/catalog/fetch/main'
+include { OSMOTOOL_INDEXCATALOG } from '../../../modules/local/osmotool/indexcatalog/main'
 
 workflow CATALOG_GENES {
     main:
-    genes = FETCH_GMGC().map { _f -> params.catalog_genes }
-    INDEX_CATALOG(genes)
+    CATALOG_FETCH()
+    genes = CATALOG_FETCH.out.genes
+    OSMOTOOL_INDEXCATALOG(genes.map { f -> tuple([id: params.catalog_name], f) })
 
     emit:
-    genes = genes                 // the gene file's path, once it is in place
-    index = INDEX_CATALOG.out     // the full index directory
+    genes    = genes                              // the gene file, once it is in place
+    index    = OSMOTOOL_INDEXCATALOG.out.index    // the full index directory
 }

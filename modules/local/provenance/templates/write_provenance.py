@@ -147,6 +147,27 @@ def tool_versions() -> dict:
     return versions
 
 
+def process_versions(path: Path) -> dict:
+    """The versions.yml every pipeline step writes (nf-core style), collected by the workflow:
+    {process: {tool: version}}. Each step runs in a container of its own, so this, not a probe
+    of this step's own image, is what the steps ran with."""
+    import yaml
+    out: dict = {}
+    for doc in yaml.safe_load_all(path.read_text()):
+        for process, tools in (doc or {}).items():
+            out[process.split(":")[-1]] = {k: str(v) for k, v in (tools or {}).items()}
+    return dict(sorted(out.items()))
+
+
+def merged_tools(per_process: dict) -> dict:
+    """{tool: version}, or {tool: [versions]} where steps disagree."""
+    seen: dict = {}
+    for tools in per_process.values():
+        for k, v in tools.items():
+            seen.setdefault(k, set()).add(v)
+    return {k: (sorted(v)[0] if len(v) == 1 else sorted(v)) for k, v in sorted(seen.items())}
+
+
 def cpu_model() -> str:
     try:
         for line in open("/proc/cpuinfo"):
@@ -160,20 +181,48 @@ def cpu_model() -> str:
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--release", type=Path, required=True)
+    ap.add_argument("--release", type=Path, default=None,
+                    help="a release directory; or give its parts with the options below")
+    ap.add_argument("--release-name", default=None, help="default: the --release directory's name")
+    ap.add_argument("--refs", type=Path, default=None, help="default: <release>/refs")
+    ap.add_argument("--alignments", type=Path, default=None, help="default: <release>/alignments")
+    ap.add_argument("--hmms", type=Path, default=None, help="default: <release>/hmms")
+    ap.add_argument("--files", type=Path, nargs="*", default=None,
+                    help="the release's top-level files (DIAMOND database, cutoffs, cascade, ...); "
+                         "default: those in <release>")
+    ap.add_argument("--catalogs", type=Path, nargs="*", default=None,
+                    help="catalog directories; default: <release>/catalogs/*/")
     ap.add_argument("--families", type=Path, default=REPO / "families.yaml")
     ap.add_argument("--repo", type=Path, default=REPO)
     ap.add_argument("--out", type=Path, default=None)
+    ap.add_argument("--versions", type=Path, default=None,
+                    help="the pipeline's collected versions.yml: tool versions per step, "
+                         "instead of probing the tools in this environment")
     args = ap.parse_args()
     rel = args.release
+    if rel is None and not (args.release_name and args.refs and args.hmms):
+        ap.error("give --release, or --release-name, --refs and --hmms (and the other parts)")
+    refs_dir = args.refs or rel / "refs"
+    aln_dir = args.alignments or (rel / "alignments" if rel else None)
+    hmm_dir = args.hmms or rel / "hmms"
+    top = {f.name: f for f in args.files} if args.files is not None else \
+        {f.name: f for f in rel.iterdir() if f.is_file()} if rel else {}
+    catalog_dirs = args.catalogs if args.catalogs is not None else \
+        sorted((rel / "catalogs").glob("*/")) if rel and (rel / "catalogs").is_dir() else []
+    release_name = args.release_name or rel.name
 
-    manifest = rel / "refs" / "manifest.tsv"
+    manifest = refs_dir / "manifest.tsv"
     releases = {}
     if manifest.exists():
         with open(manifest, newline="") as fh:       # descriptions hold quoted newlines
             for row in csv.DictReader(fh, delimiter="\t"):
                 releases[row["uniprot_release"]] = sorted(
                     {*releases.get(row["uniprot_release"], []), row["date_fetched"]})
+    per_process = process_versions(args.versions) if args.versions else {}
+    osmotool = osmotool_info()
+    if per_process and "error" in osmotool:     # not importable here: each step has its own image
+        versions = merged_tools(per_process).get("osmotool")
+        osmotool = {"version": versions or "not used", "source": "versions.yml of the steps"}
     explicit = Path("/opt/osmo_refdb/conda-explicit.txt")
     reuse_from = os.environ.get("REUSE_REFS_FROM", "")
 
@@ -183,8 +232,8 @@ def main() -> None:
                   "be compared (bin/verify_reproducible.py) and a difference be traced to its "
                   "cause (a different commit, tool version, snapshot or machine)."),
         "written": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        "release": rel.name,
-        "code": {"osmo_refdb": git_info(args.repo), "osmotool": osmotool_info()},
+        "release": release_name,
+        "code": {"osmo_refdb": git_info(args.repo), "osmotool": osmotool},
         "environment": {
             "machine": platform.machine(), "cpu": cpu_model(), "host": platform.node(),
             "platform": platform.platform(), "python": sys.version.split()[0],
@@ -192,7 +241,8 @@ def main() -> None:
                          or ("docker" if Path("/.dockerenv").exists() else "none"),
             "image_sha256": os.environ.get("SIF_SHA256", "not recorded"),
             "conda_explicit_list_sha256": sha256_of(explicit) if explicit.exists() else "not in image",
-            "tools": tool_versions(),
+            "tools": merged_tools(per_process) if per_process else tool_versions(),
+            "tools_per_step": per_process or "not recorded (no --versions)",
         },
         "inputs": {
             "families_yaml_sha256": sha256_of(args.families) if args.families.exists() else "missing",
@@ -200,21 +250,21 @@ def main() -> None:
             "refs_reused_from": reuse_from or "none (fetched in this build)",
             "reused_alignments": os.environ.get("REUSE_ALIGNMENTS", "1" if reuse_from else "0"),
             "split_mode": os.environ.get("SPLIT_MODE", "random"),
-            "refs": tree_hash(rel / "refs", "*.faa"),
-            "alignments": tree_hash(rel / "alignments"),
+            "refs": tree_hash(refs_dir, "*.faa"),
+            "alignments": tree_hash(aln_dir) if aln_dir else {"n_files": 0},
         },
         "outputs": {
             "hmms_sha256_without_DATE_and_COM_lines": {
-                p.name: hmm_sha256(p) for p in sorted((rel / "hmms").glob("*.hmm"))},
-            "files": {n: sha256_of(rel / n) for n in (
+                p.name: hmm_sha256(p) for p in sorted(hmm_dir.glob("*.hmm"))},
+            "files": {n: sha256_of(top[n]) for n in (
                 "osmo_refdb.dmnd", "osmo_refdb.diamond_cutoffs.tsv", "osmo_refdb.profile_cascade.tsv",
                 "osmo_refdb.profile_report_levels.tsv", "osmo_refdb.profile_excluded_families.txt",
                 "osmo_refdb.annotate_excluded_families.txt", "osmo_refdb.train_refs.faa")
-                if (rel / n).exists()},
+                if n in top},
         },
     }
     catalogs = {}
-    for cdir in sorted((rel / "catalogs").glob("*/")) if (rel / "catalogs").is_dir() else []:
+    for cdir in catalog_dirs:
         meta_path = cdir / "catalog.json"
         if not meta_path.exists():
             continue
@@ -229,7 +279,7 @@ def main() -> None:
                                  if (cdir / "catalog.annotation.tsv").exists() else "missing",
             "index_files": tree_hash(cdir, "catalog.fna.*")}
     record["outputs"]["catalogs"] = catalogs or "none built into this release"
-    out = args.out or rel / "PROVENANCE.json"
+    out = args.out or (rel / "PROVENANCE.json" if rel else Path("PROVENANCE.json"))
     out.write_text(json.dumps(record, indent=2) + "\n")
     c = record["code"]["osmo_refdb"]
     print(f"Provenance written: {out}")

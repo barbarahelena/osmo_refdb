@@ -11,7 +11,7 @@ separate betL from betT/caiT. Five excluded units become reportable from
 catalog reads alone. The opu ATPases, opu substrate-binding proteins and the
 trk/ktr channel do not.
 
-Script: `modules/local/annotate_catalog/templates/11d_benchmark_catalog.py`. Results:
+Script: `modules/local/catalog/package/templates/11d_benchmark_catalog.py`. Results:
 `releases/v10/results/catalog_benchmark/`. Log:
 `releases/v10_catalog_benchmark.log`. osmotool: branch `catalog-profile`
 (`df87119`), bwa-mem3 0.17.0.

@@ -6,43 +6,61 @@
 //   2. read-level recall and precision on reads simulated from the genomes with curated target genes
 //      (assets/real_genome_validation/target_orfs.tsv, genomes in --test_genomes_dir)
 //
-include { ANNOTATE_GENOME          } from '../../../modules/local/annotate_genome/main'
-include { CHECK_REFERENCE_SYSTEMS  } from '../../../modules/local/check_reference_systems/main'
-include { TARGET_COORDS            } from '../../../modules/local/target_coords/main'
-include { SIMULATE_GENOME_READS    } from '../../../modules/local/simulate_genome_reads/main'
-include { REAL_READ_RECALL         } from '../../../modules/local/real_read_recall/main'
+include { OSMOTOOL_ANNOTATE as OSMOTOOL_ANNOTATE_GENOME } from '../../../modules/local/osmotool/annotate/main'
+include { OSMOTOOL_PROFILE  as OSMOTOOL_PROFILE_RECALL  } from '../../../modules/local/osmotool/profile/main'
+include { WGSIM                   } from '../../../modules/local/wgsim/main'
+include { ORFM                    } from '../../../modules/local/orfm/main'
+include { HMMER_HMMSCAN           } from '../../../modules/local/hmmer/hmmscan/main'
+include { VALIDATION_CHECKSYSTEMS } from '../../../modules/local/validation/checksystems/main'
+include { VALIDATION_TARGETCOORDS } from '../../../modules/local/validation/targetcoords/main'
+include { VALIDATION_READRECALL   } from '../../../modules/local/validation/readrecall/main'
 
 workflow REAL_GENOME_VALIDATION {
     take:
-    release     // the release's name, once it is final
+    db          // the release as osmotool reads it
+    hmms        // BUILD_HMMS: the pressed HMM database, for hmmscan on the reads
 
     main:
     targets  = file("${projectDir}/assets/real_genome_validation/target_orfs.tsv", checkIfExists: true)
-    test_dir = params.test_genomes_dir ?: "${params.repo}/test_genomes"
+    expected = file("${projectDir}/assets/real_genome_validation/expected_systems.tsv", checkIfExists: true)
+    test_dir = params.test_genomes_dir ?: "${projectDir}/test_genomes"
 
     reference = params.reference_genomes_dir
-        ? channel.fromPath("${params.reference_genomes_dir}/*.fna").map { f -> tuple(f.baseName, f) }
+        ? channel.fromPath("${params.reference_genomes_dir}/*.fna").map { f -> tuple([id: f.baseName], f) }
         : channel.empty()
     curated = channel.fromPath(targets)
         .splitCsv(header: true, sep: '\t')
         .map { row -> row.genome }
         .unique()
-        .map { g -> tuple(g, file("${test_dir}/${g}.fna", checkIfExists: true)) }
+        .map { g -> tuple([id: g], file("${test_dir}/${g}.fna", checkIfExists: true)) }
 
-    // one annotation per genome, whichever check needs it
-    ANNOTATE_GENOME(release, reference.mix(curated).unique { pair -> pair[0] })
-    annotated = ANNOTATE_GENOME.out.annotated
+    // one annotation per genome, whichever check needs it (Prodigal proteins kept, ext.args)
+    genomes = reference.mix(curated).unique { pair -> pair[0].id }
+    OSMOTOOL_ANNOTATE_GENOME(genomes.map { meta, fna -> tuple(meta, fna, []) }, db)
 
     // 1. system calls
-    expected = file("${projectDir}/assets/real_genome_validation/expected_systems.tsv", checkIfExists: true)
-    CHECK_REFERENCE_SYSTEMS(annotated.map { _name, files -> files }.flatten().collect(), expected)
+    VALIDATION_CHECKSYSTEMS(
+        OSMOTOOL_ANNOTATE_GENOME.out.systems.mix(OSMOTOOL_ANNOTATE_GENOME.out.gene_counts)
+            .map { _meta, f -> f }.collect(),
+        expected)
 
     // 2. read recall, on the genomes that have curated target genes
-    curated_annotated = annotated.join(curated.map { name, fna -> tuple(name, fna) })
-    TARGET_COORDS(curated_annotated.map { name, files, _fna -> tuple(name, files) }, targets)
-    SIMULATE_GENOME_READS(curated_annotated.map { name, _files, fna -> tuple(name, fna) })
-    REAL_READ_RECALL(release, SIMULATE_GENOME_READS.out.reads.join(TARGET_COORDS.out.regions))
+    curated_proteins = OSMOTOOL_ANNOTATE_GENOME.out.proteins.join(curated)   // meta, faa, fna
+    VALIDATION_TARGETCOORDS(curated_proteins.map { meta, faa, _fna -> tuple(meta, faa) }, targets)
+    WGSIM(curated_proteins.map { meta, _faa, fna -> tuple(meta, fna) })
+    reads = WGSIM.out.reads
+
+    OSMOTOOL_PROFILE_RECALL(reads, db, [])   // DIAMOND, alignments kept (ext.args)
+    ORFM(reads)
+    HMMER_HMMSCAN(ORFM.out.orfs, hmms, 'osmo_refdb.hmm')   // HMM on the same reads
+
+    VALIDATION_READRECALL(
+        reads.join(VALIDATION_TARGETCOORDS.out.regions)
+             .join(OSMOTOOL_PROFILE_RECALL.out.alignments)
+             .join(HMMER_HMMSCAN.out.tblout))
 
     emit:
-    report = CHECK_REFERENCE_SYSTEMS.out.report.mix(REAL_READ_RECALL.out.results.map { _name, files -> files }).collect()
+    report   = VALIDATION_CHECKSYSTEMS.out.report
+                   .mix(VALIDATION_READRECALL.out.results.map { _meta, truth, cmp -> [truth, cmp] }.flatten())
+                   .collect()
 }

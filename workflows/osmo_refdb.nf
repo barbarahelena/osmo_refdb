@@ -9,26 +9,47 @@ include { BACDIVE_ANALYSIS   } from '../subworkflows/local/bacdive_analysis/main
 include { REAL_GENOME_VALIDATION } from '../subworkflows/local/real_genome_validation/main'
 
 workflow OSMO_REFDB {
+    take:
+    families        // families.yaml
+    source          // the source release's snapshot
+    snapshot        // harvested BacDive batches to start from, or []
+    pool            // the random-panel pool: pool.hmm
+    pool_families   //                        pool_families.tsv
+
     main:
     // independent of the release: start at once, run alongside the build
     CATALOG_GENES()
-    BACDIVE_DATA()
+    BACDIVE_DATA(snapshot, pool)
 
     // the release, then the catalog on it, then the gate
-    RELEASE_CATALOG(CATALOG_GENES.out.genes)
+    RELEASE_CATALOG(families, source, CATALOG_GENES.out.genes)
     RELEASE_CATALOG.out.report.view { f -> f.text }
+    db = RELEASE_CATALOG.out.db
 
-    // after the gate: BacDive on the frozen release, then the NaCl model
-    analyzed = channel.empty()
+    // after the gate: BacDive and the NaCl model on the frozen release, and the real-genome checks
+    done = RELEASE_CATALOG.out.done
     if( params.gate_passed ) {
-        BACDIVE_ANALYSIS(RELEASE_CATALOG.out.release, BACDIVE_DATA.out.proteins)
-        REAL_GENOME_VALIDATION(RELEASE_CATALOG.out.release)
-        analyzed = BACDIVE_ANALYSIS.out.analyzed.mix(REAL_GENOME_VALIDATION.out.report)
+        data = BACDIVE_DATA.out
+        BACDIVE_ANALYSIS(db, data.chunks, data.genomes, data.control_genomes, data.pilot, data.classes,
+                         data.control_pilot, data.strains, data.control_strains, pool_families)
+        REAL_GENOME_VALIDATION(db, RELEASE_CATALOG.out.hmms)
+        done = done.mix(BACDIVE_ANALYSIS.out.done, REAL_GENOME_VALIDATION.out.report).collect()
     }
 
+    // every step's tool versions, from the `versions` topic (modules: `eval(...), topic: versions`),
+    // as one YAML file, {step: {tool: version}}; the chunked steps report identical ones, kept once
+    software_versions = channel.topic('versions')
+        .map { process, tool, version -> tuple(process.tokenize(':').last(), "${tool}: \"${version.trim()}\"".toString()) }
+        .unique()
+        .groupTuple(sort: true)
+        .map { process, tools -> "\"${process}\":\n" + tools.collect { line -> "    ${line}" }.join('\n') }
+        .collectFile(name: 'software_versions.yml', newLine: true, sort: true)
+
     // the receipt, once everything this invocation does to the release is done
-    PROVENANCE(RELEASE_CATALOG.out.release, RELEASE_CATALOG.out.report.mix(analyzed).collect())
+    PROVENANCE(params.release, RELEASE_CATALOG.out.refs, RELEASE_CATALOG.out.alignments,
+               RELEASE_CATALOG.out.hmms, RELEASE_CATALOG.out.release_files, RELEASE_CATALOG.out.cascade,
+               RELEASE_CATALOG.out.catalog, software_versions, families, file(projectDir), done)
 
     emit:
-    release = PROVENANCE.out
+    provenance = PROVENANCE.out.provenance
 }

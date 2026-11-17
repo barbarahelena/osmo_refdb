@@ -33,7 +33,7 @@ if you want to avoid the HMMER dependency there too.
 ## Quick start
 
 The build is a Nextflow workflow (`main.nf`; see `docs/hpc.md` for the cluster setup and
-`containers/README.md` for the two container images):
+`containers/README.md` for the container of each step):
 
 ```bash
 nextflow run main.nf --release v1                           # build, benchmark, catalog, screen; stops at the gate
@@ -436,7 +436,7 @@ everything together.
 | 9b | `09b_compute_read_truth.py` | Locate each read on its source contig (k-mer match) and label it by actual CDS overlap, not just its source construct -- a read that lands entirely in flanking DNA carries no gene signal and must not be scored as a positive. Also labels real background reads and records read length. |
 | 10 | `10_run_benchmark.sh` | Run `osmotool profile` with its default DIAMOND+HMM cascade (`CASCADE=off` for DIAMOND alone, `CASCADE=score` for the calibration pass; `SKIP_HMM=1` reruns only the DIAMOND side) and HMM (hmmscan; `JOBS` samples in parallel) on the simulated reads. `--keep_aln` keeps the raw DIAMOND alignments and the cascade's hmmsearch table, so one run scores both DIAMOND alone and DIAMOND+cascade |
 | 11 | `11_compute_metrics.py` | Precision/recall/F1, ROC/PR curves, per-family best-threshold summary, read-length-stratified summary and background false-positive rate, for three methods: `diamond`, `diamond_cascade` (what `osmotool profile` reports by default; per-read calls rebuilt from osmotool's kept files and checked against its `gene_counts.tsv`) and `hmm`. In the calibration pass (no `--cascade-config`) it instead decides and writes `osmo_refdb.profile_cascade.tsv` and `osmo_refdb.profile_report_levels.tsv` (step 9c-11c); on the test reads it scores those choices per reporting unit in `summary_by_report_unit.tsv` (the numbers for the paper) and checks osmotool's `unit_counts.tsv` against the rebuilt calls. `summary.tsv` counts false positives three ways: `fp` (the family's own hard negatives and flanks; `precision`/`f1`, comparable to releases up to v8), `fp_cross` (other panel genes' real reads called as this family, mostly close-paralog confusion; `precision_panel`/`f1_panel`), and `fp_background`/`background_fp_per_million` (random background reads). `fp_other_negatives` (other families' hard negatives called as this family) is in none of those, since sibling families share one negative pool. `fp_all` = all three, with `precision_all`/`f1_all`: the same denominator at gene and group level, used for the report-level and cascade decision. `hard_negative_fp_per_million` and `background_fp_per_million` are rates per million negative reads, independent of how many negatives were mixed in: use those to compare families or releases. Families sharing a `families.yaml` `paralog_group` are also scored as one unit in `summary_by_group.tsv`, where a read called as a sibling counts as correct (`within_group_swaps`) |
-| 11b | `11b_benchmark_annotate.py` | Annotate-mode benchmark at protein level: runs `osmotool annotate --proteins` (HMM with GA cutoffs, and DIAMOND with its bitscore cutoffs) on the held-out test positives, test hard negatives and random background, and scores per-protein calls from `gene_coordinates.tsv`. Output in `results/annotate/` (`summary.tsv`, `summary_by_group.tsv`, `overall.tsv`) |
+| 11b | `bin/benchmark_annotate.py` | Annotate-mode benchmark at protein level: runs `osmotool annotate --proteins` (HMM with GA cutoffs, and DIAMOND with its bitscore cutoffs) on the held-out test positives, test hard negatives and random background, and scores per-protein calls from `gene_coordinates.tsv`. Output in `results/annotate/` (`summary.tsv`, `summary_by_group.tsv`, `overall.tsv`) |
 
 | 12 | `12_package_markers.py` | Copy a separately-built marker release (`markers.yaml`, see below) into a main release's `markers/` subdirectory: DIAMOND db, its source FASTA (for reference lengths), decoy-label exclusion list, and a manifest with per-marker lengths and the marker build's DIAMOND benchmark precision/recall |
 | 14 | `14_package_catalog.py` (`run_pipeline.sh catalog`) | Build a gene catalog into the release as `catalogs/<name>/` with `osmotool build-catalog`: translate the catalog genes, annotate them with this release's HMMs under their gathering cutoffs (as `annotate --method hmm`), index the whole catalog with bwa-mem3. Adds provenance (source, input checksums, release) to `catalog.json`, the gzipped hmmsearch domain table, and `SHA256SUMS`. The catalog is part of the release: rebuild it for every release |
@@ -445,7 +445,7 @@ everything together.
 
 (Running this on a cluster with a full-size gut catalog: `docs/hpc.md`.
 The prevalence-filtered GMGC catalogs are on Zenodo, record 10473258;
-`modules/local/fetch_gmgc/templates/fetch_zenodo_member.py` downloads one habitat without the 19.3 GB zip.)
+`modules/local/catalog/fetch/templates/fetch_zenodo_member.py` downloads one habitat without the 19.3 GB zip.)
 
 `osmotool profile --catalog NAME` assigns reads to a gene catalog the
 release ships under `catalogs/NAME/` before translated search, the approach

@@ -1,0 +1,37 @@
+// osmotool build-catalog: annotate a gene catalog with a release's HMMs and index it (bwa-mem3).
+// ext.args (conf/modules.config): --index hits|all|none; ext.prefix: the output directory's name.
+// NEEDS an osmotool with catalog mode: not in 0.8.0 (it is on osmotool's catalog-profile branch).
+process OSMOTOOL_BUILDCATALOG {
+    tag "${meta.id}"
+    label 'process_high'
+
+    container 'docker.io/barbarahelena/osmotool:0.8.0'
+
+    input:
+    tuple val(meta), path(genes)
+    path(db)
+
+    output:
+    tuple val(meta), path("${prefix}"), emit: catalog
+    tuple val("${task.process}"), val('osmotool'), eval("osmotool --version | cut -d' ' -f2"), topic: versions, emit: versions_osmotool
+    tuple val("${task.process}"), val('hmmer'), eval("hmmsearch -h | grep -oE 'HMMER [0-9.]+' | cut -d' ' -f2"), topic: versions, emit: versions_hmmer
+    tuple val("${task.process}"), val('bwa-mem3'), eval("bwa-mem3 version 2>&1 | head -1"), topic: versions, emit: versions_bwa_mem3
+
+    when:
+    task.ext.when == null || task.ext.when
+
+    script:
+    def args = task.ext.args ?: ''
+    prefix   = task.ext.prefix ?: "${meta.id}"
+    """
+    osmotool build-catalog ${db} --genes ${genes} -o ${prefix} --threads ${task.cpus} ${args}
+    """
+
+    stub:
+    prefix = task.ext.prefix ?: "${meta.id}"
+    """
+    mkdir ${prefix}
+    echo '{}' > ${prefix}/catalog.json
+    touch ${prefix}/catalog.annotation.tsv
+    """
+}
