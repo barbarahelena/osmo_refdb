@@ -451,6 +451,10 @@ everything together.
 
 ### Gene catalogs
 
+(Running this on a cluster with a full-size gut catalog: `hpc/README.md`.
+The prevalence-filtered GMGC catalogs are on Zenodo, record 10473258;
+`hpc/fetch_zenodo_member.py` downloads one habitat without the 19.3 GB zip.)
+
 `osmotool profile --catalog NAME` assigns reads to a gene catalog the
 release ships under `catalogs/NAME/` before translated search, the approach
 of catalog-based profilers such as Cayman: the family of each catalog gene is
@@ -463,7 +467,7 @@ users never annotate anything themselves.
 CATALOG_NAME=gmgc_gut \
 CATALOG_GENES=/data/GMGC10.human-gut.95nr.0.5.percent.prevalence.fna.gz \
 CATALOG_SOURCE="GMGC v1.0, human gut, prevalence > 0.5%" \
-CATALOG_SOURCE_URL=https://gmgc.embl.de/ THREADS=32 \
+CATALOG_SOURCE_URL=https://zenodo.org/records/10473258 THREADS=32 \
 bash run_pipeline.sh catalog v10
 ```
 
@@ -472,9 +476,11 @@ bash run_pipeline.sh catalog v10
   works straight away. Sub-cutoff homologs and decoys are in it, so their
   reads are recognised and dropped; reads from genes without any hit fall
   back to translated search.
-- The full, competitive index of every catalog gene (bwa-mem3, about 3.6
-  bytes per base: tens of GB for a gut catalog) does not depend on the
-  release, only on the gene file and the aligner. It is built separately
+- The full, competitive index of every catalog gene (bwa-mem3) does not
+  depend on the release, only on the gene file and the aligner. It is about
+  3.4 bytes per byte of FASTA on the catalogs measured so far (a 137 MB
+  sample of the human-gut catalog gave a 472 MB index); the size for a whole
+  gut catalog has not been measured (see `hpc/README.md`). It is built separately
   and distributed on its own:
 
   ```bash
