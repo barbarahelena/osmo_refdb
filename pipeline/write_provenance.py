@@ -173,6 +173,10 @@ def main() -> None:
     reuse_from = os.environ.get("REUSE_REFS_FROM", "")
 
     record = {
+        "about": ("Build record of this release: which code, tools and inputs produced it, and "
+                  "checksums of what came out. It does not change anything; it lets two builds "
+                  "be compared (hpc/verify_reproducible.py) and a difference be traced to its "
+                  "cause (a different commit, tool version, snapshot or machine)."),
         "written": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "release": rel.name,
         "code": {"osmo_refdb": git_info(args.repo), "osmotool": osmotool_info()},
@@ -204,6 +208,22 @@ def main() -> None:
                 if (rel / n).exists()},
         },
     }
+    catalogs = {}
+    for cdir in sorted((rel / "catalogs").glob("*/")) if (rel / "catalogs").is_dir() else []:
+        meta_path = cdir / "catalog.json"
+        if not meta_path.exists():
+            continue
+        meta = json.loads(meta_path.read_text())
+        catalogs[cdir.name] = {
+            "gene_file": meta.get("genes", ""), "gene_file_sha256": meta.get("genes_sha256", ""),
+            "annotated_with_hmm_sha256": meta.get("hmm_sha256", ""),
+            "index": meta.get("index", ""), "aligner": meta.get("aligner", ""),
+            "n_genes_input": meta.get("n_genes_input"),
+            "n_genes_with_hit": meta.get("n_genes_annotated_or_hit"),
+            "annotation_sha256": sha256_of(cdir / "catalog.annotation.tsv")
+                                 if (cdir / "catalog.annotation.tsv").exists() else "missing",
+            "index_files": tree_hash(cdir, "catalog.fna.*")}
+    record["outputs"]["catalogs"] = catalogs or "none built into this release"
     out = args.out or rel / "PROVENANCE.json"
     out.write_text(json.dumps(record, indent=2) + "\n")
     c = record["code"]["osmo_refdb"]

@@ -29,22 +29,48 @@ catalog** (the first 159,560 genes of `GMGC10.human-gut.95nr.0.5.percent.prevale
 - Real numbers about the source: the human-gut file is 2.99 GB (gzip); the
   Zenodo zip it sits in is 19.3 GB.
 
+## Order of work, and what depends on what
+
+The HMMs decide everything downstream, so they are the first thing built and
+the last thing that may still change:
+
+```
+release build (HMMs, DIAMOND db, benchmarks)
+   |-- catalog annotation -- screen -- GATE -- freeze
+   |-- BacDive annotation -- NaCl model
+   `-- catalog / profile / annotate benchmarks
+full catalog index   (needs only the gene file: starts at once, in parallel)
+```
+
+- The catalog and BacDive do not feed each other, but both are made *with the
+  HMMs*: a change to the HMMs (say a new decoy) repeats both. So the one that
+  can change the HMMs comes first. The catalog annotation does: it is the
+  widest real-data test of the HMMs' specificity there is. On 159,560 real gut
+  genes it showed gor claiming 127 genes (18% of everything annotated), 86% of
+  them scoring below the weakest true gor protein: lipoamide dehydrogenase and
+  relatives, which the benchmark never contained. That is found in minutes by
+  `pipeline/15_catalog_screen.py`, before BacDive or the NaCl model are run.
+- **The gate** is a person reading the screen. A flagged family means "look at
+  those genes" (closest relative among the family's own references and the
+  suspected confusers). A real confuser class means a decoy and a rebuild; a
+  false alarm (the flag also fires on divergent true members) means carry on.
+  Only then is the release frozen, and BacDive and the NaCl model run on it.
+
 ## Steps
 
 1. **Image** (login node with internet; Apptainer >= 1.2 for `--build-arg`):
    ```bash
-   git clone -b release-catalog https://github.com/barbarahelena/osmo_refdb.git && cd osmo_refdb
+   git clone -b <branch> https://github.com/barbarahelena/osmo_refdb.git && cd osmo_refdb
    apptainer build --fakeroot ~/osmo_refdb_hpc.sif hpc/apptainer/osmo_refdb_hpc.def
    ```
    The image holds the conda env (`environment.yml`: mafft, hmmer, diamond,
-   bwa-mem3, ...) and osmotool from branch `catalog-profile`. bwa-mem3 needs
-   AVX2 on x86-64 (or ARM NEON); the build script prints whether a node has it.
-   Compute nodes usually have no internet: everything is installed here.
-2. **Release data** (not in git; about 2 GB from `releases/v10/` on the laptop):
-   `osmo_refdb.dmnd`, `osmo_refdb.train_refs.faa`, `osmo_refdb.profile_*`,
-   `hmms/`, `refs/`, `markers/`, `results/reads/`, `results/diamond/`,
-   `osmo_refdb.profile_report_levels.tsv`. Copy to `<clone>/releases/v10/`
-   with `rsync -a`.
+   bwa-mem3, ...) and osmotool from `OSMOTOOL_REF` (a tag or commit for a real
+   release). bwa-mem3 needs AVX2 on x86-64 (or ARM NEON). Compute nodes
+   usually have no internet: everything is installed here.
+2. **Snapshot** (not in git; about 2 GB from `releases/v10/` on the laptop):
+   `refs/`, `alignments/`, and what the build reads from the source release
+   (`osmo_refdb.train_refs.faa`, `markers/`, ...). `rsync -a` it to
+   `<clone>/releases/<snapshot>/`.
 3. **Catalog** (login or transfer node):
    ```bash
    bash hpc/00_fetch_gmgc.sh /data/gmgc 40000000   # 40 MB smoke-test sample first
@@ -52,18 +78,24 @@ catalog** (the first 159,560 genes of `GMGC10.human-gut.95nr.0.5.percent.prevale
    ```
    `fetch_zenodo_member.py` reads one member out of the 19.3 GB zip with HTTP
    range requests, resumably (`<out>.part`).
-4. **Smoke test on the sample**, to size the real job: build a catalog from the
-   40 MB sample (`.head`, decompress it and cut at a record boundary first, as
-   a truncated gzip ends mid-record) and note `sacct` numbers.
+4. **Smoke test on the sample**, to size the real jobs: decompress the `.head`
+   file and cut it at a record boundary (a truncated gzip ends mid-record),
+   build a catalog from it and note the `sacct` numbers.
 5. **Environment file**: copy `hpc/slurm/env.sh.example` to `env.sh`, edit,
    `source` it. Any path you pass to a job (`R1`, `R2`, `OUT`, the catalog)
    must lie under a directory in `APPTAINER_BIND`.
-6. **Build the catalog**: `sbatch hpc/slurm/10_build_catalog.sbatch`. It annotates the catalog
-   with the release's HMMs and packages the small hits-only index into
-   `releases/<release>/catalogs/<name>/`, then builds the full index in
-   `$FULL_INDEX_DIR`.
-7. **Profile a sample**:
-   `sbatch --export=ALL,R1=...,R2=...,OUT=... hpc/slurm/30_profile_sample.sbatch`.
+6. **Submit the chain**:
+   ```bash
+   export RELEASE=v10-canonical REUSE_REFS_FROM=releases/v10
+   bash hpc/slurm/submit_all.sh
+   ```
+   It submits the full index, the release build, the catalog annotation (after
+   the build) and the screen (after that), with SLURM dependencies.
+7. **The gate**: read the screen's log and `catalogs/<name>/screen.tsv`.
+8. **After the gate, on the frozen release**: BacDive annotation as a SLURM
+   array and the NaCl retrain (scripts not written yet), the catalog benchmark
+   with the real catalog as background (`11d` not extended yet), and
+   `sbatch hpc/slurm/30_profile_sample.sbatch` per sample.
 
 ## What to record
 
@@ -97,11 +129,19 @@ itself; these are the things that do, and the things that stay out of reach.
   commit in the image. Local builds used osmotool from a working tree on
   `PYTHONPATH`, which shadows the installed package; `write_provenance.py`
   detects and records that.
-- *Record.* `pipeline/write_provenance.py` writes `PROVENANCE.json` next to the
-  release: commit (and dirty files), osmotool commit, architecture, container
-  and image checksum, every tool's version, the UniProt release and fetch
-  dates, the snapshot it was built from, and checksums of refs/, alignments/,
-  every HMM, the DIAMOND database and the cutoff files.
+- *Record.* `PROVENANCE.json`, written next to the release by
+  `pipeline/write_provenance.py`, is the build's receipt. It changes nothing
+  and nothing reads it to build anything; it answers "what exactly made this
+  release?" so that two builds can be compared and a difference traced to a
+  cause. It holds, in four blocks: **code** (the osmo_refdb commit and any
+  uncommitted files, the osmotool commit and whether a working tree shadowed
+  the installed one), **environment** (machine type, container and the image's
+  checksum, the version of every tool called), **inputs** (families.yaml's
+  checksum, the UniProt release and fetch dates, which snapshot it was built
+  from, a checksum over `refs/` and `alignments/`) and **outputs** (a checksum
+  of every HMM, the DIAMOND database, the cutoff files and each catalog's
+  annotation and index). Whether two builds agree is checked separately, on the
+  files themselves, by `verify_reproducible.py`.
 
 **Not fixed by where it runs**
 - *UniProt and RefSeq are live.* Re-running step 1 on the cluster fetches
