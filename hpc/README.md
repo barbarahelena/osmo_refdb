@@ -78,6 +78,64 @@ At minimum:
 | profile, same sample, no catalog | | | | |
 | profile, same sample, catalog + hits index only | | | | |
 
+## Reproducibility: what a canonical HPC build fixes, and what it does not
+
+A release should come from one recorded run, not from whatever a laptop had
+that day. Running on the cluster does not make a build reproducible by
+itself; these are the things that do, and the things that stay out of reach.
+
+**Fixed by building canonically on the cluster**
+- *Architecture.* The local builds so far ran in an arm64 Docker VM
+  (`aarch64`); users run x86-64. HMMER and bwa-mem3 use different SIMD code on
+  each. Whether scores differ in the last digits has not been measured; a
+  canonical x86-64 build removes the question for the release.
+- *Environment.* `environment.yml` pins only lower bounds, so rebuilding an
+  image can change tool versions. The image bakes in its exact package list
+  (`/opt/osmo_refdb/conda-explicit.txt`, `pip-freeze.txt`), is built once per
+  release and kept, and its SHA-256 goes into the release's provenance.
+- *Code.* Build from a committed checkout, with osmotool installed at a tag or
+  commit in the image. Local builds used osmotool from a working tree on
+  `PYTHONPATH`, which shadows the installed package; `write_provenance.py`
+  detects and records that.
+- *Record.* `pipeline/write_provenance.py` writes `PROVENANCE.json` next to the
+  release: commit (and dirty files), osmotool commit, architecture, container
+  and image checksum, every tool's version, the UniProt release and fetch
+  dates, the snapshot it was built from, and checksums of refs/, alignments/,
+  every HMM, the DIAMOND database and the cutoff files.
+
+**Not fixed by where it runs**
+- *UniProt and RefSeq are live.* Re-running step 1 on the cluster fetches
+  whatever they hold that day: a different database vintage, not v10 again.
+  The input of a build is therefore the release's `refs/` snapshot
+  (`REUSE_REFS_FROM`); the snapshot is shipped with the release. A fetch from
+  scratch makes a new release, and its `refs/` is then archived. Compute
+  nodes may not have internet, so the fetch runs on a login node anyway.
+- *MAFFT with several threads is not reproducible run to run* (18 of 44 v9
+  models differed when realigned from identical input). Alignments are
+  therefore inputs: reused from the snapshot, realigned only for families
+  whose training set changed (`run_pipeline.sh` does this per family), and
+  archived with the release. `hmmbuild` itself is deterministic.
+
+**Measured so far.** Same machine, same refs and reused alignments (v10 vs
+v10-betl-decoy): 45 of 46 HMMs identical apart from the `DATE` and `COM` lines
+HMMER writes into every file, and the DIAMOND database byte-identical. The one
+HMM that differs is betL, which was changed on purpose. **Not measured:** the
+same build on arm64 versus x86-64, and the same build twice on the cluster.
+
+**Procedure**
+1. Build the image once (`hpc/apptainer/osmo_refdb_hpc.def`, `OSMOTOOL_REF` = tag
+   or commit) and keep it.
+2. Clean checkout of the commit; put the snapshot at `releases/<snapshot>/`.
+3. `sbatch hpc/slurm/05_pipeline.sbatch` with `RELEASE` and `REUSE_REFS_FROM`
+   set (see the script).
+4. Before releasing, rebuild once more from the first build's `refs/` and
+   `alignments/` and run
+   `python hpc/verify_reproducible.py releases/A releases/B`. It must print
+   `REPRODUCED`: HMMs (without DATE/COM lines), cutoffs, cascade config,
+   report levels and the benchmark tables identical. The alignments of
+   changed families are the one place two *independent* builds can differ,
+   which is why the second build reuses the first one's.
+
 ## Known gaps
 
 - The catalog benchmark (`pipeline/11d_benchmark_catalog.py`) builds its catalogs

@@ -4,8 +4,16 @@
 # none), from the osmo_refdb repo root, so environment.yml is found:
 #
 #   apptainer build --fakeroot osmo_refdb_hpc.sif hpc/apptainer/osmo_refdb_hpc.def
-#   # another osmotool branch or tag:
-#   apptainer build --fakeroot --build-arg OSMOTOOL_REF=v0.9.0 osmo_refdb_hpc.sif hpc/apptainer/osmo_refdb_hpc.def
+#   # another osmotool tag or commit:
+#   apptainer build --fakeroot --build-arg OSMOTOOL_REF=<tag-or-commit> osmo_refdb_hpc.sif hpc/apptainer/osmo_refdb_hpc.def
+#
+# For a build whose results are published, OSMOTOOL_REF must be a tag or a
+# commit hash, never a branch name (a branch moves). environment.yml pins only
+# lower bounds, so a rebuilt image can differ from an earlier one: the exact
+# packages of THIS image are written to /opt/osmo_refdb/conda-explicit.txt and
+# pip-freeze.txt inside it, and the image's checksum is recorded in each
+# release's PROVENANCE.json (hpc/slurm/05_pipeline.sbatch sets SIF_SHA256).
+# Build the image once for a release and keep it; do not rebuild it for a rerun.
 #
 # --build-arg needs Apptainer >= 1.2; on older versions edit OSMOTOOL_REF below.
 # If --fakeroot is not allowed on your cluster, build the same recipe
@@ -27,6 +35,9 @@ From: continuumio/miniconda3:24.1.2-0
         && rm -rf /var/lib/apt/lists/*
     conda env create -f /opt/osmo_refdb/environment.yml
     conda clean -afy
+    # what was actually installed, so a later build can be compared
+    conda list -n osmo_refdb --explicit > /opt/osmo_refdb/conda-explicit.txt
+    conda run -n osmo_refdb pip freeze > /opt/osmo_refdb/pip-freeze.txt
     # osmotool from git (no PyPI release with catalog support yet)
     conda run -n osmo_refdb pip install --no-deps \
         "git+https://github.com/barbarahelena/osmotool.git@{{ OSMOTOOL_REF }}"
@@ -40,3 +51,4 @@ From: continuumio/miniconda3:24.1.2-0
 
 %labels
     Description osmo_refdb pipeline and osmotool, with bwa-mem3 for gene catalogs
+    OsmotoolRef {{ OSMOTOOL_REF }}
