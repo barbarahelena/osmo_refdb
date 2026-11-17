@@ -31,8 +31,7 @@
  * output in a permanent place and skips the task whenever it is already there, even without work/.
  * storeDir is used for the gene file and the full catalog index. Everything else goes from step to step
  * as outputs and inputs; no step reads a published file. The release is published into
- * releases/<release> by the steps that make its parts (conf/modules.config); a release that exists is
- * refused unless the run is a -resume (the run after the gate). See docs/hpc.md.
+ * releases/<release> by the steps that make its parts (conf/modules.config). See docs/hpc.md.
  *
  * Nextflow starts Apptainer with --no-home and `env -`: neither the host home directory nor the host
  * environment is inside the container.

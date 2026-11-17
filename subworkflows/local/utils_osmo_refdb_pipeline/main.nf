@@ -35,11 +35,6 @@ workflow PIPELINE_INITIALISATION {
     }
     snapshot = params.bacdive_snapshot ? file(params.bacdive_snapshot, checkIfExists: true) : []
 
-    // a release is published once: a second run of the same name only with -resume (after the gate)
-    published = file("${params.repo}/releases/${params.release}")
-    if( published.exists() && !workflow.resume )
-        error "${published} exists: name a new release (--release), or add -resume to continue that run"
-
     emit:
     families      = channel.value(file(params.families_file, checkIfExists: true))
     source        = channel.value(source)

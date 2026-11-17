@@ -117,8 +117,8 @@ writes into the clone. Results are published (`publishDir`, `conf/modules.config
   `work/` for `-resume`).
 
 The one directory osmotool reads (its `DATABASE`) is `RELEASE_DB`: the DIAMOND files, `hmms/` and the
-cascade, passed to every osmotool step. A release that exists is refused at the start, unless the run is
-a `-resume` (the run after the gate). The BacDive genomes and proteins are only reused through
+cascade, passed to every osmotool step. As with any output directory, publishing into a release name
+that exists overwrites its files: name a new release for every build. The BacDive genomes and proteins are only reused through
 `-resume`: deleting `work/` means downloading them again, unless `--bacdive_snapshot` points at
 harvested batches (then only the genomes are fetched again).
 
