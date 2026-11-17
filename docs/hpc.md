@@ -116,8 +116,9 @@ writes into the clone. Results are published (`publishDir`, `conf/modules.config
 - the BacDive tables and harvested batches into `<repo>/<data_dir>` (not the genomes, which stay in
   `work/` for `-resume`).
 
-The one directory osmotool reads (its `DATABASE`) is `RELEASE_DB`: the DIAMOND files, `hmms/` and the
-cascade, passed to every osmotool step. As with any output directory, publishing into a release name
+osmotool reads one directory (its `DATABASE`): every osmotool step is given the DIAMOND files, the
+cascade and `hmms/` as one list, which Nextflow stages as that directory (`db/`), so it is not built or
+copied anywhere. As with any output directory, publishing into a release name
 that exists overwrites its files: name a new release for every build. The BacDive genomes and proteins are only reused through
 `-resume`: deleting `work/` means downloading them again, unless `--bacdive_snapshot` points at
 harvested batches (then only the genomes are fetched again).

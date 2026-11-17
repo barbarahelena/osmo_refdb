@@ -8,7 +8,7 @@ process BENCHMARK_READS {
     tag "${mode}"
     input:
     path(reads)
-    path(db)        // RELEASE_DB: without a cascade for mode score, with the calibrated one for mode on
+    path(db, stageAs: 'db/*')   // the release as osmotool reads it (DATABASE): its DIAMOND files, cascade and hmms/, staged as db/
     val(mode)
 
     output:
@@ -21,7 +21,7 @@ process BENCHMARK_READS {
     script:
     """
     CASCADE=${mode} THREADS=${task.cpus} JOBS=${task.cpus} \\
-        bash ${moduleDir}/templates/10_run_benchmark.sh ${reads} results ${db} ${db}/hmms/osmo_refdb.hmm
+        bash ${moduleDir}/templates/10_run_benchmark.sh ${reads} results db db/hmms/osmo_refdb.hmm
     """
 
     stub:

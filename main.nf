@@ -54,7 +54,7 @@ workflow profile_samples {
     samples = channel.fromPath(params.samples)
         .splitCsv(header: true)
         .map { row -> tuple([id: row.id], [file(row.r1, checkIfExists: true), file(row.r2, checkIfExists: true)]) }
-    db    = file("${params.repo}/releases/${params.release}", checkIfExists: true)
+    db    = files("${params.repo}/releases/${params.release}/*", checkIfExists: true)   // staged as osmotool's DATABASE
     // the catalog's full index if it has been built (--catalog and --keep_aln: conf/modules.config)
     index = file("${params.full_index_dir}/catalog_index.json").exists() ? file(params.full_index_dir) : []
     OSMOTOOL_PROFILE(samples, db, index)

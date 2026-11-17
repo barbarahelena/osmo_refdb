@@ -9,7 +9,7 @@ process OSMOTOOL_PROFILE {
 
     input:
     tuple val(meta), path(reads)   // [R1, R2]
-    path(db)                       // an unpacked release directory
+    path(db, stageAs: 'db/*')   // the release as osmotool reads it (DATABASE): its DIAMOND files, cascade and hmms/, staged as db/
     path(catalog_index)
 
     output:
@@ -29,7 +29,7 @@ process OSMOTOOL_PROFILE {
     prefix    = task.ext.prefix ?: "${meta.id}"
     def index = catalog_index ? "--catalog_index ${catalog_index}" : ''
     """
-    osmotool profile ${db} -1 ${reads[0]} -2 ${reads[1]} \\
+    osmotool profile db -1 ${reads[0]} -2 ${reads[1]} \\
         --out_prefix ${prefix} --threads ${task.cpus} ${index} ${args}
     """
 

@@ -8,7 +8,7 @@ process OSMOTOOL_ANNOTATE {
 
     input:
     tuple val(meta), path(fasta), path(proteins)   // proteins: [] to let osmotool run Prodigal
-    path(db)                                       // an unpacked release directory
+    path(db, stageAs: 'db/*')   // the release as osmotool reads it (DATABASE): its DIAMOND files, cascade and hmms/, staged as db/
 
     output:
     tuple val(meta), path("${prefix}.gene_counts.tsv"),                     emit: gene_counts
@@ -29,7 +29,7 @@ process OSMOTOOL_ANNOTATE {
     prefix   = task.ext.prefix ?: "${meta.id}"
     def prot = proteins ? "--proteins ${proteins}" : ''
     """
-    osmotool annotate ${db} ${fasta} ${prot} \\
+    osmotool annotate db ${fasta} ${prot} \\
         --out_prefix ${prefix} --threads ${task.cpus} ${args}
     """
 

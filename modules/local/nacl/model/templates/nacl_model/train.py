@@ -233,6 +233,7 @@ def main():
     ap.add_argument('--annotate', default=None, help='default: <pv-dir>/annotate')
     ap.add_argument('--strains', default=None, help='default: <pv-dir>/random_panel/strains')
     ap.add_argument('--release', required=True, help='release dir the annotate output was made with')
+    ap.add_argument('--release-name', default=None, help="default: the --release directory's name")
     ap.add_argument('--out', required=True)
     ap.add_argument('--n-search', type=int, default=40, help='random-search configs (step 2)')
     ap.add_argument('--n-search-inner', type=int, default=20, help='configs per outer fold (step 3)')
@@ -250,7 +251,7 @@ def main():
     ap.add_argument('--skip-nested', action='store_true', help='reuse oof_predictions.tsv')
     args = ap.parse_args()
     os.makedirs(args.out, exist_ok=True)
-    rel_name = os.path.basename(os.path.normpath(args.release))
+    rel_name = args.release_name or os.path.basename(os.path.normpath(args.release))
 
     # 1. table ---------------------------------------------------------------
     tpath = os.path.join(args.out, 'training_table.tsv')

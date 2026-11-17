@@ -8,7 +8,7 @@ process BUILD_HMMS {
     label 'process_medium'
     input:
     path(refs_in, stageAs: 'refs_in')
-    path(aln_in, stageAs: 'aln_in')
+    path(aln_in, stageAs: 'aln_in/*')   // the families' alignments, the decoys' to reuse, manifest.tsv
     path(families)
 
     output:
@@ -28,7 +28,7 @@ process BUILD_HMMS {
     script:
     """
     cp -R refs_in refs
-    mkdir alignments && cp -R aln_in/. alignments/
+    mkdir alignments && cp -L aln_in/* alignments/
     T=${moduleDir}/templates
     THREADS=${task.cpus} bash \$T/05_build_hmms.sh refs alignments hmms ${families}
     python \$T/05b_build_hmm_decoys.py --refs refs --aln alignments --hmms hmms --families ${families} \\

@@ -12,7 +12,7 @@ process BACDIVE_ANNOTATE {
     tuple val(chunk), path(strains), path(control_strains)   // BACDIVE_PROTEINS, the same chunk
     path(genomes)                                              // BACDIVE_FETCH
     path(control_genomes, stageAs: 'control_genomes')
-    path(db)                                                   // RELEASE_DB
+    path(db, stageAs: 'db/*')   // the release as osmotool reads it (DATABASE): its DIAMOND files, cascade and hmms/, staged as db/
 
     output:
     path('annotate/*'),         optional: true, emit: annotate
@@ -25,8 +25,8 @@ process BACDIVE_ANNOTATE {
     def run = "${moduleDir}/templates/phenotype_validation/run_annotate_cached.sh"
     """
     export CHUNK=${chunk}/${params.nchunks}
-    bash ${run} ${genomes} ${strains} annotate ${db} ${task.cpus}
-    bash ${run} control_genomes ${control_strains} control_annotate ${db} ${task.cpus}
+    bash ${run} ${genomes} ${strains} annotate db ${task.cpus}
+    bash ${run} control_genomes ${control_strains} control_annotate db ${task.cpus}
     """
 
     stub:

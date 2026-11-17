@@ -29,10 +29,10 @@ the index exists, so it writes its versions into the index directory instead.
 | `biocontainers/orfm:2.1.1--h54198d6_1` | `ORFM` (same build as in the osmotool image) |
 | `biocontainers/hmmer:3.4--h7d74f8d_5` | `HMMER_HMMSCAN` (same build as in the osmotool image) |
 | `biocontainers/wgsim:1.0--h577a1d6_10` | `WGSIM` |
-| `biocontainers/python:3.11` | Python standard library only: `CATALOG_FETCH`, `CATALOG_PACKAGE`, `VALIDATION_CHECKSYSTEMS`, `VALIDATION_TARGETCOORDS`, `VALIDATION_READRECALL`, `RELEASE_DB` |
+| `biocontainers/python:3.11` | Python standard library only: `CATALOG_FETCH`, `CATALOG_PACKAGE`, `VALIDATION_CHECKSYSTEMS`, `VALIDATION_TARGETCOORDS`, `VALIDATION_READRECALL` |
 | Seqera `py-yaml` | `SPLIT_REFS`, `CATALOG_SCREEN`, `BENCHMARK_ANNOTATEPREP`, `BENCHMARK_ANNOTATESCORE` |
 | Seqera `refs` | `RELEASE_REFS` |
-| Seqera `align` | `ALIGN_FAMILIES` |
+| Seqera `align` | `MAFFT_ALIGN`, `TRIMAL` (mafft 7.526 is not on biocontainers) |
 | Seqera `hmms` | `BUILD_HMMS` |
 | Seqera `diamond-py` | `BUILD_DIAMOND` |
 | Seqera `simulate` | `BENCHMARK_SIMULATE_CALIB`, `BENCHMARK_SIMULATE_TEST` |
@@ -64,9 +64,8 @@ URLs in the module's `container` line.
 
 ### Still to do (checked against the registry on 2026-11-17)
 
-- **To rebuild.** Seqera images have no `find`, `xargs`, `gzip`, `zcat` or `cmp`. `align` needs
-  `conda-forge::diffutils` (`cmp` in `ALIGN_FAMILIES`), and `bacdive-fetch` needs `conda-forge::gzip`
-  and `conda-forge::findutils` (`fetch_genomes.sh`). Their `environment.yml` files already list them.
+- **To rebuild.** Seqera images have no `find`, `xargs`, `gzip`, `zcat` or `cmp`. `bacdive-fetch` needs
+  `conda-forge::gzip` and `conda-forge::findutils` (`fetch_genomes.sh`); its `environment.yml` lists them.
 - `python=3.11` resolved to 3.11.0 in every Seqera image. The osmotool image has 3.11.18. To have
   one Python everywhere, pin `python=3.11.18` and rebuild.
 

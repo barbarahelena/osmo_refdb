@@ -12,6 +12,7 @@ process SPLIT_REFS {
 
     output:
     path('refs'), emit: refs
+    path('refs/*.positive.train.faa'), emit: train   // per family: what its alignment and HMM are built from
     tuple val("${task.process}"), val('python'), eval("python3 --version 2>&1 | cut -d' ' -f2"), topic: versions, emit: versions_python
     tuple val("${task.process}"), val('pyyaml'), eval("python3 -c 'import yaml; print(yaml.__version__)'"), topic: versions, emit: versions_pyyaml
 
@@ -25,5 +26,8 @@ process SPLIT_REFS {
     stub:
     """
     cp -R refs_in refs
+    printf '>a\\nMK\\n>b\\nMR\\n' > refs/ectA.positive.train.faa
+    printf '>a\\nMK\\n>c\\nMW\\n' > refs/ectB.positive.train.faa
+    printf '>a\\nMK\\n' > refs/ectC.positive.train.faa
     """
 }

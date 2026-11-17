@@ -9,7 +9,7 @@ process OSMOTOOL_BUILDCATALOG {
 
     input:
     tuple val(meta), path(genes)
-    path(db)
+    path(db, stageAs: 'db/*')   // the release as osmotool reads it (DATABASE): its DIAMOND files, cascade and hmms/, staged as db/
 
     output:
     tuple val(meta), path("${prefix}"), emit: catalog
@@ -24,7 +24,7 @@ process OSMOTOOL_BUILDCATALOG {
     def args = task.ext.args ?: ''
     prefix   = task.ext.prefix ?: "${meta.id}"
     """
-    osmotool build-catalog ${db} --genes ${genes} -o ${prefix} --threads ${task.cpus} ${args}
+    osmotool build-catalog db --genes ${genes} -o ${prefix} --threads ${task.cpus} ${args}
     """
 
     stub:

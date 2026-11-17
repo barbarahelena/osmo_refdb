@@ -28,7 +28,7 @@ workflow BACDIVE_ANALYSIS {
     BACDIVE_MATRIX(genomes, pilot, annotate)
     matrix = BACDIVE_MATRIX.out.matrix
     BACDIVE_ANALYZE(matrix, pool_families, strains, classes, control_pilot, control_strains, control_annotate)
-    NACL_MODEL(db, matrix, annotate, strains, BACDIVE_ANALYZE.out.family_ranking)
+    NACL_MODEL(params.release, db, matrix, annotate, strains, BACDIVE_ANALYZE.out.family_ranking)
 
     emit:
     done = BACDIVE_ANALYZE.out.reports.mix(NACL_MODEL.out.model).collect()

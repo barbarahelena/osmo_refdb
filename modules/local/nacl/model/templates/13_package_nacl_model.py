@@ -74,6 +74,7 @@ def main() -> None:
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--build', required=True, type=Path, help="train.py's --out directory")
     ap.add_argument('--release', required=True, type=Path)
+    ap.add_argument('--release-name', default=None, help="default: the --release directory's name")
     ap.add_argument('--out', type=Path, default=None,
                     help='write the packaged model here instead of <release>/nacl_model '
                          '(the Nextflow pipeline publishes it into the release)')
@@ -88,9 +89,10 @@ def main() -> None:
     for p in (model_p, card_p):
         if not p.is_file():
             sys.exit(f'missing {p} -- run train.py and explain.py first')
-    if schema['refdb_release'] != args.release.name:
+    release_name = args.release_name or args.release.name
+    if schema['refdb_release'] != release_name:
         sys.exit(f"model was trained on {schema['refdb_release']} annotate output, "
-                 f'refusing to package it into {args.release.name}')
+                 f'refusing to package it into {release_name}')
     if not (args.release / 'osmo_refdb.dmnd').is_file():
         sys.exit(f'{args.release} is not a built release (no osmo_refdb.dmnd)')
 
