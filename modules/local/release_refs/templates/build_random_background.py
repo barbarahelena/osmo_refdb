@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-01f_build_random_background.py — shared random bacterial background for the benchmark
+build_random_background.py — shared random bacterial background for the benchmark
 
 Each family's own negatives are hard negatives: proteins sharing its Pfam
 domain. They are what cutoffs must be calibrated against, but scored alone
@@ -13,17 +13,17 @@ calibration, never in the DIAMOND or HMM db):
   1. Sample --n random bacterial proteins from UniProt that carry none of
      the Pfam domains named anywhere in the families file (positive,
      negative and hmm-negative queries, negative_pfam, fusion_marker_pfam,
-     pfam_model). Uses 01_fetch_refs.py's sampler, so a population this
+     pfam_model). Uses fetch_refs.py's sampler, so a population this
      size (~75 million) is drawn by stratified sampling and cached per
      UniProt release.
   2. Drop any sampled protein >= --threshold % identical (DIAMOND) to any
-     family's positive set, the same rule 01b_check_negative_purity.py uses
+     family's positive set, the same rule check_negative_purity.py uses
      for hard negatives. This catches panel genes the domain exclusion
      misses: genes queried by symbol whose Pfam domain isn't listed (e.g.
      the marker set), or entries with no Pfam annotation at all.
 
-09_simulate_reads.py simulates reads from the result as family
-"random_bg"; 11_compute_metrics.py counts every call on those reads as an
+simulate_reads.py simulates reads from the result as family
+"random_bg"; compute_metrics.py counts every call on those reads as an
 off-target false positive for the family it was called as.
 
 Outputs (in --refs):
@@ -32,7 +32,7 @@ Outputs (in --refs):
   random_background_manifest.tsv  query, release, date, counts
 
 Usage:
-  python 01f_build_random_background.py --refs refs --families families.yaml [--n 5000]
+  python build_random_background.py --refs refs --families families.yaml [--n 5000]
 """
 
 from __future__ import annotations
@@ -50,7 +50,7 @@ from pathlib import Path
 
 import yaml
 
-RANDOM_BG_FAMILY = "random_bg"           # must match 09_simulate_reads.py / 11
+RANDOM_BG_FAMILY = "random_bg"           # must match simulate_reads.py / 11
 RANDOM_BG_FASTA = "random_background.faa"
 PFAM_FIELDS = ("positive_query", "negative_query", "hmm_negative_query",
                "negative_pfam", "fusion_marker_pfam", "pfam_model")
@@ -59,8 +59,8 @@ HERE = Path(__file__).resolve().parent
 
 
 def load_fetch_module():
-    """01_fetch_refs.py isn't importable by name (leading digit)."""
-    spec = importlib.util.spec_from_file_location("fetch_refs", HERE / "01_fetch_refs.py")
+    """fetch_refs.py isn't importable by name (leading digit)."""
+    spec = importlib.util.spec_from_file_location("fetch_refs", HERE / "fetch_refs.py")
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
@@ -149,7 +149,7 @@ def main() -> None:
                          "to any panel positive (01b's rule)")
     ap.add_argument("--threads", type=int, default=4)
     ap.add_argument("--cache-dir", type=Path, default=None,
-                    help="Sampling cache (default: 01_fetch_refs.py's)")
+                    help="Sampling cache (default: fetch_refs.py's)")
     args = ap.parse_args()
 
     fetch = load_fetch_module()

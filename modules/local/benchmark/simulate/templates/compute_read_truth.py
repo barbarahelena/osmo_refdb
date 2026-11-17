@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-09b_compute_read_truth.py — per-read ground truth via actual CDS overlap.
+compute_read_truth.py — per-read ground truth via actual CDS overlap.
 
-Motivating bug: 09_simulate_reads.py's truth.tsv labels every read simulated
+Motivating bug: simulate_reads.py's truth.tsv labels every read simulated
 from a positive/negative construct with that construct's label, but each
 construct is FLANK_LEN (300bp) of random DNA + the real CDS + FLANK_LEN more
 random DNA. A read landing entirely in the flanking DNA carries no gene
@@ -13,20 +13,20 @@ missed a true positive.
 This step locates each simulated read on its source contig via a k-mer seed
 match (works regardless of which simulator produced the reads -- neither
 InSilicoSeq nor wgsim reliably exposes read coordinates through the CLI used
-in 09_simulate_reads.py) and checks overlap against the known CDS interval
+in simulate_reads.py) and checks overlap against the known CDS interval
 [FLANK_LEN, contig_len - FLANK_LEN). Reads that can't be confidently located
 (should be rare -- only at very high simulated error rates) are dropped
 rather than guessed at.
 
-Also picks up real background reads (09_simulate_reads.py --background,
+Also picks up real background reads (simulate_reads.py --background,
 written as background_R1/R2.fastq) -- these have no genomic-context contig
 to check overlap against, so every one is recorded as a trivial true
 negative rather than k-mer-matched. And records each read's length, so
-11_compute_metrics.py can report metrics stratified by read length even
-when 09_simulate_reads.py --read-lengths simulated several.
+compute_metrics.py can report metrics stratified by read length even
+when simulate_reads.py --read-lengths simulated several.
 
 Usage:
-  python 09b_compute_read_truth.py --reads results/reads \\
+  python compute_read_truth.py --reads results/reads \\
       --min-cds-overlap 20
 Output:
   results/reads/read_truth.tsv  (read_id, family, label, uniprot_id,
@@ -41,7 +41,7 @@ import gzip
 import re
 from pathlib import Path
 
-FLANK_LEN = 300  # must match 09_simulate_reads.py:FLANK_LEN
+FLANK_LEN = 300  # must match simulate_reads.py:FLANK_LEN
 KMER_SIZE = 21
 N_PROBES = 8
 HEADER_ID_RE = re.compile(r"\|([A-Z0-9]+)\|")
@@ -147,7 +147,7 @@ def main() -> None:
         kmer_indexes: dict[str, dict[str, int]] = {}
 
         # Glob rather than a fixed filename: read-length-stratified runs
-        # (09_simulate_reads.py --read-lengths) write e.g.
+        # (simulate_reads.py --read-lengths) write e.g.
         # "<family>.<label>.rl150_R1.fastq" instead of "<family>.<label>_R1.fastq".
         for r1_path in sorted(args.reads.glob(f"{stem}*_R1.fastq*")):
             r2_path = Path(str(r1_path).replace("_R1.fastq", "_R2.fastq"))
@@ -190,7 +190,7 @@ def main() -> None:
                         "read_length": len(read_seq),
                     })
 
-    # Background reads (09_simulate_reads.py --background): real reads with
+    # Background reads (simulate_reads.py --background): real reads with
     # no known osmoadaptation content and no genomic-context contig to check
     # overlap against, so every one is trivially a true negative for every
     # family -- no k-mer matching needed.
@@ -213,7 +213,7 @@ def main() -> None:
 
     if not out_rows:
         print("No reads processed -- check --reads points at a populated "
-              "results/reads directory (run 09_simulate_reads.py first).")
+              "results/reads directory (run simulate_reads.py first).")
         return
 
     out_path = args.reads / "read_truth.tsv"

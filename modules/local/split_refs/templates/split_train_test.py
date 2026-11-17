@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-03_split_train_test.py — split each family's positive FASTA into train/test
+split_train_test.py — split each family's positive FASTA into train/test
 sets *before* building the HMM or DIAMOND database, so the benchmark's
 held-out set is genuinely unseen by both methods (no data leakage).
 
@@ -29,8 +29,8 @@ refs/<family>.negative.train.faa / refs/<family>.negative.test.faa:
 
   negative.train -> cutoff calibration (05/06 HMM GA, 08b DIAMOND bitscore)
                     and, for `decoy_from_negatives` families, the decoy refs
-                    built by 08a_build_decoy_refs.py
-  negative.test  -> benchmark negative reads (09_simulate_reads.py), never
+                    built by build_decoy_refs.py
+  negative.test  -> benchmark negative reads (simulate_reads.py), never
                     seen by calibration or the db
 
 Before this, only decoy families split their negatives; every other family
@@ -65,7 +65,7 @@ Two split modes:
     trained on), which a random split doesn't stress at all.
 
 Usage:
-  python 03_split_train_test.py --refs refs --test-fraction 0.2 \\
+  python split_train_test.py --refs refs --test-fraction 0.2 \\
       --families families.yaml --split-mode random|taxonomy
 """
 

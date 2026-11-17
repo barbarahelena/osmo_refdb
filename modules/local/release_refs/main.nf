@@ -25,7 +25,7 @@ process RELEASE_REFS {
     rm -f refs/*.positive.train.faa refs/*.positive.calib.faa refs/*.positive.test.faa \\
           refs/*.negative.train.faa refs/*.negative.test.faa refs/*.decoy.faa refs/extra_positives_manifest.tsv
     python ${moduleDir}/templates/strip_ref_tag.py --refs refs --tag _study --threads ${task.cpus}
-    python ${moduleDir}/templates/01_fetch_refs.py --families ${families} --out refs \\
+    python ${moduleDir}/templates/fetch_refs.py --families ${families} --out refs \\
         --only-hmm-decoys --cache-dir cache
     """
 

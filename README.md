@@ -95,7 +95,7 @@ references), so start low (`0.1`-`0.3`) and compare against
 to see the recall cost before raising it further.
 
 **Note**: this release also changes osmotool's DIAMOND output format (adds
-a `scovhsp` column) — `11_compute_metrics.py` now expects that column, so
+a `scovhsp` column) — `compute_metrics.py` now expects that column, so
 `*.blastx.tsv` files from an older release won't parse correctly against
 the updated script. Rerun `benchmark` (not just `all`) against any release
 built before this change to regenerate them.
@@ -107,7 +107,7 @@ Capped fetches (every family's negatives, and positives with
 population. The accession lists are cached per UniProt release in
 `cache/uniprot/`, so the first build after a new UniProt release spends
 about an hour listing them and later builds reuse the cache. Pass
-`--no-cache` to `01_fetch_refs.py` to force a fresh listing.
+`--no-cache` to `fetch_refs.py` to force a fresh listing.
 
 Edit `families.yaml` — add one entry with a `name`, `positive_query`
 (UniProt REST query) and `negative_query` (a hard-negative Pfam-family
@@ -134,7 +134,7 @@ proved the two score distributions overlap almost completely. Adds that
 family's held-out negative sequences to the DIAMOND db as
 `<family>_decoy` references, purely so they can win DIAMOND's existing
 best-hit contest away from a mislabeled call; never appears in reported
-output. See `modules/local/build_diamond/templates/08a_build_decoy_refs.py`'s docstring for the full
+output. See `modules/local/build_diamond/templates/build_decoy_refs.py`'s docstring for the full
 mechanism.
 
 Optional `trim_gt` field (float, default 0.8): per-family override for
@@ -178,13 +178,13 @@ trkH/ktrB/ktrD (real, distinct siblings sharing that Pfam family, same
 situation as proX/opuAC/opuBC/opuCC). Adopting the same accession for more
 than one of them made their HMMs byte-identical — every read scores
 exactly the same against all three, `HMM_CALIBRATE`'s alphabetical
-`cat hmms/*.hmm` plus `11_compute_metrics.py`'s best-hit tie-break means
+`cat hmms/*.hmm` plus `compute_metrics.py`'s best-hit tie-break means
 whichever sorts first absorbs 100% of the shared signal, and the rest get
 exactly zero HMM recall. The v6 benchmark caught this directly: ktrB
 scored real hits, trkH and ktrD scored 0 true positives each, despite
 normal, non-trivial DIAMOND recall on the same reads (DIAMOND discriminates
 via each family's own distinct reference sequences, not the shared
-profile, so it's unaffected). `01_fetch_refs.py` now fails fast
+profile, so it's unaffected). `fetch_refs.py` now fails fast
 (`check_no_duplicate_pfam_models`) if two families.yaml entries share a
 `pfam_model` accession, specifically to catch this mistake before a full
 build wastes time on it again. `PFAM_FETCH` fetches the actual
@@ -195,7 +195,7 @@ InterPro entry metadata endpoint's `entry_annotations.hmm` counter, which
 reports `0` regardless of whether the model is actually fetchable, so don't
 use that counter to decide. DIAMOND references are unaffected either way —
 those always come from this repo's own UniProt fetch; `pfam_model` only
-changes where the HMM comes from. `06_calibrate_cutoffs.py` reads (and
+changes where the HMM comes from. `calibrate_cutoffs.py` reads (and
 leaves untouched) the GA line Pfam shipped, rather than computing one, but
 still scores this repo's own held-out positive/negative sets against it and
 flags the family (`pfam_ga_review_needed` in `cutoff_manifest.tsv`) if
@@ -215,7 +215,7 @@ count and a name/description match are necessary checks, but this repo's
 own held-out benchmark is the only thing that actually confirms Pfam's
 cutoff behaves well on *this* project's specific negative pool — a
 `pfam_model` adoption isn't done until that scorecard has been read.
-`06b_qc_scorecard.py` prints an extra, hard-to-miss banner specifically
+`qc_scorecard.py` prints an extra, hard-to-miss banner specifically
 for `pfam_model` families flagged this way (separate from the general
 per-family review list), precisely so this can't be missed by skimming
 past a long scorecard run.
@@ -227,7 +227,7 @@ only mrpA/mrpB — the Mrp/Mnh Na+/H+ antiporter's A and B subunits, confirmed
 via UniProt domain-architecture evidence across Actinomycetota, Bacillota
 specifically Paenibacillaceae, and some Alphaproteobacteria — see
 `families.yaml`'s mrpA/mrpB entries for the taxonomic detail). Without this,
-`01c_check_length_outliers.py` would drop a genuine fused-ORF sequence as a
+`check_length_outliers.py` would drop a genuine fused-ORF sequence as a
 probable fusion *artifact* (it's roughly the sum of both subunits' lengths)
 — exactly wrong here, since Task 1b explicitly wants the fused form
 recognized as a real detection target. With `fusion_partner` declared, an
@@ -235,20 +235,20 @@ over-length candidate is checked against a second length window centered on
 (this family's median + the partner's median) instead of being discarded
 outright; `fusion_marker_pfam` (a Pfam domain unique to one partner, absent
 from a standalone copy of the other — confirmed via UniProt's own domain
-annotation, fetched by `01_fetch_refs.py` for `fusion_partner` families
+annotation, fetched by `fetch_refs.py` for `fusion_partner` families
 specifically) confirms it's a true fusion rather than an unrelated length
 outlier when domain evidence is available, and is advisory (not required)
 otherwise. Confirmed fusion candidates are routed to
 `refs/<family>.fusion_candidates.faa` — excluded from this family's own
 MAFFT alignment/HMM (a ~1000aa fused sequence would badly gap the
 alignment of ~800aa standalone sequences) but picked up by
-`modules/local/build_diamond/templates/08d_build_fusion_refs.py`, which merges a pair's fusion
+`modules/local/build_diamond/templates/build_fusion_refs.py`, which merges a pair's fusion
 candidates (deduped by UniProt accession) into one `<familyA>_<familyB>_fused`
 DIAMOND-only reference set. The same file also carries fused ORFs pulled
 out of a family's own NEGATIVE fetch under a bare locus tag — a fused ORF
 matches a family's negative_query just as easily as a true hard negative
 does, and can dominate that pool badly enough to distort
-`01c_check_length_outliers.py`'s own median-based length filter (confirmed
+`check_length_outliers.py`'s own median-based length filter (confirmed
 in production for mrpB: ~68% of its negative pool was genuine mrpA+mrpB
 fusion sequences, which became the filter's own "normal" length center and
 caused it to discard the true hard negatives instead) — see that script's
@@ -259,13 +259,13 @@ Unlike a decoy reference, a fused-ORF hit is a
 is not added to `osmotool profile`/`annotate`'s exclusion lists. What a
 `_fused` hit should imply for the two individual family calls is
 complex-aware scoring logic that lives downstream in `osmotool`, not in
-this repo. See `modules/local/release_refs/templates/01c_check_length_outliers.py` and
-`modules/local/build_diamond/templates/08d_build_fusion_refs.py` docstrings for the full mechanism.
+this repo. See `modules/local/release_refs/templates/check_length_outliers.py` and
+`modules/local/build_diamond/templates/build_fusion_refs.py` docstrings for the full mechanism.
 
 Optional `paralog_group: <name>` field: close paralogs in the panel that
 are expected to confuse each other at read level (e.g. the opu ATPases
 opuAA/opuBA/opuCA) share a group name. It changes nothing in the build;
-`11_compute_metrics.py` writes `summary_by_group.tsv`, scoring each group's
+`compute_metrics.py` writes `summary_by_group.tsv`, scoring each group's
 members as one unit, so a result can be read per gene or per system.
 
 `report_level: gene | group | none` field (every family in
@@ -273,7 +273,7 @@ members as one unit, so a result can be read per gene or per system.
 table. `group` sums a paralog group into one row and must be set on all of
 its members; otherwise each member is `gene` or `none` on its own.
 `scope: annotate_only` requires `none`. The values were set from the
-calibration rule in `11_compute_metrics.py` (`decide_units`): a unit is
+calibration rule in `compute_metrics.py` (`decide_units`): a unit is
 reported at the finest level whose `f1_all` on the calibration reads
 reaches 0.5 (gene before group), each level taking the better of cascade
 off/on, and the cascade config follows the chosen level. `f1_all` counts
@@ -287,7 +287,7 @@ pipeline. A family without the field takes the rule's level (markers.yaml,
 subset files).
 
 Optional `max_positive_override: <int>` field: per-family cap on
-`01_fetch_refs.py`'s positive-set fetch, overriding the global
+`fetch_refs.py`'s positive-set fetch, overriding the global
 `--max-positive` CLI flag for just that family. Needed for a family whose
 `positive_query` is deliberately anchored on a broad Pfam accession rather
 than a gene symbol (see cspA below) and would otherwise try to fetch every
@@ -413,33 +413,33 @@ everything together.
 
 | Step | Script | Purpose |
 |---|---|---|
-| 1 | `01_fetch_refs.py` | Fetch positive + hard-negative sequences per family from UniProt |
-| 1b | `01b_check_negative_purity.py` | Flag/drop hard negatives that are actually true positives under a different gene symbol (DIAMOND identity check against the positive set; see `refs/negative_purity_manifest.tsv`) |
-| 1c | `01c_check_length_outliers.py` | Flag/drop sequences (positive or negative) whose length is way off their family's median -- likely a multi-domain fusion protein or a partial fragment, not a clean single-domain family member (see `refs/length_outlier_manifest.tsv`) |
+| 1 | `fetch_refs.py` | Fetch positive + hard-negative sequences per family from UniProt |
+| 1b | `check_negative_purity.py` | Flag/drop hard negatives that are actually true positives under a different gene symbol (DIAMOND identity check against the positive set; see `refs/negative_purity_manifest.tsv`) |
+| 1c | `check_length_outliers.py` | Flag/drop sequences (positive or negative) whose length is way off their family's median -- likely a multi-domain fusion protein or a partial fragment, not a clean single-domain family member (see `refs/length_outlier_manifest.tsv`) |
 | 1d | *retired* | Merged local study sequences (`extra_sequences/`, gitignored, so not reproducible). Removed 2026-11-17; a rebuild from an older release's refs strips them with `modules/local/release_refs/templates/strip_ref_tag.py` (offline, re-clusters the four affected families, writes `refs/removed_tag_manifest.tsv`) |
-| 1e | `01e_add_refseq_positives.py` | For families opted in via `families.yaml`'s `refseq_gene_symbols` (only where UniProt's own gene-symbol population is already fully exhausted and a per-family novelty/contamination check confirmed it's safe), merge additional real positives from NCBI RefSeq into the fetched positive set (see `refs/refseq_positives_manifest.tsv`) |
-| 1f | `01f_build_random_background.py` | Sample a shared random bacterial background (default 5000 proteins carrying none of the panel's Pfam domains, minus any >= 70% identical to a panel positive) into `refs/random_background.faa`. Benchmark-only: never used for calibration or in either db. Step 9 simulates reads from it and step 11 reports each family's off-target false positives per million of those reads (see `refs/random_background_manifest.tsv`) |
-| 2 | `02_cluster_cdhit.sh` | CD-HIT cluster positives and negatives at 90% identity (remove redundancy, avoid train/test leakage from near-duplicates) |
-| 3 | `03_split_train_test.py` | Split positives three ways: train (builds the HMMs and DIAMOND db), calib (sets the HMM GA cutoffs, the DIAMOND bitscore cutoffs and, as simulated reads, the profile cascade config) and test (benchmark only). The held-out 20% (`--test-fraction`) is drawn as before, so train is unchanged from a two-way split; half of it (`--calib-fraction`) becomes calib. Up to v9 there was no calib set and the cutoffs were tuned on the benchmark's own positives. Also splits every family's negatives into train (cutoff calibration in steps 5-6 and 8b; decoy refs in step 8a) / test (benchmark negative reads), so the benchmark never scores negatives that set a cutoff. Non-decoy families hold out half their negatives (`--negative-test-fraction`, default 0.5); decoy families use `--test-fraction` |
+| 1e | `add_refseq_positives.py` | For families opted in via `families.yaml`'s `refseq_gene_symbols` (only where UniProt's own gene-symbol population is already fully exhausted and a per-family novelty/contamination check confirmed it's safe), merge additional real positives from NCBI RefSeq into the fetched positive set (see `refs/refseq_positives_manifest.tsv`) |
+| 1f | `build_random_background.py` | Sample a shared random bacterial background (default 5000 proteins carrying none of the panel's Pfam domains, minus any >= 70% identical to a panel positive) into `refs/random_background.faa`. Benchmark-only: never used for calibration or in either db. Step 9 simulates reads from it and step 11 reports each family's off-target false positives per million of those reads (see `refs/random_background_manifest.tsv`) |
+| 2 | `cluster_cdhit.sh` | CD-HIT cluster positives and negatives at 90% identity (remove redundancy, avoid train/test leakage from near-duplicates) |
+| 3 | `split_train_test.py` | Split positives three ways: train (builds the HMMs and DIAMOND db), calib (sets the HMM GA cutoffs, the DIAMOND bitscore cutoffs and, as simulated reads, the profile cascade config) and test (benchmark only). The held-out 20% (`--test-fraction`) is drawn as before, so train is unchanged from a two-way split; half of it (`--calib-fraction`) becomes calib. Up to v9 there was no calib set and the cutoffs were tuned on the benchmark's own positives. Also splits every family's negatives into train (cutoff calibration in steps 5-6 and 8b; decoy refs in step 8a) / test (benchmark negative reads), so the benchmark never scores negatives that set a cutoff. Non-decoy families hold out half their negatives (`--negative-test-fraction`, default 0.5); decoy families use `--test-fraction` |
 | 4 | `MAFFT_ALIGN`, `TRIMAL` (workflow) | MAFFT align + trimAl trim the TRAIN positives, one family per task. A family whose train set and `trim_gt` are unchanged since the source release keeps its alignment (`alignments/manifest.tsv` records which). trimAl's gap threshold defaults to 0.8 but can be overridden per family via `families.yaml`'s `trim_gt` |
-| 5 | `HMMER_HMMBUILD`, `PFAM_FETCH`, `HMMER_HMMSEARCH` (workflow) | hmmbuild per family (or, for a family marked `pfam_model`, fetch that curated Pfam-A HMM directly instead); score the positive-calib and negative-train sets. HMM decoys: `HMM_DECOYSELECT` (`05b_build_hmm_decoys.py --select-only`), then `CDHIT`, `MAFFT_ALIGN`, `TRIMAL`, `HMMER_HMMBUILD` |
-| 6 | `06_calibrate_cutoffs.py` (`HMM_CALIBRATE`) | Set per-family HMM GA (gathering) cutoffs (or, for `pfam_model` families, read and keep Pfam's own GA line, only flagging it if it doesn't separate this repo's own curated sets well). Where positives and negatives overlap, the cutoff is the median over 1000 seeded bootstrap resamples of the F1-optimal cutoff (`--cutoff-method sweep` for the plain F1 sweep): it moves less between builds (see `modules/local/hmm/calibrate/templates/cutoff_stability.py`). The manifest also records the plain sweep's cutoff, the bootstrap 10th-90th percentile range and `cutoff_range_wide` (the data do not pin the cutoff down) |
-| 6b | `06b_qc_scorecard.py` | Consolidate negative-purity, length-outlier, and HMM-cutoff-overlap manifests into one per-family scorecard (`qc_scorecard.tsv`) flagging families that need review |
+| 5 | `HMMER_HMMBUILD`, `PFAM_FETCH`, `HMMER_HMMSEARCH` (workflow) | hmmbuild per family (or, for a family marked `pfam_model`, fetch that curated Pfam-A HMM directly instead); score the positive-calib and negative-train sets. HMM decoys: `HMM_DECOYSELECT` (`build_hmm_decoys.py --select-only`), then `CDHIT`, `MAFFT_ALIGN`, `TRIMAL`, `HMMER_HMMBUILD` |
+| 6 | `calibrate_cutoffs.py` (`HMM_CALIBRATE`) | Set per-family HMM GA (gathering) cutoffs (or, for `pfam_model` families, read and keep Pfam's own GA line, only flagging it if it doesn't separate this repo's own curated sets well). Where positives and negatives overlap, the cutoff is the median over 1000 seeded bootstrap resamples of the F1-optimal cutoff (`--cutoff-method sweep` for the plain F1 sweep): it moves less between builds (see `modules/local/hmm/calibrate/templates/cutoff_stability.py`). The manifest also records the plain sweep's cutoff, the bootstrap 10th-90th percentile range and `cutoff_range_wide` (the data do not pin the cutoff down) |
+| 6b | `qc_scorecard.py` | Consolidate negative-purity, length-outlier, and HMM-cutoff-overlap manifests into one per-family scorecard (`qc_scorecard.tsv`) flagging families that need review |
 | 7 | `HMM_CALIBRATE` | Concatenate + hmmpress into one binary HMM database |
-| 8a | `08a_build_decoy_refs.py` | For families marked `decoy_from_negatives: true` (e.g. betL), turn their held-out negative-train split into searchable `<family>_decoy` DIAMOND references -- confusable paralogs (e.g. betT/caiT) that can win DIAMOND's best-hit contest away from a mislabeled call, since a single score threshold can't separate them (see betL's `families.yaml` entry) |
-| 8d | `08d_build_fusion_refs.py` | For families.yaml pairs marked `fusion_partner` (e.g. mrpA/mrpB), merge each pair's fusion-candidate sequences (flagged by 01c, deduped by UniProt accession) into one searchable `<familyA>_<familyB>_fused` DIAMOND reference -- a real, reportable detection target for a single-ORF fused lineage, not excluded from output the way decoys are |
-| 8 | `08_build_diamond_db.sh` | Build a DIAMOND db from TRAIN positives + any decoy refs from step 8a + any fused refs from step 8d -- excludes `_refseq`-tagged sequences specifically (kept for HMM's alignment, dropped for DIAMOND): confirmed across 4 families that the merged pool helps HMM but mostly hurts DIAMOND's identity-based matching |
-| 8b | `08b_calibrate_diamond_cutoffs.py` | Calibrate a per-family minimum DIAMOND bitscore, mirroring HMM's GA cutoff -- DIAMOND otherwise applies one flat `--min_identity` across every family, which can't separate a true gene from a genuinely close paralog (e.g. betL vs betT) whose identity to it happens to exceed that flat threshold |
-| 8c | `08c_write_scope_manifest.py` | Write `osmo_refdb.profile_excluded_families.txt` (families marked `scope: annotate_only`, e.g. murB, plus all decoy labels) and `osmo_refdb.annotate_excluded_families.txt` (decoy labels only), consumed by `osmotool profile`/`annotate --exclude_families` |
+| 8a | `build_decoy_refs.py` | For families marked `decoy_from_negatives: true` (e.g. betL), turn their held-out negative-train split into searchable `<family>_decoy` DIAMOND references -- confusable paralogs (e.g. betT/caiT) that can win DIAMOND's best-hit contest away from a mislabeled call, since a single score threshold can't separate them (see betL's `families.yaml` entry) |
+| 8d | `build_fusion_refs.py` | For families.yaml pairs marked `fusion_partner` (e.g. mrpA/mrpB), merge each pair's fusion-candidate sequences (flagged by 01c, deduped by UniProt accession) into one searchable `<familyA>_<familyB>_fused` DIAMOND reference -- a real, reportable detection target for a single-ORF fused lineage, not excluded from output the way decoys are |
+| 8 | `DIAMOND_TRAINREFS / DIAMOND_MAKEDB` | Build a DIAMOND db from TRAIN positives + any decoy refs from step 8a + any fused refs from step 8d -- excludes `_refseq`-tagged sequences specifically (kept for HMM's alignment, dropped for DIAMOND): confirmed across 4 families that the merged pool helps HMM but mostly hurts DIAMOND's identity-based matching |
+| 8b | `calibrate_diamond_cutoffs.py` | Calibrate a per-family minimum DIAMOND bitscore, mirroring HMM's GA cutoff -- DIAMOND otherwise applies one flat `--min_identity` across every family, which can't separate a true gene from a genuinely close paralog (e.g. betL vs betT) whose identity to it happens to exceed that flat threshold |
+| 8c | `write_scope_manifest.py` | Write `osmo_refdb.profile_excluded_families.txt` (families marked `scope: annotate_only`, e.g. murB, plus all decoy labels) and `osmo_refdb.annotate_excluded_families.txt` (decoy labels only), consumed by `osmotool profile`/`annotate --exclude_families` |
 | 9c-11c | steps 9-11 with `--split calib` | Calibration pass, run first by `benchmark`: simulate reads from positive.calib + negative.train, run DIAMOND with `CASCADE=score` (every family flagged at a threshold nothing fails, so no call is dropped but each one's HMM score is kept) and HMM on them. 11c then decides per family or paralog group, on these reads only, the report level and the cascade together: it replays cascade off and on for every unit, applies the report-level rule (see `report_level` above) and writes `osmo_refdb.profile_cascade.tsv` and `osmo_refdb.profile_report_levels.tsv`. Neither was tuned on benchmark reads (the cascade was, up to v9). Output in `results/calib/` |
-| 9 | `09_simulate_reads.py` | Simulate reads from held-out TEST positives + TEST negatives (the negative split disjoint from calibration and from any decoy refs, so a benchmark read is never scored against a threshold or db entry built from its own source sequence) |
-| 9b | `09b_compute_read_truth.py` | Locate each read on its source contig (k-mer match) and label it by actual CDS overlap, not just its source construct -- a read that lands entirely in flanking DNA carries no gene signal and must not be scored as a positive. Also labels real background reads and records read length. |
-| 10 | `10_run_benchmark.sh` | Run `osmotool profile` with its default DIAMOND+HMM cascade (`CASCADE=off` for DIAMOND alone, `CASCADE=score` for the calibration pass; `SKIP_HMM=1` reruns only the DIAMOND side) and HMM (hmmscan; `JOBS` samples in parallel) on the simulated reads. `--keep_aln` keeps the raw DIAMOND alignments and the cascade's hmmsearch table, so one run scores both DIAMOND alone and DIAMOND+cascade |
-| 11 | `11_compute_metrics.py` | Precision/recall/F1, ROC/PR curves, per-family best-threshold summary, read-length-stratified summary and background false-positive rate, for three methods: `diamond`, `diamond_cascade` (what `osmotool profile` reports by default; per-read calls rebuilt from osmotool's kept files and checked against its `gene_counts.tsv`) and `hmm`. In the calibration pass (no `--cascade-config`) it instead decides and writes `osmo_refdb.profile_cascade.tsv` and `osmo_refdb.profile_report_levels.tsv` (step 9c-11c); on the test reads it scores those choices per reporting unit in `summary_by_report_unit.tsv` (the numbers for the paper) and checks osmotool's `unit_counts.tsv` against the rebuilt calls. `summary.tsv` counts false positives three ways: `fp` (the family's own hard negatives and flanks; `precision`/`f1`, comparable to releases up to v8), `fp_cross` (other panel genes' real reads called as this family, mostly close-paralog confusion; `precision_panel`/`f1_panel`), and `fp_background`/`background_fp_per_million` (random background reads). `fp_other_negatives` (other families' hard negatives called as this family) is in none of those, since sibling families share one negative pool. `fp_all` = all three, with `precision_all`/`f1_all`: the same denominator at gene and group level, used for the report-level and cascade decision. `hard_negative_fp_per_million` and `background_fp_per_million` are rates per million negative reads, independent of how many negatives were mixed in: use those to compare families or releases. Families sharing a `families.yaml` `paralog_group` are also scored as one unit in `summary_by_group.tsv`, where a read called as a sibling counts as correct (`within_group_swaps`) |
+| 9 | `simulate_reads.py` | Simulate reads from held-out TEST positives + TEST negatives (the negative split disjoint from calibration and from any decoy refs, so a benchmark read is never scored against a threshold or db entry built from its own source sequence) |
+| 9b | `compute_read_truth.py` | Locate each read on its source contig (k-mer match) and label it by actual CDS overlap, not just its source construct -- a read that lands entirely in flanking DNA carries no gene signal and must not be scored as a positive. Also labels real background reads and records read length. |
+| 10 | `run_benchmark.sh` | Run `osmotool profile` with its default DIAMOND+HMM cascade (`CASCADE=off` for DIAMOND alone, `CASCADE=score` for the calibration pass; `SKIP_HMM=1` reruns only the DIAMOND side) and HMM (hmmscan; `JOBS` samples in parallel) on the simulated reads. `--keep_aln` keeps the raw DIAMOND alignments and the cascade's hmmsearch table, so one run scores both DIAMOND alone and DIAMOND+cascade |
+| 11 | `compute_metrics.py` | Precision/recall/F1, ROC/PR curves, per-family best-threshold summary, read-length-stratified summary and background false-positive rate, for three methods: `diamond`, `diamond_cascade` (what `osmotool profile` reports by default; per-read calls rebuilt from osmotool's kept files and checked against its `gene_counts.tsv`) and `hmm`. In the calibration pass (no `--cascade-config`) it instead decides and writes `osmo_refdb.profile_cascade.tsv` and `osmo_refdb.profile_report_levels.tsv` (step 9c-11c); on the test reads it scores those choices per reporting unit in `summary_by_report_unit.tsv` (the numbers for the paper) and checks osmotool's `unit_counts.tsv` against the rebuilt calls. `summary.tsv` counts false positives three ways: `fp` (the family's own hard negatives and flanks; `precision`/`f1`, comparable to releases up to v8), `fp_cross` (other panel genes' real reads called as this family, mostly close-paralog confusion; `precision_panel`/`f1_panel`), and `fp_background`/`background_fp_per_million` (random background reads). `fp_other_negatives` (other families' hard negatives called as this family) is in none of those, since sibling families share one negative pool. `fp_all` = all three, with `precision_all`/`f1_all`: the same denominator at gene and group level, used for the report-level and cascade decision. `hard_negative_fp_per_million` and `background_fp_per_million` are rates per million negative reads, independent of how many negatives were mixed in: use those to compare families or releases. Families sharing a `families.yaml` `paralog_group` are also scored as one unit in `summary_by_group.tsv`, where a read called as a sibling counts as correct (`within_group_swaps`) |
 | 11b | `modules/local/benchmark/templates/benchmark_annotate.py` | Annotate-mode benchmark at protein level: runs `osmotool annotate --proteins` (HMM with GA cutoffs, and DIAMOND with its bitscore cutoffs) on the held-out test positives, test hard negatives and random background, and scores per-protein calls from `gene_coordinates.tsv`. Output in `results/annotate/` (`summary.tsv`, `summary_by_group.tsv`, `overall.tsv`) |
 
-| 12 | `12_package_markers.py` | Copy a separately-built marker release (`markers.yaml`, see below) into a main release's `markers/` subdirectory: DIAMOND db, its source FASTA (for reference lengths), decoy-label exclusion list, and a manifest with per-marker lengths and the marker build's DIAMOND benchmark precision/recall |
-| 14 | `14_package_catalog.py` (`run_pipeline.sh catalog`) | Build a gene catalog into the release as `catalogs/<name>/` with `osmotool build-catalog`: translate the catalog genes, annotate them with this release's HMMs under their gathering cutoffs (as `annotate --method hmm`), index the whole catalog with bwa-mem3. Adds provenance (source, input checksums, release) to `catalog.json`, the gzipped hmmsearch domain table, and `SHA256SUMS`. The catalog is part of the release: rebuild it for every release |
+| 12 | `package_markers.py` | Copy a separately-built marker release (`markers.yaml`, see below) into a main release's `markers/` subdirectory: DIAMOND db, its source FASTA (for reference lengths), decoy-label exclusion list, and a manifest with per-marker lengths and the marker build's DIAMOND benchmark precision/recall |
+| 14 | `package_catalog.py` (`run_pipeline.sh catalog`) | Build a gene catalog into the release as `catalogs/<name>/` with `osmotool build-catalog`: translate the catalog genes, annotate them with this release's HMMs under their gathering cutoffs (as `annotate --method hmm`), index the whole catalog with bwa-mem3. Adds provenance (source, input checksums, release) to `catalog.json`, the gzipped hmmsearch domain table, and `SHA256SUMS`. The catalog is part of the release: rebuild it for every release |
 
 ### Gene catalogs
 
@@ -529,7 +529,7 @@ bash run_pipeline.sh markers v9        # builds + benchmarks releases/v9-markers
 
 `markers` is equivalent to
 `FAMILIES_FILE=markers.yaml bash run_pipeline.sh all v9-markers` followed by
-`python modules/local/package_markers/templates/12_package_markers.py --marker-release releases/v9-markers --release releases/v9`;
+`python modules/local/package_markers/templates/package_markers.py --marker-release releases/v9-markers --release releases/v9`;
 the packaging step can also add markers to an existing release (e.g. v8)
 without rebuilding it. Review `releases/<name>-markers/results/metrics/summary.tsv`
 before shipping: a marker with poor DIAMOND precision inflates the

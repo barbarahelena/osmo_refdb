@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-06_calibrate_cutoffs.py — set per-family HMM gathering thresholds (GA cutoffs)
+calibrate_cutoffs.py — set per-family HMM gathering thresholds (GA cutoffs)
 
-Reads the hmmsearch --tblout score tables produced by 05_build_hmms.sh for
+Reads the hmmsearch --tblout score tables produced by the HMM_BUILD subworkflow for
 the positive calibration set (positive.calib: held out from the model and
 from the benchmark's positive.test) and hard-negative set, finds a score
 threshold that separates them, writes the cutoff into each .hmm file's GA
@@ -16,7 +16,7 @@ Strategy (mirrors how Pfam sets GA cutoffs):
     gap (safe separation).
   * if there IS overlap: sweep every candidate threshold across the
     combined positive+negative score population and pick the one that
-    maximizes F1 (same technique 11_compute_metrics.py's
+    maximizes F1 (same technique compute_metrics.py's
     summarize_best_threshold() already uses for post-hoc benchmark
     analysis, applied here at calibration time instead).
 
@@ -62,12 +62,12 @@ Strategy (mirrors how Pfam sets GA cutoffs):
     (median interquartile range 2 bits under 80% subsampling), so this is
     about differences between builds, not noise within one.
 
-families.yaml `pfam_model: PFxxxxx` families (see 05_build_hmms.sh) are
+families.yaml `pfam_model: PFxxxxx` families (see the HMM_BUILD subworkflow) are
 handled differently here: their .hmm file already carries a real GA cutoff
 -- Pfam's own, curated for that Pfam family, not computed by this script --
 so it's read and left as-is rather than overwritten. Our own held-out
 positive/negative sets are still scored against it (already done by
-05_build_hmms.sh) purely to confirm Pfam's cutoff actually separates OUR
+the HMM_BUILD subworkflow) purely to confirm Pfam's cutoff actually separates OUR
 curated true positives from OUR hard negatives; a bad result there
 (status="pfam_ga_review_needed" in the manifest) means the assumption that
 this Pfam family is gene-specific enough for our purposes was wrong, not
@@ -76,14 +76,14 @@ pfam_model from that family in families.yaml and let it fall back to a
 normal custom-built, empirically-calibrated model instead.
 
 Decoy-aware GA: for a family a `decoy_aware_ga` HMM decoy competes with
-(families.yaml hmm_decoys; scored by 05b_build_hmm_decoys.py), a calibration
+(families.yaml hmm_decoys; scored by build_hmm_decoys.py), a calibration
 sequence that the decoy outscores (and that reaches the decoy's own GA) is
 not called as the family, as in annotate's best-hit contest: such a
 positive counts as a miss at every cutoff, such a negative drops out. The
 cutoff then only has to separate what the decoy leaves, which lets a family
 whose confusers overlap it in score (betL vs betT/caiT) keep a lower GA.
 
-Usage: python 06_calibrate_cutoffs.py [--hmms hmms] [--families families.yaml]
+Usage: python calibrate_cutoffs.py [--hmms hmms] [--families families.yaml]
 Output: updates hmms/<family>.hmm in place with a GA line (skipped for
         pfam_model families, whose GA line is Pfam's own)
         hmms/cutoff_manifest.tsv
@@ -385,7 +385,7 @@ def main() -> None:
         neg_path = score_dir / f"{family}.negative.tblout"
 
         if not hmm_path.exists():
-            print(f"[{family}] SKIP: {hmm_path} not found (run 05_build_hmms.sh first)")
+            print(f"[{family}] SKIP: {hmm_path} not found (run the HMM_BUILD subworkflow first)")
             continue
 
         pos_scores = parse_tblout_scores(pos_path)

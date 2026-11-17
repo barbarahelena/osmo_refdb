@@ -21,7 +21,7 @@ process SPLIT_REFS {
     script:
     """
     cp -R refs_in refs
-    python ${moduleDir}/templates/03_split_train_test.py --refs refs --families ${families} \\
+    python ${moduleDir}/templates/split_train_test.py --refs refs --families ${families} \\
         --split-mode ${params.split_mode}
     """
 

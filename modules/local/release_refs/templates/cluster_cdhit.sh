@@ -1,17 +1,17 @@
 #!/bin/bash
 # ---------------------------------------------------------------------------
-# osmo_refdb — 02_cluster_cdhit.sh
+# osmo_refdb — cluster_cdhit.sh
 # Cluster each family's positive AND negative FASTA at 90% amino acid
 # identity to remove redundancy before the train/test split. Clustering
 # negatives too (not just positives) matters for the same anti-leakage
-# reason: 03_split_train_test.py splits every family's negative.faa into a
+# reason: split_train_test.py splits every family's negative.faa into a
 # calibration half and a benchmark half, and near-duplicate negatives split
 # randomly across the two would let a cutoff (or, for decoy_from_negatives
 # families, a decoy DIAMOND ref) "see" a near-identical sequence to one of
 # its own benchmark negatives, inflating apparent precision. Assumes
 # cd-hit is on PATH (true inside the osmo_refdb Docker image / conda env).
 #
-# Usage: bash 02_cluster_cdhit.sh [refs_dir]
+# Usage: bash cluster_cdhit.sh [refs_dir]
 # ---------------------------------------------------------------------------
 
 set -euo pipefail
@@ -38,7 +38,7 @@ for LABEL in positive negative; do
         echo "[${FAMILY}/${LABEL}] ${N_SEQ} -> ${N_CLUSTERED} sequences after clustering"
 
         # Overwrite <label>.faa with the deduplicated set so downstream steps
-        # (03_split_train_test.py onward) only ever see non-redundant sequences.
+        # (split_train_test.py onward) only ever see non-redundant sequences.
         cp "${CLUSTERED}" "${FASTA}"
     done
 done

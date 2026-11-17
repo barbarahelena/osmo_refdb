@@ -21,7 +21,7 @@ process BENCHMARK_READS {
     script:
     """
     CASCADE=${mode} THREADS=${task.cpus} JOBS=${task.cpus} \\
-        bash ${moduleDir}/templates/10_run_benchmark.sh ${reads} results db db/hmms/osmo_refdb.hmm
+        bash ${moduleDir}/templates/run_benchmark.sh ${reads} results db db/hmms/osmo_refdb.hmm
     """
 
     stub:

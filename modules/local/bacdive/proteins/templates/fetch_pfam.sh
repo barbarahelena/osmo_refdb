@@ -4,7 +4,7 @@
 # (build_random_pool.py); the pool itself (pool.hmm) travels as a snapshot. Run on a
 # login node (internet). Note: re-deriving the pool also needs screen_proteomes.faa,
 # which no script in this repo creates.
-#   bash bin/00_fetch_pfam.sh data/phenotype_validation
+#   bash bin/fetch_pfam.sh data/phenotype_validation
 set -euo pipefail
 DEST="${1:?destination data dir}/random_panel"
 BASE=https://ftp.ebi.ac.uk/pub/databases/Pfam/releases/Pfam39.0

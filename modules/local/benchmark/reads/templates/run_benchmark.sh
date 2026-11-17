@@ -1,11 +1,11 @@
 #!/bin/bash
 # ---------------------------------------------------------------------------
-# osmo_refdb — 10_run_benchmark.sh
+# osmo_refdb — run_benchmark.sh
 # Run DIAMOND (via osmotool profile, train-only db; with the DIAMOND+HMM
 # cascade unless CASCADE=off) and HMM (translate + hmmscan, train-only HMMs) on the simulated reads, for later
-# scoring by 11_compute_metrics.py.
+# scoring by compute_metrics.py.
 #
-# Usage: bash 10_run_benchmark.sh [reads_dir] [results_dir] [release_dir] [hmm_db]
+# Usage: bash run_benchmark.sh [reads_dir] [results_dir] [release_dir] [hmm_db]
 #
 # release_dir is an unpacked osmo_refdb release directory (e.g. releases/v8),
 # NOT the .dmnd file path directly -- `osmotool profile` finds osmo_refdb.dmnd,
@@ -41,13 +41,13 @@ DIAMOND_MIN_SUBJECT_COVER="${DIAMOND_MIN_SUBJECT_COVER:-0.0}"
 # That file is written by step 11 from the CALIBRATION reads (run_pipeline.sh
 # runs steps 9-11 on --split calib first), never from the reads scored here.
 # --keep_aln retains the raw DIAMOND alignments and the cascade's own
-# hmmsearch table, so 11_compute_metrics.py scores DIAMOND alone and
+# hmmsearch table, so compute_metrics.py scores DIAMOND alone and
 # DIAMOND+cascade from this single run.
 # CASCADE=score is the calibration run's mode: every family in the HMM db is
 # flagged with a threshold no read can fail, so osmotool keeps every DIAMOND
 # call (gene_counts.tsv = DIAMOND-only) but its --keep_aln
 # <sample>.cascade.hmmsearch.tblout holds each call's HMM score against the
-# family it was called to. 11_compute_metrics.py replays any cascade config
+# family it was called to. compute_metrics.py replays any cascade config
 # from that, which is how report level and cascade get decided together on
 # the calibration reads. The scores are what production would see: the
 # cascade's hmmsearch fixes -Z to the number of models, so neither a score
@@ -146,4 +146,4 @@ done | xargs -P "${JOBS}" -L 1 bash -c \
     "${SCRIPT_DIR}/translate_and_hmmscan.sh" "${HMM_DB}" "${HMM_THREADS}"
 
 echo ""
-echo "Done. Now run: python 11_compute_metrics.py --results ${OUT_DIR} --out ${OUT_DIR}/metrics"
+echo "Done. Now run: python compute_metrics.py --results ${OUT_DIR} --out ${OUT_DIR}/metrics"

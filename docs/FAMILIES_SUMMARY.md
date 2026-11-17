@@ -13,7 +13,7 @@
 | `negative_pfam` | Pfam accession documented for the negative query |
 | `scope: annotate_only` | Excludes a family from `osmotool profile` output while still building/searching it (e.g. housekeeping genes) |
 | `paralog_group` | Names close paralogs that confuse each other at read level; adds `summary_by_group.tsv`, nothing in the build |
-| `report_level` | `gene`, `group` or `none`: how `osmotool profile`'s unit table reports the family (its own row, summed with its paralog group, or listed as excluded). Set on every family from the calibration-read rule in `11_compute_metrics.py`; the numbers behind each choice are in the release's `osmo_refdb.profile_report_levels.tsv` |
+| `report_level` | `gene`, `group` or `none`: how `osmotool profile`'s unit table reports the family (its own row, summed with its paralog group, or listed as excluded). Set on every family from the calibration-read rule in `compute_metrics.py`; the numbers behind each choice are in the release's `osmo_refdb.profile_report_levels.tsv` |
 | `decoy_from_negatives` | Adds the QC'd negative set to the DIAMOND db as a `<family>_decoy`, letting a confusable named paralog win reads away from this family instead of relying on a score cutoff |
 | `trim_gt` | Per-family override of trimAl's gap threshold (default 0.8) — lower values keep more variable/flanking columns |
 | `pfam_model` | Use Pfam's own curated HMM directly instead of building one from our fetched sequences (only when a per-gene InterPro check shows the Pfam family is gene-specific, not a broad fold). **Currently unused**: all past adoptions were reverted — see below |

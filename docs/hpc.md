@@ -53,7 +53,7 @@ full catalog index   (needs only the gene file: starts at once, in parallel)
   genes it showed gor claiming 127 genes (18% of everything annotated), 86% of
   them scoring below the weakest true gor protein: lipoamide dehydrogenase and
   relatives, which the benchmark never contained. That is found in minutes by
-  `modules/local/catalog/screen/templates/15_catalog_screen.py`, before BacDive or the NaCl model are run.
+  `modules/local/catalog/screen/templates/catalog_screen.py`, before BacDive or the NaCl model are run.
 - **The gate** is a person reading the screen. A flagged family means "look at
   those genes" (closest relative among the family's own references and the
   suspected confusers). A real confuser class means a decoy and a rebuild; a
@@ -133,7 +133,7 @@ it to tighten `conf/base.config`.
 | GMGC human gut catalog (2.99 GB) | yes | `CATALOG_FETCH` (storeDir) -> `modules/local/catalog/fetch/templates/fetch_zenodo_member.py`, resumable, CRC-checked |
 | BacDive strain records | yes, no credentials | `BACDIVE_FETCH` (its template) -> `harvest_bacdive.sh sweep`; with `--bacdive_snapshot <dir>/bacdive_raw` its batches are not fetched again, so a shipped snapshot reproduces the published table (BacDive itself is live). The batches are published to `<repo>/<data_dir>/bacdive_raw` |
 | BacDive genomes (about 9.4 GB), salt-in control genomes (0.7 GB) | yes | `fetch_genomes.sh` from NCBI FTP, resumable |
-| Pfam-A 39.0 | yes, added | `00_fetch_pfam.sh` (pinned URL); only needed to re-derive the random-panel pool |
+| Pfam-A 39.0 | yes, added | `fetch_pfam.sh` (pinned URL); only needed to re-derive the random-panel pool |
 | random-panel pool (`pool.hmm`, `pool_families.tsv`, 13 MB) | **no: a snapshot** (`--random_panel`, default `<repo>/<data_dir>/random_panel`) | re-deriving it needs `screen_proteomes.faa`, which no script creates |
 | release snapshot (`refs/`, `alignments/`, ...) | **no: rsync** | UniProt/RefSeq are live, so the snapshot is the input |
 | reference genomes for real-genome validation | in git | `test_genomes/` (3), osmotool's `test_genomes/` (9); validated by the workflow for every release |
@@ -254,7 +254,7 @@ same build on arm64 versus x86-64, and the same build twice on the cluster.
 
 ## Known gaps
 
-- The catalog benchmark (`modules/local/catalog/package/templates/11d_benchmark_catalog.py`) builds its catalogs
+- The catalog benchmark (`modules/local/catalog/package/templates/benchmark_catalog.py`) builds its catalogs
   from the release's own sequences. Adding a real catalog as background (scenarios
   A and B) is the next change; the test reads are back-translated proteins and will
   not map to real genes, so the real catalog tests background competition and

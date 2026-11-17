@@ -1,6 +1,6 @@
 ---
 # yaml-language-server: $schema=https://raw.githubusercontent.com/nf-core/modules/master/modules/environment-schema.json
-# Image: Seqera insilicoseq_wgsim_python_pyyaml (exists; versions read from the image). 09_simulate_reads.py uses iss when it is installed
+# Image: Seqera insilicoseq_wgsim_python_pyyaml (exists; versions read from the image). simulate_reads.py uses iss when it is installed
 channels:
   - conda-forge
   - bioconda

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-01_fetch_refs.py — osmo_refdb reference sequence fetcher
+fetch_refs.py — osmo_refdb reference sequence fetcher
 
 Fetches, per gene family defined in families.yaml:
   * a broad POSITIVE set from UniProt (reviewed + unreviewed, all bacterial
@@ -11,18 +11,18 @@ Fetches, per gene family defined in families.yaml:
     ectB) — used to calibrate HMM score cutoffs and as specificity controls
     in the benchmark.
 
-Usage:  python 01_fetch_refs.py [--families families.yaml] [--out refs]
+Usage:  python fetch_refs.py [--families families.yaml] [--out refs]
 Output: refs/<family>.positive.faa
         refs/<family>.negative.faa
         refs/<family>.hmm_negative.faa     (families.yaml `hmm_negative_query`
                                             families only -- a separate,
                                             HMM-calibration-only negative
-                                            pool; see 05_build_hmms.sh /
-                                            06_calibrate_cutoffs.py. DIAMOND
+                                            pool; see the HMM_BUILD subworkflow /
+                                            calibrate_cutoffs.py. DIAMOND
                                             calibration and the benchmark's
                                             own ground truth keep using the
                                             main negative.faa above, split
-                                            by 03_split_train_test.py)
+                                            by split_train_test.py)
         refs/<family>.positive.domains.tsv, refs/<family>.negative.domains.tsv
                                             (fusion_partner families only)
         refs/<famA>_<famB>.dedicated_fusion_fetch.faa
@@ -31,7 +31,7 @@ Output: refs/<family>.positive.faa
                                             candidates)
         refs/<decoy>.hmm_decoy.raw.faa      (families.yaml top-level
                                             `hmm_decoys` entries; built into
-                                            HMMs by 05b_build_hmm_decoys.py)
+                                            HMMs by build_hmm_decoys.py)
         refs/manifest.tsv
 """
 
@@ -446,7 +446,7 @@ def diversity_stats(fasta_text: str) -> tuple[int, int]:
     of check that would have caught the default-sort-order bias fixed
     above at build time instead of by manual investigation after the fact.
     Genus = organism's first underscore-separated token, same convention
-    03_split_train_test.py's genus_of() uses for taxonomy-mode splitting."""
+    split_train_test.py's genus_of() uses for taxonomy-mode splitting."""
     organisms, genera = set(), set()
     for line in fasta_text.splitlines():
         if line.startswith(">"):
@@ -513,7 +513,7 @@ def fetch_pfam_domains(accessions: list[str]) -> dict[str, list[str]]:
     in the reference set (matters once a family is random-sampled via
     max_positive_override). Used only for families that declare
     `fusion_partner` in families.yaml, to give
-    01c_check_length_outliers.py real domain evidence (not just length) for
+    check_length_outliers.py real domain evidence (not just length) for
     telling a genuine fused ORF apart from an unrelated length outlier --
     see that script's docstring.
     """
@@ -543,13 +543,13 @@ def check_no_duplicate_pfam_models(families: list[dict]) -> None:
     """
     Fail fast if two families share a `pfam_model` accession.
 
-    05_build_hmms.sh fetches the literal Pfam-A HMM for a pfam_model family
+    the HMM_BUILD subworkflow fetches the literal Pfam-A HMM for a pfam_model family
     and only rewrites its NAME/ACC lines -- the actual model weights are
     untouched, so two families adopting the SAME accession end up with
     byte-identical HMMs. hmmscan then can't discriminate between them at
     all: every read scores exactly the same against both, and whichever
-    sorts first in 07_press_hmms.sh's alphabetical `cat hmms/*.hmm`
-    ordering wins 100% of the shared signal via 11_compute_metrics.py's
+    sorts first in HMM_CALIBRATE's alphabetical `cat hmms/*.hmm`
+    ordering wins 100% of the shared signal via compute_metrics.py's
     best-hit tie-break, leaving the other(s) at exactly zero HMM recall.
     Confirmed in production (v6 benchmark): trkH/ktrB/ktrD all adopted
     pfam_model: PF02386 -- ktrB absorbed every tied hit, trkH and ktrD
@@ -578,7 +578,7 @@ def check_no_duplicate_pfam_models(families: list[dict]) -> None:
 
 def fusion_pairs(families: list[dict]) -> list[tuple[str, str]]:
     """Unique, sorted fusion_partner pairs declared in families.yaml -- same
-    dedup logic as 08d_build_fusion_refs.py's load_fusion_pairs (kept
+    dedup logic as build_fusion_refs.py's load_fusion_pairs (kept
     independent rather than shared, since the two scripts have no import
     relationship)."""
     fam_by_name = {fam["name"]: fam for fam in families}
@@ -668,7 +668,7 @@ def fetch_fusion_pair_candidates(families: list[dict], out_dir: Path) -> None:
     combined-domain query -- rather than relying only on incidentally
     spotting them in each family's own (capped, gene-symbol-exclusion-based)
     positive/negative fetch, which is what mrpA/mrpB/otsA/otsB relied on
-    before this existed. See 01c_check_length_outliers.py's module
+    before this existed. See check_length_outliers.py's module
     docstring for why incidental discovery alone isn't reliable (it's still
     kept as a safety net -- this is additive, not a replacement).
 
@@ -723,7 +723,7 @@ def fetch_fusion_pair_candidates(families: list[dict], out_dir: Path) -> None:
         def skip(reason: str) -> None:
             # A previous run may have written this file (e.g. before a
             # families.yaml edit, or before a bug fix here) -- removing it
-            # on skip stops 08d_build_fusion_refs.py from silently trusting
+            # on skip stops build_fusion_refs.py from silently trusting
             # stale data that this run couldn't actually verify.
             if out_path.exists():
                 out_path.unlink()
@@ -769,7 +769,7 @@ def fetch_fusion_pair_candidates(families: list[dict], out_dir: Path) -> None:
 def fetch_hmm_decoys(families_path: Path, out: Path, only_missing: bool = False) -> None:
     """HMM decoys: models of a confuser class that compete in osmotool
     annotate's best-hit contest and are then dropped from output (see
-    05b_build_hmm_decoys.py). Same seeded, capped sampling as the family
+    build_hmm_decoys.py). Same seeded, capped sampling as the family
     fetches. only_missing: skip a decoy whose raw file already exists (a
     rebuild from another release's refs keeps the sequences it was built from)."""
     for decoy in load_hmm_decoys(families_path):
@@ -797,7 +797,7 @@ def main() -> None:
     ap.add_argument("--out", type=Path, default=Path("refs"))
     ap.add_argument("--max-positive", type=int, default=None,
                     help="Cap on number of positive sequences fetched per family.")
-    # 2000 since 2026-11-06 (was 1000): 03_split_train_test.py now halves
+    # 2000 since 2026-11-06 (was 1000): split_train_test.py now halves
     # each negative pool into calibration (train) and benchmark (test), so
     # 2000 keeps the calibration half about as large as v8's whole pool.
     ap.add_argument("--max-negative", type=int, default=2000,
@@ -844,14 +844,14 @@ def main() -> None:
         # family's own negative_query just as easily as a true hard
         # negative -- confirmed in production for mrpB (~68% of its
         # negative pool) and otsA/otsB (~41-59%), corrupting the
-        # median-based length filter in 01c_check_length_outliers.py.
+        # median-based length filter in check_length_outliers.py.
         # Excluding it here means the fetch's own accession-sorted
         # oversample (see resolve_accessions) is no longer wasted on
         # contamination we'd throw away anyway -- the same n=1000 budget
         # now lands entirely on genuine hard negatives. 01c's own
         # domain-evidence pre-filter stays in place as a safety net (e.g.
         # for a fused ORF whose Pfam annotation is stale/lagging at fetch
-        # time); see 01c_check_length_outliers.py's module docstring and
+        # time); see check_length_outliers.py's module docstring and
         # the dedicated fusion-pair fetch below, which recovers what this
         # exclusion removes as a real detection target rather than just
         # discarding it.
@@ -866,7 +866,7 @@ def main() -> None:
         max_pos = fam.get("max_positive_override", args.max_positive)
         # Same idea for negatives: a family whose negative-set median is
         # confirmed unstable at the default --max-negative cap (so far only
-        # mazG, see families.yaml and 01c_check_length_outliers.py's
+        # mazG, see families.yaml and check_length_outliers.py's
         # negative_median_override) needs a bigger draw to actually contain
         # enough sequences near its own true center -- fixing the median
         # alone doesn't help if the small capped sample barely has anything
@@ -880,7 +880,7 @@ def main() -> None:
         # Per-family, per-label RNG so a random-sampled fetch is
         # reproducible across reruns but independent of every other
         # family/label's own draws (same reasoning as
-        # 03_split_train_test.py's per-family seeding).
+        # split_train_test.py's per-family seeding).
         pos_fasta, n_pos, pos_accessions = fetch_set(
             pos_query, name, "positive", max_seqs=max_pos,
             rng=random.Random(f"{FETCH_RANDOM_SEED}:{name}:positive"))
@@ -901,20 +901,20 @@ def main() -> None:
         # Opt-in per-family HMM-only negative pool (families.yaml
         # `hmm_negative_query`) -- for a family where DIAMOND and HMM need
         # different negatives, not just different reference sequences (see
-        # 08_build_diamond_db.sh's _study/_refseq positive-side split for
+        # DIAMOND_TRAINREFS / DIAMOND_MAKEDB's _study/_refseq positive-side split for
         # the DIAMOND-specific precedent this mirrors on the negative side).
         # Confirmed on mscS: its broad PF00924 negative pool is dominated by
         # bare-locus-tag entries that are actually mscS itself (mislabeled
         # positives). A full swap to a surgically cleaned pool helped HMM's
         # benchmark F1 but loosened DIAMOND's calibration and hurt it (same
         # mechanism as mrpB's fusion-fix history) -- this field lets ONLY
-        # 06_calibrate_cutoffs.py's whole-protein GA-cutoff calibration see
+        # calibrate_cutoffs.py's whole-protein GA-cutoff calibration see
         # the cleaned pool. IMPORTANT: this does NOT reproduce that HMM
-        # benchmark improvement -- 11_compute_metrics.py's summary.tsv is
+        # benchmark improvement -- compute_metrics.py's summary.tsv is
         # pure best-hit-per-read on raw bit scores and never applies the GA
         # cutoff, and osmotool's `profile`-mode cascade uses a separately-
         # swept short-read threshold instead of it too (see
-        # 11_compute_metrics.py's decide_units). It only changes the
+        # compute_metrics.py's decide_units). It only changes the
         # cutoff osmotool's `annotate` mode applies directly (full-length
         # ORF calls) -- see mscS's own families.yaml entry for the full
         # writeup. 08b's DIAMOND calibration, 01b/01c's QC, and the
@@ -944,7 +944,7 @@ def main() -> None:
         # negative pool was ~68% genuine mrpA+mrpB fused-ORF sequences
         # (same PF13244+PF20501+PF04039+PF00361+PF00662 architecture as
         # mrpA's documented fusion cases, under locus tags like
-        # "Lokhon_03054") -- see 01c_check_length_outliers.py for what this
+        # "Lokhon_03054") -- see check_length_outliers.py for what this
         # evidence is used for.
         if fam.get("fusion_partner"):
             domains = fetch_pfam_domains(pos_accessions)

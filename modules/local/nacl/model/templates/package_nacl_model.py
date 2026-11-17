@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-13_package_nacl_model.py -- copy a trained NaCl-max model (bin/nacl_model/
+package_nacl_model.py -- copy a trained NaCl-max model (bin/nacl_model/
 train.py + explain.py output) into a release as its nacl_model/ subdirectory,
 for osmotool to apply to annotated genomes. Packaging only; never retrains.
 
@@ -9,7 +9,7 @@ family counts depend on that release's HMM cutoffs. The script refuses a
 model whose schema names another release.
 
 Usage:
-  python bin/13_package_nacl_model.py \\
+  python bin/package_nacl_model.py \\
       --build releases/v10/nacl_model_build --release releases/v10
 
 Writes releases/<release>/nacl_model/:

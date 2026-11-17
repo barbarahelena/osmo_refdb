@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-05b_build_hmm_decoys.py — build HMM decoy models: profiles of a confuser
+build_hmm_decoys.py — build HMM decoy models: profiles of a confuser
 class that compete in osmotool `annotate`'s best-hit contest and are then
-dropped from its output, the HMM counterpart of 08a_build_decoy_refs.py's
+dropped from its output, the HMM counterpart of build_decoy_refs.py's
 DIAMOND decoys.
 
 Motivating case: opuBA. The v9 BacDive run called opuBA in 64% of genomes
@@ -20,10 +20,10 @@ How it plugs in, with no new scoring logic anywhere:
   * annotate: hmmsearch --cut_ga over the pressed db, best hit per protein,
     then labels in osmo_refdb.annotate_excluded_families.txt are dropped
     (08c lists every hmm_decoys name there and in the profile list).
-  * benchmark: 10_run_benchmark.sh scans reads against the same pressed db;
-    11_compute_metrics.py counts a best hit to a *_decoy label as NO_CALL.
-  * 07_press_hmms.sh concatenates hmms/*.hmm, so the decoy is included.
-  * 06_calibrate_cutoffs.py only iterates families.yaml `families`, so a
+  * benchmark: run_benchmark.sh scans reads against the same pressed db;
+    compute_metrics.py counts a best hit to a *_decoy label as NO_CALL.
+  * HMM_CALIBRATE concatenates hmms/*.hmm, so the decoy is included.
+  * calibrate_cutoffs.py only iterates families.yaml `families`, so a
     decoy's GA is the fixed `ga` given here. It only has to be below the
     competing families' cutoffs: a decoy can only win a protein it scores
     higher than they do.
@@ -42,7 +42,7 @@ which the benchmark scores, is disjoint from it. Any accession also present
 in a test split is dropped anyway.
 
 `decoy_aware_ga: true` makes the competing families' GA calibration
-decoy-aware (06_calibrate_cutoffs.py): their positive.calib and
+decoy-aware (calibrate_cutoffs.py): their positive.calib and
 negative.train are scored against the decoy here
 (hmms/scores/<family>.<decoy>.{positive,negative}.tblout), and a sequence
 the decoy outscores is not called as the family, as in annotate's best-hit
@@ -52,9 +52,9 @@ the cutoff it allows is therefore optimistic, and only the test split
 (negative.test) shows what it costs.
 
 Usage:
-  python 05b_build_hmm_decoys.py --refs refs --aln alignments --hmms hmms \\
+  python build_hmm_decoys.py --refs refs --aln alignments --hmms hmms \\
       --families families.yaml [--threads 4]
-Input:  refs/<decoy>.hmm_decoy.raw.faa   (01_fetch_refs.py)
+Input:  refs/<decoy>.hmm_decoy.raw.faa   (fetch_refs.py)
 Output: refs/<decoy>.hmm_decoy.faa, refs/<decoy>.hmm_decoy.clustered.faa,
         <aln>/<decoy>.trimmed.aln, <hmms>/<decoy>.hmm (with GA line)
 """
@@ -72,8 +72,8 @@ HERE = Path(__file__).resolve().parent
 
 
 def load_set_ga_line():
-    """06_calibrate_cutoffs.py isn't importable by name (leading digit)."""
-    spec = importlib.util.spec_from_file_location("calibrate", HERE / "06_calibrate_cutoffs.py")
+    """calibrate_cutoffs.py isn't importable by name (leading digit)."""
+    spec = importlib.util.spec_from_file_location("calibrate", HERE / "calibrate_cutoffs.py")
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod.set_ga_line
@@ -157,7 +157,7 @@ def main() -> None:
     for decoy in decoys:
         name = decoy["name"]
         if not name.endswith("_decoy"):
-            # 11_compute_metrics.py recognises decoy calls by this suffix.
+            # compute_metrics.py recognises decoy calls by this suffix.
             raise SystemExit(f"ERROR: hmm_decoys name {name!r} must end in '_decoy'")
         source_family = decoy.get("from_negatives_of")
         if source_family:
@@ -208,7 +208,7 @@ def main() -> None:
               f"competes with {', '.join(decoy.get('competes_with', [])) or 'unspecified'})")
 
         if decoy.get("decoy_aware_ga"):
-            # 06_calibrate_cutoffs.py: the competing families' calibration
+            # calibrate_cutoffs.py: the competing families' calibration
             # sequences, scored against this decoy
             score_dir = args.hmms / "scores"
             score_dir.mkdir(exist_ok=True)

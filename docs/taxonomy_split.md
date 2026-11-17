@@ -20,7 +20,7 @@ The question here is whether v10's numbers depend on that lenient split.
 
 ## What changed
 
-Only step 3, `03_split_train_test.py --split-mode taxonomy`:
+Only step 3, `split_train_test.py --split-mode taxonomy`:
 
 - **Positives are split by genus.** The genus is the first word of the
   organism name in the FASTA header (`opuAB|A0A1Y5T4E0|Aquimixticola_soesokkakensis`
@@ -89,7 +89,7 @@ HMM annotate recall by identity to the nearest training reference:
 ## Profile (simulated reads, DIAMOND + cascade, per reporting unit)
 
 f1_all counts every non-background read called as the unit as a false
-positive (see `modules/local/benchmark/metrics/templates/11_compute_metrics.py`).
+positive (see `modules/local/benchmark/metrics/templates/compute_metrics.py`).
 
 Over the 27 reported units, median values:
 

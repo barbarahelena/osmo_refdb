@@ -23,10 +23,10 @@ zcat -f "${R1}" "${R2}" > "${MERGED_FASTQ}"
 orfm "${MERGED_FASTQ}" > "${ORFS_FASTA}"
 
 # NOTE: no --cut_ga here. GA cutoffs were calibrated on full-length proteins
-# (see 06_calibrate_cutoffs.py); short simulated-read ORF fragments can never
+# (see calibrate_cutoffs.py); short simulated-read ORF fragments can never
 # reach that bit-score threshold, so using --cut_ga would silently produce
 # zero hits for every read. Instead emit raw hmmscan bit scores and let
-# 11_compute_metrics.py sweep thresholds (same approach used for DIAMOND).
+# compute_metrics.py sweep thresholds (same approach used for DIAMOND).
 hmmscan --cpu "${THREADS}" --tblout "${TBLOUT}" --noali \
     "${HMM_DB}" "${ORFS_FASTA}" > /dev/null
 

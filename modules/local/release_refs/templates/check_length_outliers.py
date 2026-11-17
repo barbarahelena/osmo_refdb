@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-01c_check_length_outliers.py — flag/drop sequences whose length is way off
+check_length_outliers.py — flag/drop sequences whose length is way off
 from their family's typical length (likely multi-domain fusion proteins or
 partial fragments, not clean single-domain family members).
 
@@ -28,7 +28,7 @@ from that snapshot, so re-running with a different --max-ratio is safe.
 
 families.yaml: `negative_median_override: <aa>` -- for a family whose own
 negative-set median is confirmed UNSTABLE under the default capped fetch
-(01_fetch_refs.py's --max-negative, 1000 by default when this was
+(fetch_refs.py's --max-negative, 1000 by default when this was
 established; 2000 since 2026-11-06): use this fixed value
 instead of recomputing the median from whatever the capped fetch happens
 to contain this run. Confirmed via a systematic sweep of every capped
@@ -53,11 +53,11 @@ mrpA sequences would badly gap the alignment for everyone). So for these
 families specifically, an over-length POSITIVE candidate is checked against
 a SECOND window centered on (own_median + partner_median) instead of being
 flagged as an outlier outright; if it also carries `fusion_marker_pfam`
-(Pfam domain evidence fetched by 01_fetch_refs.py, in
+(Pfam domain evidence fetched by fetch_refs.py, in
 refs/<family>.positive.domains.tsv, when available) it's routed to
 refs/<family>.fusion_candidates.faa instead of length_outliers.faa --
 excluded from the normal alignment/HMM path (like a true outlier) but
-picked up separately by 08d_build_fusion_refs.py as a real, reportable
+picked up separately by build_fusion_refs.py as a real, reportable
 DIAMOND-only reference. Domain evidence is confirmatory, not required for
 the positive side: if domains.tsv isn't present (e.g. after re-running 01c
 alone without rerunning 01), the length-window match alone is enough to
@@ -83,7 +83,7 @@ small-sample noise problem), which then made the filter discard the true
 can't be used to detect this (length is exactly what the contamination
 breaks), so for a family with fusion_partner declared, its NEGATIVE
 snapshot is screened by domain evidence alone (refs/<family>.negative.
-domains.tsv, fetched by 01_fetch_refs.py) BEFORE the median is computed:
+domains.tsv, fetched by fetch_refs.py) BEFORE the median is computed:
 anything carrying `fusion_marker_pfam` is pulled out to refs/<family>.
 fusion_candidates.faa (merged with any positive-side fusion hits) so the
 remaining negative population's own median reflects the true hard-negative
@@ -93,7 +93,7 @@ no-op (with a printed note) if refs/<family>.negative.domains.tsv isn't
 present.
 
 Usage:
-  python 01c_check_length_outliers.py --refs refs --families families.yaml \\
+  python check_length_outliers.py --refs refs --families families.yaml \\
       --max-ratio 1.5
 Output:
   refs/<family>.<label>.faa                      (filtered in place)
@@ -127,7 +127,7 @@ def load_family_names(path: Path) -> list[str]:
 
 
 def load_domain_evidence(refs_dir: Path, family: str, label: str) -> dict[str, list[str]]:
-    """accession -> Pfam domain list, from 01_fetch_refs.py's fusion-partner
+    """accession -> Pfam domain list, from fetch_refs.py's fusion-partner
     domain fetch (label is "positive" or "negative"). Returns {} if not
     present -- on the positive side, fusion detection then falls back to
     length evidence alone; on the negative side, there's no safe fallback
@@ -145,7 +145,7 @@ def load_domain_evidence(refs_dir: Path, family: str, label: str) -> dict[str, l
 
 
 def header_accession(header: str) -> str:
-    """<tag>|UniProtID|Organism -> UniProtID (see 01_fetch_refs.py:retag_fasta)."""
+    """<tag>|UniProtID|Organism -> UniProtID (see fetch_refs.py:retag_fasta)."""
     parts = header.split("|")
     return parts[1] if len(parts) >= 2 else header
 
@@ -332,7 +332,7 @@ def main() -> None:
             # fusion_path is written once per family, on the positive-label
             # pass (partner is only set then) -- combine with any negative-
             # side fused-ORF contamination pulled out in Pass 1 above, so
-            # both sources end up in the one file 08d_build_fusion_refs.py
+            # both sources end up in the one file build_fusion_refs.py
             # reads.
             all_fusion_hits = fusion_hits_by_family.get(family, []) + fusion_hits
             if partner:

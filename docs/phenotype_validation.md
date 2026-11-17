@@ -497,7 +497,7 @@ Notes:
 - Run one thread per job and parallelise across genomes. In the pilot, extra
   threads per job made the HMM step slower (measured with hmmscan).
 - The feature matrix has 44 columns, one more than `families.yaml`. The extra
-  column is `mrpA_mrpB_fused`, from `08d_build_fusion_refs.py`. It is detected
+  column is `mrpA_mrpB_fused`, from `build_fusion_refs.py`. It is detected
   in no genome here.
 - On macOS arm64 with numpy 2.0, `analyze_extended.py` prints many
   `encountered in matmul` warnings. They come from numpy's Accelerate backend,

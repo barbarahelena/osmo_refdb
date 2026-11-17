@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-11b_benchmark_annotate.py — benchmark `osmotool annotate` on held-out
+benchmark_annotate.py — benchmark `osmotool annotate` on held-out
 full-length proteins.
 
 The read benchmark (steps 9-11) scores `osmotool profile`. Annotate mode
@@ -12,7 +12,7 @@ own benchmark here, at the protein level.
 
 Evaluation set, all unseen by both the models and the cutoff calibration:
   positives        every family's refs/<family>.positive.test.faa
-                   (03_split_train_test.py: not in positive.train, which
+                   (split_train_test.py: not in positive.train, which
                    builds the HMMs and DIAMOND db, and not in
                    positive.calib, which sets the cutoffs)
   hard negatives   every family's refs/<family>.negative.test.faa (same Pfam
@@ -33,7 +33,7 @@ coordinates, each protein gets a Prodigal-style header and sits alone on its
 own one-gene contig, so the multi-subunit system layer has nothing to
 colocalise and plays no part.
 
-False positives for family F are counted as in 11_compute_metrics.py:
+False positives for family F are counted as in compute_metrics.py:
   fp                  F's own hard negatives called F     -> precision, f1
   fp_cross            other families' positives called F  -> precision_panel
   fp_other_negatives  other families' hard negatives called F (reported only)
@@ -41,7 +41,7 @@ False positives for family F are counted as in 11_compute_metrics.py:
                       background_fp_per_10k)
 
 Usage:
-  python 11b_benchmark_annotate.py --refs releases/v10/refs \\
+  python benchmark_annotate.py --refs releases/v10/refs \\
       --release releases/v10 --families families.yaml \\
       --out releases/v10/results/annotate [--methods hmm diamond]
 Output (in --out):

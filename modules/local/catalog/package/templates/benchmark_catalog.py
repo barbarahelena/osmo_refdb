@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-11d_benchmark_catalog.py -- benchmark `osmotool profile --catalog` on the
+benchmark_catalog.py -- benchmark `osmotool profile --catalog` on the
 release's simulated test reads, in two bounding scenarios.
 
 A catalog changes which reads reach translated search, so its value depends
@@ -23,7 +23,7 @@ Both are indexed in full (index all, competitive). A is also scored with the
 small index a release ships (A_hits: genes with an HMM hit only).
 
 Catalog genes are the release's proteins back-translated exactly as
-09_simulate_reads.py builds its read constructs (protein_to_dna: one fixed
+simulate_reads.py builds its read constructs (protein_to_dna: one fixed
 codon per amino acid), so a test read matches its own gene base for base.
 That same choice makes simulated nucleotide identity track protein identity,
 which real strains do not: in B it is harmless (no catalog gene reaches 97%),
@@ -48,7 +48,7 @@ reads comes from catalogued strains (counts mixed linearly between A_full and
 B_full).
 
 Usage:
-  python bin/11d_benchmark_catalog.py --release releases/v10 \\
+  python bin/benchmark_catalog.py --release releases/v10 \\
       --families families.yaml --threads 8
 """
 from __future__ import annotations
@@ -67,14 +67,16 @@ HERE = Path(__file__).resolve().parent
 
 
 def _load(name: str, filename: str):
-    spec = importlib.util.spec_from_file_location(name, HERE / filename)
+    spec = importlib.util.spec_from_file_location(name, HERE / filename)   # an absolute path stays itself
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
 
 
-m11 = _load("compute_metrics", "11_compute_metrics.py")
-m09 = _load("simulate_reads", "09_simulate_reads.py")
+# the benchmark's own scripts, in their modules (modules/local/benchmark/<step>/templates/)
+BENCHMARK = HERE.parents[2] / "benchmark"
+m11 = _load("compute_metrics", BENCHMARK / "metrics" / "templates" / "compute_metrics.py")
+m09 = _load("simulate_reads", BENCHMARK / "simulate" / "templates" / "simulate_reads.py")
 
 SCENARIO_SPLITS = {
     "A": ["positive.train", "positive.calib", "positive.test", "negative.train", "negative.test"],

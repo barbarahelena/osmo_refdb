@@ -1,6 +1,6 @@
 // The DIAMOND database's references besides the train sets: decoy references from the negatives of
-// families marked decoy_from_negatives (templates/08a_build_decoy_refs.py), and fused-ORF references
-// for the fusion_partner pairs (templates/08d_build_fusion_refs.py). Published into the release's refs/.
+// families marked decoy_from_negatives (templates/build_decoy_refs.py), and fused-ORF references
+// for the fusion_partner pairs (templates/build_fusion_refs.py). Published into the release's refs/.
 process DIAMOND_EXTRAREFS {
     label 'process_single'
 
@@ -20,8 +20,8 @@ process DIAMOND_EXTRAREFS {
 
     script:
     """
-    python ${moduleDir}/templates/08a_build_decoy_refs.py --refs ${refs} --families ${families} --out extra
-    python ${moduleDir}/templates/08d_build_fusion_refs.py --refs ${refs} --families ${families} --out extra
+    python ${moduleDir}/templates/build_decoy_refs.py --refs ${refs} --families ${families} --out extra
+    python ${moduleDir}/templates/build_fusion_refs.py --refs ${refs} --families ${families} --out extra
     """
 
     stub:

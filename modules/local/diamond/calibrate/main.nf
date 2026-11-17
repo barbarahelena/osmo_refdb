@@ -1,6 +1,6 @@
 // The DIAMOND database's release files besides the database itself: each family's bit-score cutoff
-// from its calibration searches (templates/08b_calibrate_diamond_cutoffs.py --hits), and the families
-// kept out of profile's and annotate's output (templates/08c_write_scope_manifest.py).
+// from its calibration searches (templates/calibrate_diamond_cutoffs.py --hits), and the families
+// kept out of profile's and annotate's output (templates/write_scope_manifest.py).
 process DIAMOND_CALIBRATE {
     tag "${name}"
     label 'process_single'
@@ -26,9 +26,9 @@ process DIAMOND_CALIBRATE {
     script:
     """
     mkdir -p hits
-    python ${moduleDir}/templates/08b_calibrate_diamond_cutoffs.py --refs ${refs} --release . \\
+    python ${moduleDir}/templates/calibrate_diamond_cutoffs.py --refs ${refs} --release . \\
         --release-name ${name} --families ${families} --hits hits --out ${name}.diamond_cutoffs.tsv
-    python ${moduleDir}/templates/08c_write_scope_manifest.py --families ${families} \\
+    python ${moduleDir}/templates/write_scope_manifest.py --families ${families} \\
         --profile-out ${name}.profile_excluded_families.txt \\
         --annotate-out ${name}.annotate_excluded_families.txt
     """

@@ -10,7 +10,7 @@ draws 80% of a family's calibration positives and negatives without
 replacement (hmms/scores/<family>.{positive,negative}.tblout, plus the
 decoy contest for decoy-aware families), chooses the cutoff on each draw by
   sweep   the plain F1 sweep (the original method), and
-  bagged  the median of bootstrap F1 optima (06_calibrate_cutoffs.py),
+  bagged  the median of bootstrap F1 optima (calibrate_cutoffs.py),
 and reports, per family, how far each moves across the draws (the
 interquartile range, in bits) and what each costs in F1 on the *full*
 calibration data compared with the best the full data allow.
@@ -38,7 +38,7 @@ from pathlib import Path
 import numpy as np
 
 HERE = Path(__file__).resolve().parent
-spec = importlib.util.spec_from_file_location("calibrate", HERE / "06_calibrate_cutoffs.py")
+spec = importlib.util.spec_from_file_location("calibrate", HERE / "calibrate_cutoffs.py")
 cal = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(cal)
 

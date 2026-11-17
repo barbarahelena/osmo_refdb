@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-09_simulate_reads.py — simulate short reads from held-out test positives +
+simulate_reads.py — simulate short reads from held-out test positives +
 hard negatives, for benchmarking DIAMOND vs HMM.
 
 Steps:
   1. Load each family's held-out positive test set (refs/<family>.positive.test.faa,
-     produced upstream by 03_split_train_test.py so it was never used to
+     produced upstream by split_train_test.py so it was never used to
      build the HMM or DIAMOND db) and held-out hard-negative set
      (refs/<family>.negative.test.faa, never used for cutoff calibration).
   2. Optionally mix in real background metagenome reads (--background) that
@@ -16,7 +16,7 @@ Steps:
      mid-read, mimicking real gene fragments in metagenomic reads) using
      InSilicoSeq if available, else wgsim.
   4. Write reads + a truth table (read_id -> family/negative/background,
-     source UniProt ID) for later scoring by 11_compute_metrics.py.
+     source UniProt ID) for later scoring by compute_metrics.py.
 
 Reproducibility: wgsim (-S) and InSilicoSeq (--seed) both need an explicit
 seed passed at the CLI to be deterministic -- neither seeds itself by
@@ -37,7 +37,7 @@ when that family's own sequences do. (Reads are not byte-identical to builds
 made before this change.)
 
 Usage:
-  python 09_simulate_reads.py --refs refs --families families.yaml \\
+  python simulate_reads.py --refs refs --families families.yaml \\
       --reads-per-sequence 20 --out results/reads
 """
 
@@ -160,13 +160,13 @@ def main() -> None:
                           "with no known osmoadaptation content -- run "
                           "through the same DIAMOND/HMM benchmark as every "
                           "other sample, scored as pure false-positive risk "
-                          "in background_fpr.tsv (11_compute_metrics.py), "
+                          "in background_fpr.tsv (compute_metrics.py), "
                           "since they don't belong to any gene family")
     ap.add_argument("--split", choices=["test", "calib"], default="test",
                      help="test (default): benchmark reads from positive.test "
                           "+ negative.test + the random background. calib: "
                           "calibration reads from positive.calib + "
-                          "negative.train, which 11_compute_metrics.py turns "
+                          "negative.train, which compute_metrics.py turns "
                           "into the profile cascade config, so that config is "
                           "never tuned on benchmark reads. No random "
                           "background in calib (it feeds no cascade decision).")
@@ -187,7 +187,7 @@ def main() -> None:
 
     for family in families:
         # Benchmark negatives come from the held-out negative.test split
-        # (03_split_train_test.py), for every family: negative.train sets the
+        # (split_train_test.py), for every family: negative.train sets the
         # HMM/DIAMOND cutoffs (05/06, 08b) and, for decoy families, becomes
         # the decoy refs in the DIAMOND db (08a). Simulating from it would
         # score reads against thresholds -- or literal db entries -- built
@@ -214,8 +214,8 @@ def main() -> None:
         jobs += [(family, "positive", pos_fname),
                  (family, "negative", neg_fname)]
 
-    # Shared random bacterial background (01f_build_random_background.py):
-    # unrelated proteins, scored in 11_compute_metrics.py as off-target
+    # Shared random bacterial background (build_random_background.py):
+    # unrelated proteins, scored in compute_metrics.py as off-target
     # false positives per family. Appended last; it has its own rng, so it
     # changes nothing for the families.
     if args.split == "calib":
@@ -224,7 +224,7 @@ def main() -> None:
         jobs.append((RANDOM_BG_FAMILY, "negative", RANDOM_BG_FASTA))
     else:
         print(f"NOTE: no {RANDOM_BG_FASTA} in {args.refs} -- benchmark has no "
-              f"random background (run 01f_build_random_background.py)")
+              f"random background (run build_random_background.py)")
 
     for family, label, fname in jobs:
         records = parse_fasta(args.refs / fname)
@@ -281,7 +281,7 @@ def main() -> None:
     if args.background:
         bg_r1, bg_r2 = args.background
         # Named/laid out exactly like every other sample ("background_R1/R2")
-        # so 10_run_benchmark.sh's existing glob picks it up automatically --
+        # so run_benchmark.sh's existing glob picks it up automatically --
         # no separate wiring needed to actually run DIAMOND/HMM against it.
         ext = ".fastq.gz" if str(bg_r1).endswith(".gz") else ".fastq"
         shutil.copy(bg_r1, args.out / f"background_R1{ext}")
@@ -296,7 +296,7 @@ def main() -> None:
         writer.writerows(truth_rows)
 
     print(f"\nDone. Truth table written to {truth_path}")
-    print("Next: bash 10_run_benchmark.sh")
+    print("Next: bash run_benchmark.sh")
 
 
 if __name__ == "__main__":

@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-06b_qc_scorecard.py — consolidate per-family QC signal into one scorecard.
+qc_scorecard.py — consolidate per-family QC signal into one scorecard.
 
 Three separate checks each write their own manifest:
-  - 01b_check_negative_purity.py  -> refs/negative_purity_manifest.tsv
-  - 01c_check_length_outliers.py  -> refs/length_outlier_manifest.tsv
-  - 06_calibrate_cutoffs.py       -> hmms/cutoff_manifest.tsv
+  - check_negative_purity.py  -> refs/negative_purity_manifest.tsv
+  - check_length_outliers.py  -> refs/length_outlier_manifest.tsv
+  - calibrate_cutoffs.py       -> hmms/cutoff_manifest.tsv
 Cross-referencing them by hand (as done manually earlier in this project,
 e.g. to diagnose proX/betL) works but doesn't scale as more families get
 added. This script merges all three into one per-family table so you can
@@ -19,7 +19,7 @@ A family is flagged "review_needed" if any of:
   - its HMM cutoff status isn't a clean-separation status
 
 Usage:
-  python 06b_qc_scorecard.py --refs refs --hmms hmms --families families.yaml \\
+  python qc_scorecard.py --refs refs --hmms hmms --families families.yaml \\
       --out qc_scorecard.tsv
 """
 

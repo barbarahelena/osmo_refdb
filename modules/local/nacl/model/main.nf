@@ -1,5 +1,5 @@
 // The NaCl-max model: trained on the BacDive strains' osmotool annotation (train.py), explained (SHAP,
-// explain.py), and packaged as the release's nacl_model/ for osmotool (13_package_nacl_model.py).
+// explain.py), and packaged as the release's nacl_model/ for osmotool (package_nacl_model.py).
 // nacl_model_build/ (training table, CV, explain/) and nacl_model/ are published into the release
 // (conf/modules.config).
 process NACL_MODEL {
@@ -35,7 +35,7 @@ process NACL_MODEL {
     python ${T}/nacl_model/train.py --matrix ${matrix} --annotate annotate --strains strains \\
         --release db --release-name ${release_name} --out nacl_model_build --threads ${task.cpus}
     python ${T}/nacl_model/explain.py --build nacl_model_build --family-ranking ${family_ranking}
-    python ${T}/13_package_nacl_model.py --build nacl_model_build --release db --release-name ${release_name} --out nacl_model
+    python ${T}/package_nacl_model.py --build nacl_model_build --release db --release-name ${release_name} --out nacl_model
     """
 
     stub:

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-08c_write_scope_manifest.py — list families scoped out of reported output.
+write_scope_manifest.py — list families scoped out of reported output.
 
 families.yaml can mark a family:
   scope: annotate_only        excluded from `osmotool profile`'s reported
@@ -11,14 +11,14 @@ families.yaml can mark a family:
                                meaningless in short-read community
                                profiling). Still visible in `annotate`.
   decoy_from_negatives: true  its "<name>_decoy" DIAMOND references (see
-                               08a_build_decoy_refs.py) must never be
+                               build_decoy_refs.py) must never be
                                reported in EITHER mode -- they exist purely
                                to win select_best_hits' contest away from a
                                mislabeled call, not to be counted as a gene
                                family themselves.
 
 and its top-level `hmm_decoys` list names HMM decoy models (see
-05b_build_hmm_decoys.py), excluded from both modes the same way.
+build_hmm_decoys.py), excluded from both modes the same way.
 
 Both kinds of family are still built into the combined DIAMOND/HMM
 databases as normal -- they're harmless (or actively useful, for decoys)
@@ -27,7 +27,7 @@ profile`/`annotate --exclude_families` read to filter them out of
 gene_counts.tsv.
 
 Usage:
-  python 08c_write_scope_manifest.py --families families.yaml \\
+  python write_scope_manifest.py --families families.yaml \\
       --profile-out releases/<name>/osmo_refdb.profile_excluded_families.txt \\
       --annotate-out releases/<name>/osmo_refdb.annotate_excluded_families.txt
 """

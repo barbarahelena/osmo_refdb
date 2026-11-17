@@ -11,7 +11,7 @@ separate betL from betT/caiT. Five excluded units become reportable from
 catalog reads alone. The opu ATPases, opu substrate-binding proteins and the
 trk/ktr channel do not.
 
-Script: `modules/local/catalog/package/templates/11d_benchmark_catalog.py`. Results:
+Script: `modules/local/catalog/package/templates/benchmark_catalog.py`. Results:
 `releases/v10/results/catalog_benchmark/`. Log:
 `releases/v10_catalog_benchmark.log`. osmotool: branch `catalog-profile`
 (`df87119`), bwa-mem3 0.17.0.
@@ -30,7 +30,7 @@ bounds are scored on the same 854,484 test reads as steps 9-11:
   scored with the small index a release ships (A_hits: genes with an HMM
   hit only).
 - Catalog genes are the proteins back-translated exactly as
-  `09_simulate_reads.py` builds its constructs, so a test read matches its
+  `simulate_reads.py` builds its constructs, so a test read matches its
   own gene base for base (checked on 95 constructs).
 - Catalog thresholds are Cayman's: >= 97% identity over >= 45 bp aligned.
   Catalogs are annotated with v10's HMMs and gathering cutoffs.

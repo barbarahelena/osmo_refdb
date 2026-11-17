@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-15_catalog_screen.py -- screen a release's HMMs for confuser classes by
+catalog_screen.py -- screen a release's HMMs for confuser classes by
 annotating a real gene catalog, before the release is frozen.
 
 Why: the benchmark's hard negatives only contain the confusers someone
@@ -25,8 +25,8 @@ few genes are listed but not flagged, and a broad-by-design family (cspA) can
 score high on the looser measure.
 
 Usage:
-  python bin/15_catalog_screen.py --release releases/v10 --catalog gmgc_gut
-  python bin/15_catalog_screen.py --release releases/v10 --catalog-dir /path/to/catalog_dir
+  python bin/catalog_screen.py --release releases/v10 --catalog gmgc_gut
+  python bin/catalog_screen.py --release releases/v10 --catalog-dir /path/to/catalog_dir
 """
 from __future__ import annotations
 

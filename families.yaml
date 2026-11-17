@@ -30,7 +30,7 @@
 #                     select_best_hits' existing best-alignment contest can
 #                     win a read/protein away from the real family when it
 #                     actually belongs to a known confusable paralog (e.g.
-#                     betL vs betT/caiT) -- see 08a_build_decoy_refs.py.
+#                     betL vs betT/caiT) -- see build_decoy_refs.py.
 #                     Only meaningful for a family whose negative_query
 #                     targets specific named paralogs, not a broad Pfam
 #                     pool (a broad pool makes a weak, noisy decoy).
@@ -41,7 +41,7 @@
 #                     discriminating signal might sit outside the most
 #                     conserved core (see ectA/ectB below).
 #   max_negative_override  optional int; per-family override for
-#                     01_fetch_refs.py's --max-negative cap (default 2000;
+#                     fetch_refs.py's --max-negative cap (default 2000;
 #                     1000 before 2026-11-06), same mechanism as
 #                     max_positive_override but for the negative fetch.
 #                     Two uses: (1) paired with negative_median_override
@@ -50,11 +50,11 @@
 #                     near the true center; (2) a pool where most sampled
 #                     negatives never score against the family HMM, so the
 #                     calibration half would otherwise fall under
-#                     06_calibrate_cutoffs.py's MIN_NEG_FOR_RELIABLE_F1=30
+#                     calibrate_cutoffs.py's MIN_NEG_FOR_RELIABLE_F1=30
 #                     scored negatives (opuAA/opuBA/opuCA).
 #   negative_median_override  optional int (aa); use this fixed value as
 #                     the negative set's median length in
-#                     01c_check_length_outliers.py instead of computing it
+#                     check_length_outliers.py instead of computing it
 #                     from whatever the (capped) negative fetch contains
 #                     this run. Only for a family whose median is confirmed
 #                     UNSTABLE under the default cap -- established via a
@@ -64,7 +64,7 @@
 #   paralog_group     optional name shared by close paralogs in this panel
 #                     that are expected to confuse each other at read level
 #                     (e.g. opuAA/opuBA/opuCA). Changes nothing in the build;
-#                     11_compute_metrics.py adds summary_by_group.tsv, where a
+#                     compute_metrics.py adds summary_by_group.tsv, where a
 #                     read called as any member of its true family's group
 #                     counts as correct, next to the per-gene numbers.
 #   report_level      gene | group | none: how `osmotool profile`'s unit
@@ -76,7 +76,7 @@
 #                     in the release's osmo_refdb.profile_report_levels.tsv.
 #                     It was set from the calibration reads (positive.calib +
 #                     negative.train), never the test reads, by
-#                     11_compute_metrics.py's rule (decide_units): a family
+#                     compute_metrics.py's rule (decide_units): a family
 #                     without a group is gene if its f1_all >= 0.5, else
 #                     none; a group is gene if every member reaches 0.5,
 #                     else group if the group as one unit does, else each
@@ -89,7 +89,7 @@
 #                     this value and the rule disagree. scope:
 #                     annotate_only requires none. Unset: the rule's level.
 #   refseq_gene_symbols  optional list of gene symbols; when set,
-#                     01e_add_refseq_positives.py additionally pulls NCBI
+#                     add_refseq_positives.py additionally pulls NCBI
 #                     RefSeq bacterial proteins tagged with any of these gene
 #                     names and merges them into the positive pool, for
 #                     families whose UniProt population is already fully
@@ -112,7 +112,7 @@
 #                     see that script's header comment.
 #
 # Top-level `hmm_decoys` (after `families`) lists HMM models of a confuser
-# class, built by 05b_build_hmm_decoys.py from `query` (sampled to
+# class, built by build_hmm_decoys.py from `query` (sampled to
 # `max_seqs`, default 1500) and given the fixed GA `ga`. They compete in
 # osmotool annotate's best-hit contest and are excluded from output (08c),
 # and a benchmark read best-hitting one counts as no call (11). `ga` only
@@ -377,7 +377,7 @@ families:
       246 UniProt members total -- already exhausted, not a fetch-limit
       issue -- and after negative-purity QC (01b) removed orthologs under
       other symbols, only 10 negatives survived: too few for reliable
-      cutoff calibration (see 06_calibrate_cutoffs.py's
+      cutoff calibration (see calibrate_cutoffs.py's
       MIN_NEG_FOR_RELIABLE_F1 guard, added after this exact family
       produced a degenerate calibration in production).
 
@@ -433,7 +433,7 @@ families:
       (majority of the pool, corrupting the median-based length filter's
       own calibration). fusion_partner/fusion_marker_pfam declared below
       route these through the same negative-side domain-evidence pre-filter
-      built for mrpA/mrpB (see 01c_check_length_outliers.py) instead of
+      built for mrpA/mrpB (see check_length_outliers.py) instead of
       treating them as ordinary hard negatives: 180/437 (41%) of otsA's
       negative pool pulled out pre-median, dropping its negative-set
       median from 724aa to 487aa (close to its own positive median,
@@ -481,7 +481,7 @@ families:
       full v8 rebuild showed the fix made DIAMOND precision meaningfully
       *worse* here, not better (0.902->0.761, F1 0.829->0.773; HMM also
       regressed, 0.839->0.711 precision). Root cause, not just observed:
-      08b_calibrate_diamond_cutoffs.py sets its cutoff from the negative
+      calibrate_diamond_cutoffs.py sets its cutoff from the negative
       set's own score distribution -- the removed contamination, despite
       being conceptually wrong as ground truth, was genuinely domain-
       similar to otsB's positives (it IS otsB's own catalytic domain, just
@@ -562,11 +562,11 @@ families:
       calibrated + benchmarked on the surgical pool): HMM improved (F1
       0.481->0.546) but DIAMOND regressed (F1 0.546->0.5) -- the same
       calibration-drift mechanism already documented on mrpB's fusion-fix
-      history: 08b_calibrate_diamond_cutoffs.py sets its cutoff from the
+      history: calibrate_diamond_cutoffs.py sets its cutoff from the
       negative set's own distribution, and removing the (conceptually
       wrong but score-similar) bare-tag entries loosened DIAMOND's
       threshold. Rather than accept that trade, added `hmm_negative_query`
-      as a new opt-in field (01_fetch_refs.py/05_build_hmms.sh) so ONLY
+      as a new opt-in field (fetch_refs.py/05_build_hmms.sh) so ONLY
       HMM's calibration uses the surgical pool -- DIAMOND calibration
       (08b), 01b/01c QC, and the benchmark's own ground truth all still
       use the unfiltered negative_query below, matching
@@ -575,8 +575,8 @@ families:
       for the opposite method.
 
       IMPORTANT caveat, found verifying the deployed mechanism (not
-      assumed): `hmm_negative_query` only feeds 06_calibrate_cutoffs.py's
-      whole-protein GA-cutoff calibration. `11_compute_metrics.py`'s
+      assumed): `hmm_negative_query` only feeds calibrate_cutoffs.py's
+      whole-protein GA-cutoff calibration. `compute_metrics.py`'s
       primary summary.tsv metric -- the one every F1 number in this file
       is drawn from -- is pure best-hit-per-read competition on raw
       hmmscan bit scores and never applies that cutoff at all (confirmed
@@ -677,7 +677,7 @@ families:
       end. max_negative_override: 3000 below fixes the actual cause (too
       few samples near the true center, not just the wrong center) by
       pulling the same larger population every build, deterministically
-      (01_fetch_refs.py's per-family/per-label RNG seed is fixed) --
+      (fetch_refs.py's per-family/per-label RNG seed is fixed) --
       negative_median_override: 116 stays as a pin against that value
       drifting if the underlying UniProt data changes over time.
     positive_query: "(gene:mazG OR gene:mazG1 OR gene:mazG2) AND taxonomy_id:2"
@@ -709,7 +709,7 @@ families:
       to let `osmotool annotate` check whether all three Culligan loci
       genes co-occur in a given genome, not for `osmotool profile`.
       scope: annotate_only below is what encodes that distinction; see
-      08c_write_scope_manifest.py. Also includes murB1/murB2 (some
+      write_scope_manifest.py. Also includes murB1/murB2 (some
       organisms, e.g. Bacillus cereus/thuringiensis, Symbiobacterium
       thermophilum, carry two real, reviewed, distinctly-named paralogs
       rather than a single plain "murB") -- confirmed via UniProt (11
@@ -771,7 +771,7 @@ families:
     # pool, and most sampled CBS proteins (IMPDH and the like) never score
     # against an OpuA/B/C ATPase HMM. In v9 (1000 fetched, half to
     # calibration) only 28/12/8 calibration negatives scored for opuAA/
-    # opuBA/opuCA, under 06_calibrate_cutoffs.py's 30-negative guard, so
+    # opuBA/opuCA, under calibrate_cutoffs.py's 30-negative guard, so
     # all three fell back to max_negative+1 and genome prevalence dropped
     # (opuCA 0.80 -> 0.11 in the BacDive phenotype run). 5000 should give
     # roughly 60-400 scored calibration negatives per family.
@@ -822,7 +822,7 @@ families:
       description spot-check found a real but minor collision (24/499,
       4.8%, explicitly titled "...ProV", a different, real gene) small
       enough to handle with a narrowly-scoped `refseq_exclude_products`
-      filter (01e_add_refseq_positives.py; kept in the codebase, unused by
+      filter (add_refseq_positives.py; kept in the codebase, unused by
       any family now, same reasoning the opuBC decoy-dedup fix was kept
       after its own revert) rather than excluding the family outright the
       way mrpC/mrpF were. But that verification sample was built from the
@@ -851,7 +851,7 @@ families:
     # pool, and most sampled CBS proteins (IMPDH and the like) never score
     # against an OpuA/B/C ATPase HMM. In v9 (1000 fetched, half to
     # calibration) only 28/12/8 calibration negatives scored for opuAA/
-    # opuBA/opuCA, under 06_calibrate_cutoffs.py's 30-negative guard, so
+    # opuBA/opuCA, under calibrate_cutoffs.py's 30-negative guard, so
     # all three fell back to max_negative+1 and genome prevalence dropped
     # (opuCA 0.80 -> 0.11 in the BacDive phenotype run). 5000 should give
     # roughly 60-400 scored calibration negatives per family.
@@ -877,7 +877,7 @@ families:
     # pool, and most sampled CBS proteins (IMPDH and the like) never score
     # against an OpuA/B/C ATPase HMM. In v9 (1000 fetched, half to
     # calibration) only 28/12/8 calibration negatives scored for opuAA/
-    # opuBA/opuCA, under 06_calibrate_cutoffs.py's 30-negative guard, so
+    # opuBA/opuCA, under calibrate_cutoffs.py's 30-negative guard, so
     # all three fell back to max_negative+1 and genome prevalence dropped
     # (opuCA 0.80 -> 0.11 in the BacDive phenotype run). 5000 should give
     # roughly 60-400 scored calibration negatives per family.
@@ -1049,7 +1049,7 @@ families:
 #                         own GA/TC/NC lines) directly, instead of
 #                         hmmbuild-ing a fresh model from our own fetched-
 #                         and-aligned UniProt sequences -- see
-#                         05_build_hmms.sh and 06_calibrate_cutoffs.py.
+#                         05_build_hmms.sh and calibrate_cutoffs.py.
 #                         Checked per gene, not assumed for the whole panel
 #                         (per-gene InterPro API check: domain_architectures
 #                         count and Pfam's own family description/name --
@@ -1072,8 +1072,8 @@ families:
 #                         single fused ORF with the named partner family in
 #                         some lineages (only mrpA/mrpB here -- see mrpA's
 #                         entry below for the taxonomic evidence). See
-#                         01_fetch_refs.py, 01c_check_length_outliers.py, and
-#                         08d_build_fusion_refs.py for the mechanism.
+#                         fetch_refs.py, check_length_outliers.py, and
+#                         build_fusion_refs.py for the mechanism.
 #   fusion_marker_pfam: PFxxxxx  Paired with fusion_partner: a Pfam domain
 #                         that, when found in an over-length candidate from
 #                         EITHER partner's raw fetch, confirms a genuine
@@ -1116,7 +1116,7 @@ families:
       (Paenibacillaceae vs. Bacillaceae) -- it doesn't track any single
       clean phylum boundary, which is why this mechanism detects it from
       the ORF's own domain/length signature (see
-      01c_check_length_outliers.py, 08d_build_fusion_refs.py) rather than
+      check_length_outliers.py, build_fusion_refs.py) rather than
       from a taxonomic rule. mrpD has no fusion_partner set -- no evidence
       of an mrpD fusion turned up in any search run. Also includes
       mrpA1/mrpA2/mnhA1/mnhA2 (real, reviewed numbered-paralog gene
@@ -1128,7 +1128,7 @@ families:
       mrpB's ~68%) -- expected, since PF00361 (this family's negative
       anchor) is a broad domain diluted across many unrelated proteins,
       unlike PF04039 which mrpB's negative pool is anchored on directly.
-      Same fix applies (01c_check_length_outliers.py's negative-side
+      Same fix applies (check_length_outliers.py's negative-side
       domain-evidence pre-filter) and, unlike mrpB's own case, is KEPT
       here: full v8 rebuild shows this family's own numbers are essentially
       flat (DIAMOND F1 0.714->0.701, precision 0.625->0.634, a small recall
@@ -1204,7 +1204,7 @@ families:
       gene-symbol-annotated "mrpA", since the fused ORF's dominant/
       N-terminal domain is mrpA's); with fusion_partner declared here, 01c
       routes them to fusion_candidates.faa instead of the ordinary
-      length-outlier pile, and 08d_build_fusion_refs.py merges them into a
+      length-outlier pile, and build_fusion_refs.py merges them into a
       searchable mrpA_mrpB_fused DIAMOND reference. Also includes
       mrpB1/mrpB2/mnhB1/mnhB2 (real, reviewed numbered-paralog gene
       symbols, same class of gap as murB1/murB2 -- see issue #8).
@@ -1247,12 +1247,12 @@ families:
       "normal" negative-set median (937-944aa -- confirmed stable whether
       the negative fetch was capped at 1000 or pulled uncapped at ~9800,
       i.e. not a small-sample sampling artifact), which caused
-      01c_check_length_outliers.py's median-based length filter to discard
+      check_length_outliers.py's median-based length filter to discard
       the true ~140aa hard negatives as outliers instead of the
       contamination. Fixed by extending fusion-candidate detection to the
       negative fetch too, using domain evidence alone (pre-median, since
       length is exactly what the contamination breaks) -- see that
-      script's module docstring and 01_fetch_refs.py's negative-side
+      script's module docstring and fetch_refs.py's negative-side
       domain-evidence fetch. Median-level fix confirmed working: mrpB's
       negative-set median dropped from 937aa to 161aa (close to its own
       positive median, 141aa) once the 543/774 contaminating sequences were
@@ -1263,7 +1263,7 @@ families:
       recover -- 0.888->0.187, F1 0.587->0.272 (recall actually rose
       slightly, 0.438->0.498, the signature of a threshold that got more
       permissive, not a worse reference set). Root cause, not just
-      observed: 08b_calibrate_diamond_cutoffs.py sets its cutoff from the
+      observed: calibrate_diamond_cutoffs.py sets its cutoff from the
       negative set's own score distribution. The removed contamination,
       despite being conceptually wrong as ground truth, was genuinely
       domain-similar to mrpB's positives (real PF04039 content, just fused
@@ -1857,7 +1857,7 @@ families:
       detection specifically. All three sibling HMMs score exactly the
       same on any given read (same underlying model), so hmmscan can't
       tell them apart at all; 07_press_hmms.sh concatenates hmms/*.hmm in
-      alphabetical order and 11_compute_metrics.py's best_hit_per_read
+      alphabetical order and compute_metrics.py's best_hit_per_read
       keeps the first tied hit, so whichever of the three sorts first
       alphabetically wins 100% of the shared signal and the other two get
       systematically zero HMM recall -- observed directly: trkH and ktrD

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-08a_build_decoy_refs.py — turn a family's QC'd negative set into searchable
+build_decoy_refs.py — turn a family's QC'd negative set into searchable
 DIAMOND decoy references, for families where a single score threshold
 cannot separate the target from a specific, named confusable paralog.
 
@@ -13,13 +13,13 @@ negative_query already targets its only two real confusable paralogs by
 name (betT, caiT), so after 01b/01c QC, refs/betL.negative.faa IS a clean,
 purpose-built decoy set -- it just isn't in the searchable database yet.
 
-Reads refs/<family>.negative.train.faa (written by 03_split_train_test.py,
+Reads refs/<family>.negative.train.faa (written by split_train_test.py,
 only for families marked decoy_from_negatives), NOT the full
-refs/<family>.negative.faa -- 09_simulate_reads.py simulates benchmark
+refs/<family>.negative.faa -- simulate_reads.py simulates benchmark
 negative reads from the disjoint refs/<family>.negative.test.faa split for
 these families specifically, so a benchmark read can never trivially
 "recognize" its own literal source sequence sitting in the db as a decoy.
-Run 03_split_train_test.py before this script.
+Run split_train_test.py before this script.
 
 This step doesn't add any new scoring logic: it relies entirely on
 quantifier.select_best_hits(), which already picks the single
@@ -29,7 +29,7 @@ away from a weak betL hit. Adding them as "<family>_decoy"-labelled entries
 makes that existing best-hit contest competitive for real betT/caiT
 signal, instead of leaning on a threshold the calibration data proves can't
 work. Decoy hits are excluded from all reported output (see
-08c_write_scope_manifest.py) -- they exist purely to be won against, never
+write_scope_manifest.py) -- they exist purely to be won against, never
 to be counted.
 
 Only families explicitly marked `decoy_from_negatives: true` in
@@ -51,7 +51,7 @@ construction closes the collision at the source rather than relying on a
 benchmark to catch it after the fact.
 
 Usage:
-  python 08a_build_decoy_refs.py --refs refs --families families.yaml
+  python build_decoy_refs.py --refs refs --families families.yaml
 Output:
   refs/<family>.decoy.faa   (only for families with decoy_from_negatives: true)
 """
@@ -153,7 +153,7 @@ def main() -> None:
 
         if not neg_path.exists() or neg_path.stat().st_size == 0:
             print(f"[{family}] SKIP: no negative train split found at {neg_path} "
-                  f"-- run 01/01b/01c then 03_split_train_test.py first")
+                  f"-- run 01/01b/01c then split_train_test.py first")
             continue
 
         records = parse_fasta(neg_path)

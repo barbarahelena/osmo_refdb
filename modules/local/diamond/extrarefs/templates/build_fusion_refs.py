@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-08d_build_fusion_refs.py — turn fusion-candidate sequences flagged by
-01c_check_length_outliers.py into a single, searchable DIAMOND reference
+build_fusion_refs.py — turn fusion-candidate sequences flagged by
+check_length_outliers.py into a single, searchable DIAMOND reference
 per declared fusion pair (families.yaml: `fusion_partner`).
 
 Motivating case: mrpA/mrpB (Task 1b). In some lineages the Mrp/Mnh Na+/H+
@@ -15,19 +15,19 @@ sequences) and routes them to refs/<family>.fusion_candidates.faa instead
 of the length-outliers pile -- that file also carries fused ORFs pulled out
 of <family>'s own NEGATIVE fetch (a fused ORF under a bare locus tag
 matches a family's own negative_query just as easily as a true hard
-negative does; see 01c_check_length_outliers.py's module docstring for the
+negative does; see check_length_outliers.py's module docstring for the
 confirmed mrpB case). This script is what actually makes them searchable:
 it merges a pair's fusion candidates (deduped by UniProt accession, since
 the same fused protein can turn up in both mrpA's and mrpB's raw fetch --
 positive or negative side -- depending which gene symbol, if any, it
 happened to be annotated under), retags them under one shared
 "<familyA>_<familyB>_fused" label, and writes a combined FASTA that
-08_build_diamond_db.sh folds into the DIAMOND db like any other family.
+DIAMOND_TRAINREFS / DIAMOND_MAKEDB folds into the DIAMOND db like any other family.
 
 Unlike 08a's decoy references, a fused-ORF hit is a REAL, reportable
 detection target (it genuinely carries both subunits), not a sink for
 mislabeled calls -- it is NOT added to the profile/annotate exclusion lists
-in 08c_write_scope_manifest.py. Complex-aware scoring for what a single
+in write_scope_manifest.py. Complex-aware scoring for what a single
 "<familyA>_<familyB>_fused" hit implies for both individual family calls
 lives downstream, in osmotool (Task 2), not in this repo.
 
@@ -35,13 +35,13 @@ Each family in a fusion_partner pair processes the pair once (the second
 family sees the label already built and skips it), so this is safe however
 many pairs are declared.
 
-KNOWN LIMITATION: 08b_calibrate_diamond_cutoffs.py calibrates a per-family
+KNOWN LIMITATION: calibrate_diamond_cutoffs.py calibrates a per-family
 minimum bitscore only for names literally listed in families.yaml -- a
 "<familyA>_<familyB>_fused" label isn't one, so a fused-ORF hit currently
 ships with no calibrated cutoff of its own in <release>.diamond_cutoffs.tsv.
 There's no train/test split for fusion candidates to calibrate against
 either (they're a small side pool pulled out of 01c, never through
-03_split_train_test.py). Whatever osmotool does with an uncalibrated label
+split_train_test.py). Whatever osmotool does with an uncalibrated label
 is untested. If this turns out to matter in practice, the two obvious
 fixes are (a) extend 08b to also process each declared fusion pair's
 merged label, using the fusion_candidates pool directly instead of a
@@ -50,13 +50,13 @@ train/test split, or (b) have osmotool fall back to the more permissive
 implemented here.
 
 Usage:
-  python 08d_build_fusion_refs.py --refs refs --families families.yaml
+  python build_fusion_refs.py --refs refs --families families.yaml
 Output:
   refs/<familyA>_<familyB>_fused.faa   (one per declared, non-empty pair)
 
 Sources merged (deduped by UniProt accession), in order of how
 comprehensive they are: refs/<famA>_<famB>.dedicated_fusion_fetch.faa
-(01_fetch_refs.py's direct, uncapped combined-domain query -- see
+(fetch_refs.py's direct, uncapped combined-domain query -- see
 fetch_fusion_pair_candidates there -- the primary source when available),
 plus refs/<family>.fusion_candidates.faa for each family (incidental finds
 from that family's own positive/negative fetch -- a safety net for
@@ -151,7 +151,7 @@ def main() -> None:
             for header, seq in parse_fasta(candidates_path):
                 by_accession.setdefault(header_accession(header), (header, seq))
 
-        # 01_fetch_refs.py's dedicated fusion-pair fetch (comprehensive,
+        # fetch_refs.py's dedicated fusion-pair fetch (comprehensive,
         # uncapped combined-domain query) -- the primary source once it's
         # available; the per-family fusion_candidates.faa files above are
         # kept as a safety net for whatever it can't cover (e.g. a

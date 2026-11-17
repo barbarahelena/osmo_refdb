@@ -5,7 +5,7 @@ process CATALOG_SCREEN {
     tag "${meta.id}"
     label 'process_single'
 
-    // calls: python + pyyaml (15_catalog_screen.py)
+    // calls: python + pyyaml (catalog_screen.py)
     // Seqera container 'py-yaml' (environment.yml next to this file: its packages)
     container "${ workflow.containerEngine == 'singularity' && !task.ext.singularity_pull_docker_container ?
         'oras://community.wave.seqera.io/library/python_pyyaml:9b2a7bd921471580' :
@@ -24,7 +24,7 @@ process CATALOG_SCREEN {
 
     script:
     """
-    python ${moduleDir}/templates/15_catalog_screen.py --scores-dir ${hmms}/scores \\
+    python ${moduleDir}/templates/catalog_screen.py --scores-dir ${hmms}/scores \\
         --annotation ${catalog}/catalog.annotation.tsv --families ${families} --out screen.tsv | tee screen.log
     {
         echo

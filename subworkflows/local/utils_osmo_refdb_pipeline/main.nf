@@ -34,7 +34,7 @@ def sha256(path) {
 
 // The sets a family's model is scored on for its calibration, from its refs files by kind
 // ([kind: file], kind = 'positive.calib', 'negative.train', ...; empty files left out), in the order
-// 05_build_hmms.sh used: positives from calib, else test (the benchmark's positives overlap), else all;
+// the HMM_BUILD subworkflow used: positives from calib, else test (the benchmark's positives overlap), else all;
 // negatives from hmm_negative (an HMM-only pool), else negative.train, else all negatives.
 def scoring_sets(family, sets) {
     def pos = ['positive.calib', 'positive.test', 'positive'].find { k -> sets.containsKey(k) }
@@ -53,7 +53,7 @@ def refs_kind(f) {
     i < 0 ? tuple(base, '', f) : tuple(base.substring(0, i), base.substring(i + 1), f)
 }
 
-// The sets a family's DIAMOND cutoff is calibrated on, as 08b_calibrate_diamond_cutoffs.py picks them
+// The sets a family's DIAMOND cutoff is calibrated on, as calibrate_diamond_cutoffs.py picks them
 // from the family's refs files by kind ([kind: file], empty files included): positive.calib if it exists,
 // else positive.test; negative.train if it exists, else all negatives. An empty or missing set is not
 // searched (08b scores it as no sequences).

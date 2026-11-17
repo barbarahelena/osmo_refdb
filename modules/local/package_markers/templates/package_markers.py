@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-12_package_markers.py -- copy a separately-built marker-gene release
+package_markers.py -- copy a separately-built marker-gene release
 (markers.yaml) into a main osmo_refdb release as its markers/ subdirectory,
 for `osmotool profile`'s copies-per-genome normalisation.
 
@@ -13,7 +13,7 @@ osmotool searches them in a second, independent DIAMOND pass over the same
 reads. This step only packages; it never rebuilds anything.
 
 Usage:
-  python bin/12_package_markers.py \\
+  python bin/package_markers.py \\
       --marker-release releases/v8-markers --release releases/v8
 
 Writes releases/<release>/markers/:

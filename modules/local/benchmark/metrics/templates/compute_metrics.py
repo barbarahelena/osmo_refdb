@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-11_compute_metrics.py — score DIAMOND vs. HMM against the simulated-read truth table
+compute_metrics.py — score DIAMOND vs. HMM against the simulated-read truth table
 
 Parses:
   - results/diamond/<sample>.blastx.tsv (osmotool --keep_aln output)
   - results/hmm/<sample>.hmmscan.tblout (hmmscan output, raw bit scores)
-  - results/reads/read_truth.tsv (from 09b_compute_read_truth.py; per-read
+  - results/reads/read_truth.tsv (from compute_read_truth.py; per-read
     truth based on actual CDS overlap, not just source-construct label)
 
 For each family and method, computes read-level precision/recall/F1. A read
@@ -38,7 +38,7 @@ False positives are counted three ways for family F (summary.tsv):
                 has. On v8 they were ~99% of all cross-family calls (trkH:
                 12,097 of 12,191), real-gene confusion ~1%.
   fp_background reads from the shared random bacterial background
-                (01f_build_random_background.py, family "random_bg") called
+                (build_random_background.py, family "random_bg") called
                 F, also as background_fp_per_million. Kept out of every
                 precision: how many unrelated reads to mix in is arbitrary,
                 so the rate per million unrelated reads is the number to
@@ -61,7 +61,7 @@ any member of its true family's group is a hit (within_group_swaps counts
 how many of those were gene-level misses).
 
 Calibration mode (no --cascade-config; run on the calibration reads with
-10_run_benchmark.sh CASCADE=score) decides, per reporting unit, the report
+run_benchmark.sh CASCADE=score) decides, per reporting unit, the report
 level and the cascade together, and writes both release manifests:
 osmo_refdb.profile_cascade.tsv (which families get the HMM second opinion)
 and osmo_refdb.profile_report_levels.tsv (what osmotool profile reports, per
@@ -87,7 +87,7 @@ curves (saved as PNGs) plus two summary tables:
     a stricter score cutoff were applied on top of the best-hit call)
 
 Usage:
-  python 11_compute_metrics.py --results results/ --out results/metrics --families families.yaml
+  python compute_metrics.py --results results/ --out results/metrics --families families.yaml
 """
 
 from __future__ import annotations
@@ -118,7 +118,7 @@ def load_family_names(path: Path) -> list[str]:
 
 def load_read_truth(reads_dir: Path) -> pd.DataFrame:
     """
-    Load per-read ground truth from 09b_compute_read_truth.py's read_truth.tsv
+    Load per-read ground truth from compute_read_truth.py's read_truth.tsv
     (read_id, family, label, uniprot_id, overlaps_cds, overlap_bp). Unlike the
     contig-level truth.tsv (one row per source protein), this reflects whether
     each individual simulated read actually overlaps the true CDS -- a read
@@ -748,7 +748,7 @@ def write_report_levels(path: Path, rows: list[dict], min_f1: float) -> None:
         "raises f1_all; cascade_members lists where it is on.",
         "f1_all = F1 with every non-background read called as the unit counted as a false positive "
         "(own hard negatives and flanks, other panel genes, other families' hard negatives); "
-        "see 11_compute_metrics.py.",
+        "see compute_metrics.py.",
         "report_level is families.yaml's report_level; calibration_level is the rule's. "
         "tp..f1_all are calibration counts at the reported level and cascade (empty for none).",
         "f1_all_gene_*: per member, in members order (NA: no HMM threshold, so no cascade option). "
@@ -928,7 +928,7 @@ def main() -> None:
     hmm_calls = load_hmm_calls(args.hmm or args.results / "hmm")
     if calibration and not diamond_calls.empty and not any(diamond_dir.glob("*.cascade.hmmsearch.tblout")):
         raise SystemExit(
-            f"Calibration mode needs each DIAMOND call's HMM score: run 10_run_benchmark.sh "
+            f"Calibration mode needs each DIAMOND call's HMM score: run run_benchmark.sh "
             f"with CASCADE=score on these reads (no *.cascade.hmmsearch.tblout in {diamond_dir}).")
 
     summary_rows = []

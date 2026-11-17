@@ -1,5 +1,5 @@
 // Packages the catalog built by OSMOTOOL_BUILDCATALOG as the release's catalogs/<name>/: provenance in
-// catalog.json, the hmmsearch evidence gzipped, SHA256SUMS (templates/14_package_catalog.py).
+// catalog.json, the hmmsearch evidence gzipped, SHA256SUMS (templates/package_catalog.py).
 // Published into releases/<release>/catalogs/ (conf/modules.config).
 process CATALOG_PACKAGE {
     tag "${meta.id}"
@@ -20,7 +20,7 @@ process CATALOG_PACKAGE {
 
     script:
     """
-    python ${moduleDir}/templates/14_package_catalog.py --release-name ${release_name} \\
+    python ${moduleDir}/templates/package_catalog.py --release-name ${release_name} \\
         --name ${meta.id} --genes ${genes} --built ${catalog} --out ${meta.id} \\
         --source "${params.catalog_source}" --source-url "${params.catalog_source_url}"
     test -s ${meta.id}/catalog.annotation.tsv

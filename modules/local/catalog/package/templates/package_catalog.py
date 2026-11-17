@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-14_package_catalog.py -- build a gene catalog into a release as
+package_catalog.py -- build a gene catalog into a release as
 catalogs/<name>/, for `osmotool profile --catalog <name>`.
 
 The catalog's annotation is one unit with the release it is built for: it
@@ -22,7 +22,7 @@ component: provenance (source, input checksums, release), a compressed copy
 of the raw hmmsearch evidence, and SHA256SUMS.
 
 Usage:
-  python bin/14_package_catalog.py --release releases/v10 --name gmgc_gut \\
+  python bin/package_catalog.py --release releases/v10 --name gmgc_gut \\
       --genes GMGC10.human-gut.95nr.0.5.percent.prevalence.fna.gz \\
       --source "GMGC v1.0, human gut, prevalence > 0.5%" \\
       --source-url https://gmgc.embl.de/ --threads 32

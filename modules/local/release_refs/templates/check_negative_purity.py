@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-01b_check_negative_purity.py — flag/drop hard negatives that are secretly
+check_negative_purity.py — flag/drop hard negatives that are secretly
 true positives.
 
 Motivating bug (v1 release): betL's negative_query excluded only the
@@ -28,7 +28,7 @@ so re-running this step (e.g. after lowering --threshold) never operates
 on an already-filtered file.
 
 Usage:
-  python 01b_check_negative_purity.py --refs refs --families families.yaml \\
+  python check_negative_purity.py --refs refs --families families.yaml \\
       --threshold 70.0
 Output:
   refs/<family>.negative.faa          (filtered -- what downstream steps use)
@@ -123,7 +123,7 @@ def main() -> None:
 
     families = load_family_names(args.families)
     manifest_rows = []
-    # 01_fetch_refs.py writes this fresh, unconditionally, every time it
+    # fetch_refs.py writes this fresh, unconditionally, every time it
     # runs -- unlike neg_path (which this script itself overwrites below),
     # it's a stable signal for "when did the fetch last genuinely run",
     # used to detect a stale raw snapshot from before a families.yaml

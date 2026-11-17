@@ -1,6 +1,6 @@
 // The input set of each HMM decoy (families.yaml `hmm_decoys`): its fetched sequences, or a family's
 // negative.train for a `from_negatives_of` decoy, minus every accession the benchmark could score
-// (templates/05b_build_hmm_decoys.py --select-only). The decoys are then clustered, aligned, trimmed and built
+// (templates/build_hmm_decoys.py --select-only). The decoys are then clustered, aligned, trimmed and built
 // by their own steps (subworkflows/local/release_build).
 process HMM_DECOYSELECT {
     label 'process_single'
@@ -21,7 +21,7 @@ process HMM_DECOYSELECT {
 
     script:
     """
-    python ${moduleDir}/templates/05b_build_hmm_decoys.py --select-only --refs ${refs} --families ${families} --out decoys
+    python ${moduleDir}/templates/build_hmm_decoys.py --select-only --refs ${refs} --families ${families} --out decoys
     """
 
     stub:

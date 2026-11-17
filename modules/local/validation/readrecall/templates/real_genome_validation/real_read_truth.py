@@ -2,7 +2,7 @@
 """
 real_read_truth.py — per-read ground truth for reads simulated by wgsim
 directly from a real genome, via wgsim's own embedded read coordinates
-(no k-mer matching needed, unlike osmo_refdb's 09b_compute_read_truth.py
+(no k-mer matching needed, unlike osmo_refdb's compute_read_truth.py
 which has to support simulators that don't expose coordinates).
 
 wgsim read header format (from wgsim.c):

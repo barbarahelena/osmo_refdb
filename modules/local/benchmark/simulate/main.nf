@@ -23,9 +23,9 @@ process BENCHMARK_SIMULATE {
 
     script:
     """
-    python ${moduleDir}/templates/09_simulate_reads.py --refs refs --families ${families} \\
+    python ${moduleDir}/templates/simulate_reads.py --refs refs --families ${families} \\
         --reads-per-sequence 20 --split ${split} --out reads
-    python ${moduleDir}/templates/09b_compute_read_truth.py --reads reads
+    python ${moduleDir}/templates/compute_read_truth.py --reads reads
     """
 
     stub:

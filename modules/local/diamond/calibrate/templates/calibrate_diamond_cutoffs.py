@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-08b_calibrate_diamond_cutoffs.py — set per-family DIAMOND bit-score cutoffs.
+calibrate_diamond_cutoffs.py — set per-family DIAMOND bit-score cutoffs.
 
 DIAMOND's identity/query-cover/e-value filters are applied uniformly across
 every family (a single --min_identity for the whole database), unlike HMM's
@@ -15,8 +15,8 @@ DIAMOND's flat threshold when nothing analogous to HMM's GA cutoff existed
 to catch it.
 
 This calibrates a per-family minimum DIAMOND bitscore, mirroring how
-06_calibrate_cutoffs.py calibrates HMM's GA cutoffs: score each family's
-positive CALIB set (03_split_train_test.py: held out from the db and
+calibrate_cutoffs.py calibrates HMM's GA cutoffs: score each family's
+positive CALIB set (split_train_test.py: held out from the db and
 disjoint from the benchmark's positive.test) and (purity+length-filtered)
 hard-negative set
 against the built DIAMOND database with permissive settings (--id 0
@@ -28,7 +28,7 @@ the combined db), and pick a cutoff that separates the two distributions
 as the HMM calibration, just in DIAMOND bitscore space.
 
 Usage:
-  python 08b_calibrate_diamond_cutoffs.py --refs refs --release releases/v3 \\
+  python calibrate_diamond_cutoffs.py --refs refs --release releases/v3 \\
       --release-name osmo_refdb --families families.yaml
 Output:
   <release>/<release-name>.diamond_cutoffs.tsv
@@ -106,7 +106,7 @@ def best_family_restricted_scores(
 
 
 def choose_cutoff(pos_scores: np.ndarray, neg_scores: np.ndarray) -> tuple[float, str]:
-    """Same logic as 06_calibrate_cutoffs.py's choose_cutoff(), applied to
+    """Same logic as calibrate_cutoffs.py's choose_cutoff(), applied to
     DIAMOND bitscores instead of HMM bitscores."""
     if len(pos_scores) == 0:
         return 0.0, "no_positive_scores"
@@ -145,7 +145,7 @@ def main() -> None:
 
     db = args.release / f"{args.release_name}.dmnd"
     if args.hits is None and not db.exists():
-        print(f"ERROR: {db} not found -- run 08_build_diamond_db.sh first.")
+        print(f"ERROR: {db} not found -- run DIAMOND_TRAINREFS / DIAMOND_MAKEDB first.")
         return
 
     families = load_family_names(args.families)
@@ -161,7 +161,7 @@ def main() -> None:
                 pos_test = args.refs / f"{family}.positive.test.faa"
                 print(f"[{family}] WARNING: no positive.calib split, calibrating "
                       f"on positive.test (benchmark positives overlap)")
-            # negative.train only (03_split_train_test.py): negative.test is
+            # negative.train only (split_train_test.py): negative.test is
             # what the benchmark simulates reads from, and osmotool profile
             # applies this cutoff there, so calibrating on it would let the
             # benchmark score negatives that set the threshold.

@@ -1,6 +1,6 @@
 // The release's hmms/: each family's GA cutoff from its calibration scores, and each decoy's fixed GA
-// (templates/06_calibrate_cutoffs.py, which writes the GA lines and cutoff_manifest.tsv), the QC scorecard
-// (templates/06b_qc_scorecard.py), and every model in one pressed database, hmms/osmo_refdb.hmm.
+// (templates/calibrate_cutoffs.py, which writes the GA lines and cutoff_manifest.tsv), the QC scorecard
+// (templates/qc_scorecard.py), and every model in one pressed database, hmms/osmo_refdb.hmm.
 process HMM_CALIBRATE {
     label 'process_single'
 
@@ -29,8 +29,8 @@ process HMM_CALIBRATE {
     mkdir -p hmms/scores
     cp -L models/*.hmm hmms/
     cp -L scores/* hmms/scores/
-    python ${moduleDir}/templates/06_calibrate_cutoffs.py --hmms hmms --families ${families}
-    python ${moduleDir}/templates/06b_qc_scorecard.py --refs ${refs} --hmms hmms --families ${families} --out qc_scorecard.tsv
+    python ${moduleDir}/templates/calibrate_cutoffs.py --hmms hmms --families ${families}
+    python ${moduleDir}/templates/qc_scorecard.py --refs ${refs} --hmms hmms --families ${families} --out qc_scorecard.tsv
     # one database of every model, in name order
     cat hmms/*.hmm > osmo_refdb.hmm
     mv osmo_refdb.hmm hmms/osmo_refdb.hmm

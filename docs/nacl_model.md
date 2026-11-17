@@ -17,7 +17,7 @@ cutoffs. The current model was trained on **v10** and must be used with
 | `train.py` | Training table, hyperparameter search, nested CV, ablations, final model, intervals, salt-in detector, `feature_schema.json`. |
 | `explain.py` | SHAP importance, stability, interactions, ridge reference, plots, and the README shipped with the model. |
 | `predict.py` | Reference inference on annotate output (osmotool's test oracle). |
-| `../13_package_nacl_model.py` | Copies the build into `<release>/nacl_model/` with checksums and `self_check.json`: the model's raw output for 5 training genomes, which osmotool recomputes on load. |
+| `../package_nacl_model.py` | Copies the build into `<release>/nacl_model/` with checksums and `self_check.json`: the model's raw output for 5 training genomes, which osmotool recomputes on load. |
 
 ## Running
 
@@ -28,7 +28,7 @@ cutoffs. The current model was trained on **v10** and must be used with
 python3.11 -m venv .venv-nacl && .venv-nacl/bin/pip install xgboost scikit-learn pandas scipy matplotlib
 
 PYTHON=.venv-nacl/bin/python THREADS=8 bash run_pipeline.sh nacl_model v10
-# = train.py (~20 min) + explain.py (~10 min) + 13_package_nacl_model.py
+# = train.py (~20 min) + explain.py (~10 min) + package_nacl_model.py
 
 # predict, on osmotool >= 0.8.0 annotate output (header has gc and n_contigs)
 .venv-nacl/bin/python modules/local/nacl/model/templates/nacl_model/predict.py releases/v10/nacl_model out/genomeA out/genomeB

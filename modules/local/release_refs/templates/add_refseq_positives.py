@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-01e_add_refseq_positives.py -- merge additional real positives from NCBI
+add_refseq_positives.py -- merge additional real positives from NCBI
 RefSeq into a family's positive pool, for families whose UniProt gene-symbol
 population is already fully exhausted (fetched count == UniProt's own total,
 no fetch cap left to raise) but where RefSeq's independently-annotated
@@ -18,10 +18,10 @@ against the existing pool + a manual product-description spot-check) -- see
 docs/CHANGELOG.md and each family's own families.yaml comment.
 
 Sampling: NCBI's esearch default result order is not randomized (the same
-kind of order bias 01_fetch_refs.py already had to fix for UniProt -- see
+kind of order bias fetch_refs.py already had to fix for UniProt -- see
 issue #4 in docs/CHANGELOG.md), so this fetches the FULL matching UID list
 first (lightweight -- UIDs only, no sequence data) and draws a reproducible
-random sample from it, the same oversample-free approach 01_fetch_refs.py
+random sample from it, the same oversample-free approach fetch_refs.py
 uses once the full population is already in hand.
 
 Entries whose RefSeq description is explicitly marked ", partial" are
@@ -40,11 +40,11 @@ sample were explicitly titled "...ProV", a different gene), but opuBA's
 own RefSeq expansion was reverted for an unrelated reason before this
 filter mattered in production -- see opuBA's own families.yaml entry.
 Currently unused by any family; kept in the codebase for the next one
-that needs it, same reasoning 01_fetch_refs.py's decoy-dedup check was
+that needs it, same reasoning fetch_refs.py's decoy-dedup check was
 kept after its own revert.
 
 Usage:
-  python 01e_add_refseq_positives.py --refs refs --families families.yaml
+  python add_refseq_positives.py --refs refs --families families.yaml
 Output:
   refs/<family>.positive.faa           (RefSeq sequences appended in place)
   refs/refseq_positives_manifest.tsv
@@ -221,7 +221,7 @@ def main() -> None:
     # NCBI has no discrete, citable "release number" for RefSeq the way
     # UniProt does (it's continuously updated) -- a fetch date is the
     # practical provenance signal here, same role date_fetched already
-    # plays in 01_fetch_refs.py's own manifest.
+    # plays in fetch_refs.py's own manifest.
     date_fetched = date.today().isoformat()
     print(f"Fetch date: {date_fetched}")
 
@@ -230,7 +230,7 @@ def main() -> None:
         name = fam["name"]
         pos_path = args.refs / f"{name}.positive.faa"
         if not pos_path.exists():
-            print(f"[{name}] SKIP: {pos_path} does not exist yet -- run 01_fetch_refs.py first")
+            print(f"[{name}] SKIP: {pos_path} does not exist yet -- run fetch_refs.py first")
             continue
 
         query = build_query(fam["refseq_gene_symbols"])

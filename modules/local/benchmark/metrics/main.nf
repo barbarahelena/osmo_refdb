@@ -31,7 +31,7 @@ process BENCHMARK_METRICS {
         : '--cascade-config cascade_in/osmo_refdb.profile_cascade.tsv --report-levels cascade_in/osmo_refdb.profile_report_levels.tsv'
     """
     mkdir cascade
-    python ${moduleDir}/templates/11_compute_metrics.py --reads ${reads} --diamond run/diamond --hmm run/hmm \\
+    python ${moduleDir}/templates/compute_metrics.py --reads ${reads} --diamond run/diamond --hmm run/hmm \\
         --out metrics --families ${families} ${args}
     """
 

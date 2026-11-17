@@ -9,7 +9,7 @@
 # genome normalisation" for the build/package workflow:
 #
 #   FAMILIES_FILE=markers.yaml bash run_pipeline.sh all <release>-markers
-#   python bin/12_package_markers.py \
+#   python bin/package_markers.py \
 #       --marker-release releases/<release>-markers --release releases/<release>
 #
 # Same schema as families.yaml (see its header for every field).
@@ -138,7 +138,7 @@ families:
       TsaB carries no EC; with NOT ec:2.3.1.234 the pool drops 18,004 ->
       14,065 and the 15-entry sample was all TsaB / peptidase M22
       (~170-250 aa). A few short mis-EC'd TsaB-like entries may enter the
-      positives this way -- 01c_check_length_outliers.py flags those.
+      positives this way -- check_length_outliers.py flags those.
     positive_query: "(gene:tsaD OR gene:gcp OR gene:ygjD OR gene:tsaD1 OR gene:tsaD2 OR ec:2.3.1.234) AND taxonomy_id:2"
     negative_query: "xref:pfam-PF00814 NOT (gene:tsaD OR gene:gcp OR gene:ygjD OR gene:tsaD1 OR gene:tsaD2) NOT ec:2.3.1.234 AND taxonomy_id:2"
     negative_pfam: PF00814   # tRNA N6-adenosine threonylcarbamoyltransferase
