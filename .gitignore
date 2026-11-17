@@ -7,5 +7,9 @@ cache/
 .venv-nacl/
 pipeline/*/archive
 
-# retired step 1d: local study data, never to be committed
-extra_sequences/
+# local archive of retired inputs and old data (e.g. the study sequences of the retired
+# step 1d): never committed
+/archive/
+
+# release-independent input data (BacDive genomes etc.)
+/data/

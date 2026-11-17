@@ -11,11 +11,13 @@
 # families, HMMs, calibration, DIAMOND, benchmark) is rerun here. A fetch from
 # scratch (no REUSE_REFS_FROM) needs the login node's internet and produces a
 # different database vintage: UniProt/RefSeq are live; see hpc/README.md.
-# Resource requests are placeholders: no figures are known for this cluster yet.
+# Measured: the same structure (v10-betl-decoy: build + benchmarks + catalogue benchmark)
+# took about 2.5 h on 10 CPUs inside a 7.65 GiB VM without running out of memory, so
+# 16 cores / 32 GB / 8 h is about 1.6x the cores, 4x the memory and 3x the time.
 #SBATCH --job-name=osmo_refdb_build
-#SBATCH --cpus-per-task=16        # ADJUST
-#SBATCH --mem=64G                 # ADJUST
-#SBATCH --time=24:00:00           # ADJUST
+#SBATCH --cpus-per-task=16
+#SBATCH --mem=32G
+#SBATCH --time=08:00:00
 #SBATCH --output=osmo_refdb_build_%j.log
 set -euo pipefail
 cd "${REPO}"

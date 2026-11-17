@@ -64,8 +64,16 @@ one() {
 }
 export -f one
 
+
+# CHUNK="i/K" (SLURM arrays): process only the genomes with (position - 1) % K == i,
+# so K array tasks split the sorted genome list between them without overlap.
+chunk_filter() {
+  if [ -n "${CHUNK:-}" ]; then awk -v i="${CHUNK%/*}" -v k="${CHUNK#*/}" '(NR - 1) % k == i'; else cat; fi
+}
+
 T0=$SECONDS
-find "$PV/genomes/" -maxdepth 1 \( -name '*.fna' -o -name '*.fna.gz' \) | sort > "$OUT/.inputs"
-xargs -P "$PAR" -I{} bash -c 'one "$@"' _ {} "$OUT" "$POOL" < "$OUT/.inputs"
-N=$(wc -l < "$OUT/.inputs" | tr -d ' '); W=$((SECONDS-T0))
+INPUTS="$OUT/.inputs${CHUNK:+.${CHUNK%/*}}"
+find "$PV/genomes/" -maxdepth 1 \( -name '*.fna' -o -name '*.fna.gz' \) | sort | chunk_filter > "$INPUTS"
+xargs -P "$PAR" -I{} bash -c 'one "$@"' _ {} "$OUT" "$POOL" < "$INPUTS"
+N=$(wc -l < "$INPUTS" | tr -d ' '); W=$((SECONDS-T0))
 echo "=== ${PAR}x1: ${W}s wall for $N genomes ==="

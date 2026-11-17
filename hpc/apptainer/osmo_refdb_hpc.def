@@ -31,7 +31,7 @@ From: continuumio/miniconda3:24.1.2-0
     environment.yml /opt/osmo_refdb/environment.yml
 
 %post
-    apt-get update && apt-get install -y --no-install-recommends procps git time \
+    apt-get update && apt-get install -y --no-install-recommends procps git time curl \
         && rm -rf /var/lib/apt/lists/*
     conda env create -f /opt/osmo_refdb/environment.yml
     conda clean -afy

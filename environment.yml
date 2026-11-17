@@ -26,6 +26,7 @@ dependencies:
       - numpy
       - pandas
       - scikit-learn
+      - statsmodels     # BacDive analysis (analyze.py, analyze_extended.py)
       - matplotlib
       - scipy
       # NaCl-max model (pipeline/nacl_model/, run_pipeline.sh nacl_model)

@@ -84,18 +84,70 @@ full catalog index   (needs only the gene file: starts at once, in parallel)
 5. **Environment file**: copy `hpc/slurm/env.sh.example` to `env.sh`, edit,
    `source` it. Any path you pass to a job (`R1`, `R2`, `OUT`, the catalog)
    must lie under a directory in `APPTAINER_BIND`.
-6. **Submit the chain**:
+6. **Launch** (everything below is one script, `hpc/launch.sh`):
    ```bash
+   source hpc/slurm/env.sh
    export RELEASE=v10-canonical REUSE_REFS_FROM=releases/v10
-   bash hpc/slurm/submit_all.sh
+   bash hpc/launch.sh fetch      # login node: GMGC + BacDive strains and genomes
+   bash hpc/launch.sh build      # submits the whole chain up to the gate
+   bash hpc/launch.sh analyze    # after the gate: BacDive annotation -> analysis + NaCl model
    ```
-   It submits the full index, the release build, the catalog annotation (after
-   the build) and the screen (after that), with SLURM dependencies.
+   `build` submits, with SLURM dependencies: the full catalog index and the BacDive
+   proteins (independent of the release, start at once) and the release build ->
+   catalog annotation -> screen.
 7. **The gate**: read the screen's log and `catalogs/<name>/screen.tsv`.
-8. **After the gate, on the frozen release**: BacDive annotation as a SLURM
-   array and the NaCl retrain (scripts not written yet), the catalog benchmark
-   with the real catalog as background (`11d` not extended yet), and
-   `sbatch hpc/slurm/30_profile_sample.sbatch` per sample.
+8. **Still to do on the frozen release** (not scripted yet): the catalog benchmark with
+   the real catalog as background (`11d` is not extended), and per-sample
+   `sbatch hpc/slurm/30_profile_sample.sbatch`.
+
+## What is downloaded by a script, and what is not
+
+| input | scripted? | how |
+|---|---|---|
+| GMGC human gut catalog (2.99 GB) | yes | `launch.sh fetch` -> `00_fetch_gmgc.sh`, resumable, CRC-checked |
+| BacDive strain records | yes, no credentials | `00_fetch_bacdive.sh` -> `harvest_bacdive.sh sweep`; batches already present are skipped, so a shipped `bacdive_raw/` snapshot reproduces the published table (BacDive itself is live) |
+| BacDive genomes (about 9.4 GB), salt-in control genomes (0.7 GB) | yes | `fetch_genomes.sh` from NCBI FTP, resumable |
+| Pfam-A 39.0 | yes, added | `00_fetch_pfam.sh` (pinned URL); only needed to re-derive the random-panel pool |
+| random-panel pool (`pool.hmm`, 13 MB) | **no: a snapshot** | re-deriving it needs `screen_proteomes.faa`, which no script creates |
+| release snapshot (`refs/`, `alignments/`, ...) | **no: rsync** | UniProt/RefSeq are live, so the snapshot is the input |
+| reference genomes for real-genome validation | in git | `test_genomes/` (3), osmotool's `test_genomes/` (9) |
+| UniProt / RefSeq (build step 1) | yes, but not used | only for a from-scratch fetch, which is a new database vintage |
+
+## Resources
+
+Every figure is either **measured** (on the laptop: 10 CPUs, 7.65 GiB VM) or **scaled** from a
+measured constant by the size of the full catalog (75-86x the 133 Mbp sample, from two
+independent gene counts: 13.8 M genes in the Cayman paper, 11.9 M from the file's compressed
+size); the basis is stated. Nothing here is a guess about the cluster. Requests carry a
+margin; run once and tighten them from `sacct`.
+
+| job | cores | memory | wall | basis |
+|---|---|---|---|---|
+| fetch GMGC (login node) | 1 | - | about 20-35 min | download rate seen here 1.4-2.7 MB/s for 2.99 GB |
+| fetch BacDive + genomes (login node) | 8 | - | about 1.5 h + 50 min | **measured** (harvest 1.5 h; 9.4 GB genome fetch at 8 parallel) |
+| release build + benchmarks (`05`) | 16 | 32 GB | request 8 h | **measured** 2.5 h on 10 CPUs inside 7.65 GiB |
+| catalog annotation (`10`) | 16 | 24 GB | request 6 h | **scaled**: translation 10-12 min (1 thread), hmmsearch 21-25 min at 4 threads, Python 2.4-2.8 GB |
+| full catalog index (`11`, classic bwa) | 1 | 32 GB | request 6 h | **scaled**: classic bwa 92 s and 203 MB for 133 Mbp -> about 2 h and 15-17 GB |
+| catalog screen (`15`) | 1 | 8 GB | 30 min | reads one TSV |
+| BacDive proteins (`40`) | 40 x 4 | 8 GB each | 2 h each | **measured** 44 core-hours in all (19,965 s at 8 jobs) |
+| BacDive annotation (`41`) | 40 x 2 | 4 GB each | 1 h each | **measured** 3.6 core-hours in all (4,365 s at 3 jobs) |
+| analysis + NaCl model (`42`) | 8 | 16 GB | request 3 h | **measured** about 16 min analysis + about 30 min NaCl |
+| profile, one sample of <= 20M reads (`30`) | 8 | 32 GB | request 6 h | memory **scaled** (mapping loads the index, about 18-21 GB); time **not measured** at this scale |
+
+**Why classic bwa for the full index.** On the same 133 Mbp: bwa-mem3 builds in 33 s but peaks at
+1.37 GB (10.3 bytes per base), classic bwa takes 92 s and peaks at 0.2 GB (1.5 bytes per base).
+Scaled linearly to 10-11.5 Gbp that is about 100-120 GB for bwa-mem3 (and its own documentation
+gives a higher per-base cost above about 1 Gbp: 72 GB for the human genome, so well over 200 GB)
+against about 15-17 GB for classic bwa. Cayman builds its index with classic bwa too. The small
+hits-only index shipped in the release stays bwa-mem3.
+
+**Disk** (about 65 GB; ask for 100 GB): GMGC 3 GB, BacDive data 17.4 GB (**measured**), full catalog index
+about 18-21 GB (scaled), the release snapshot 2 GB, one build about 8 GB (**measured**: v10 is 7.6 GB),
+temporary protein FASTA for the annotation about 4 GB (scaled), the hits-only index and annotation a few GB.
+
+**Total compute**, summed over the table: roughly 44 + 4 core-hours for the BacDive arrays, about 40 for
+the release build, about 6 for the catalog annotation, 2 for the index, 5 for the analysis: on the order
+of 100 core-hours, none of it needing more than 32 GB per job.
 
 ## What to record
 

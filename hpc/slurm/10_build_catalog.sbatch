@@ -3,12 +3,15 @@
 # release (annotation + the small hits-only index, catalogs/<name>/). Needs the
 # release built first (05_pipeline.sbatch). The full competitive index does not
 # depend on the release: build it at the start, in parallel (11_index_catalog.sbatch).
-# Resource requests are placeholders: run once on the 40 MB sample first
-# (hpc/README.md), then set them from sacct's numbers.
+# Measured per stage on 159,560 real gut genes (133 Mbp), then scaled linearly by the
+# 75-86x size of the full file (11.9-13.8 M genes): translation (single-threaded Python)
+# 8.0 s -> about 10-12 min; hmmsearch 17.2 s at 4 threads -> about 21-25 min at 4 threads;
+# Python memory 203 bytes per gene -> 2.4-2.8 GB; the small hits-only index (about 5% of
+# genes) is a few GB at most. Requests: about 2x memory and 4x time.
 #SBATCH --job-name=osmo_catalog_annotate
-#SBATCH --cpus-per-task=16        # ADJUST
-#SBATCH --mem=64G                 # ADJUST
-#SBATCH --time=24:00:00           # ADJUST
+#SBATCH --cpus-per-task=16
+#SBATCH --mem=24G
+#SBATCH --time=06:00:00
 #SBATCH --output=osmo_catalog_annotate_%j.log
 set -euo pipefail
 cd "${REPO}"
