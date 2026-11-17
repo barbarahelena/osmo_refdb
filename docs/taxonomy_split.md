@@ -89,7 +89,7 @@ HMM annotate recall by identity to the nearest training reference:
 ## Profile (simulated reads, DIAMOND + cascade, per reporting unit)
 
 f1_all counts every non-background read called as the unit as a false
-positive (see `pipeline/11_compute_metrics.py`).
+positive (see `modules/local/compute_metrics/templates/11_compute_metrics.py`).
 
 Over the 27 reported units, median values:
 

@@ -32,7 +32,7 @@ dependencies:
       - statsmodels     # BacDive analysis (analyze.py, analyze_extended.py)
       - matplotlib
       - scipy
-      # NaCl-max model (pipeline/nacl_model/, run_pipeline.sh nacl_model)
+      # NaCl-max model (bin/nacl_model/, run_pipeline.sh nacl_model)
       - xgboost>=3.1   # older versions misread the saved model's base score
       - biopython
       - insilicoseq

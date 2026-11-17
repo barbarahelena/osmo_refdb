@@ -9,7 +9,7 @@
 # genome normalisation" for the build/package workflow:
 #
 #   FAMILIES_FILE=markers.yaml bash run_pipeline.sh all <release>-markers
-#   python pipeline/12_package_markers.py \
+#   python bin/12_package_markers.py \
 #       --marker-release releases/<release>-markers --release releases/<release>
 #
 # Same schema as families.yaml (see its header for every field).

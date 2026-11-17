@@ -30,40 +30,32 @@ showed it meaningfully more specific than DIAMOND for this reference
 database (see `hmms/osmo_refdb.hmm` + `--hmm_db`); pass `--method diamond`
 if you want to avoid the HMMER dependency there too.
 
-## Quick start (Docker)
+## Quick start
+
+The build is a Nextflow workflow (`main.nf`; see `docs/hpc.md` for the cluster setup and
+`containers/README.md` for the two container images):
 
 ```bash
-docker build -t osmo_refdb .
-docker run --rm -v "$(pwd):/opt/osmo_refdb" osmo_refdb -c "bash run_pipeline.sh all v1"
+nextflow run main.nf --release v1                           # build, benchmark, catalog, screen; stops at the gate
+nextflow run main.nf --release v1 -resume --gate_passed true   # BacDive, NaCl model, validation
 ```
 
-## Quick start (conda)
+## What the workflow does
 
-```bash
-conda env create -f environment.yml
-conda activate osmo_refdb
-bash run_pipeline.sh all v1
-```
-
-## What `run_pipeline.sh` does
-
-```
-bash run_pipeline.sh build v1        # fetch, cluster, split, align,
-                                      # hmmbuild, calibrate, press, diamond makedb
-bash run_pipeline.sh benchmark v1    # simulate reads, run DIAMOND+HMM, score
-bash run_pipeline.sh all v1          # build then benchmark
-bash run_pipeline.sh markers v1      # build + package marker genes into
-                                      # releases/v1/markers/ (see "Marker genes
-                                      # for copies-per-genome normalisation")
-CATALOG_NAME=gmgc_gut CATALOG_GENES=genes.fna.gz \
-bash run_pipeline.sh catalog v1      # annotate + index a gene catalog into
-                                      # releases/v1/catalogs/gmgc_gut/ (see
-                                      # "Gene catalogs")
-```
+`RELEASE_BUILD` (`subworkflows/local/release_build`), one process per step, each with its
+scripts in `modules/local/<step>/templates/`: fetch refs, split, align, hmmbuild + calibrate,
+DIAMOND database, then the calibration and test benchmarks. `RELEASE_CATALOG` adds the gene
+catalog and the screen; after the gate come the BacDive analysis, the NaCl model and the
+real-genome validation. `families.yaml` is the input (`--families_file` to point at a subset).
 
 Everything for a given release name is written to `releases/<name>/`
 (git-ignored), so you can keep multiple versions around and reproduce any
 of them independently.
+
+**Not yet converted from the old `run_pipeline.sh`:** the marker-gene build and packaging
+(`modules/local/package_markers/`), the taxonomy split and read-length / background options of
+the benchmark below. The sections that follow still describe them with the old
+`run_pipeline.sh` commands.
 
 By default, step 3's train/test split is a random shuffle of sequences —
 a held-out test sequence is still likely to have a close relative in
@@ -142,7 +134,7 @@ proved the two score distributions overlap almost completely. Adds that
 family's held-out negative sequences to the DIAMOND db as
 `<family>_decoy` references, purely so they can win DIAMOND's existing
 best-hit contest away from a mislabeled call; never appears in reported
-output. See `pipeline/08a_build_decoy_refs.py`'s docstring for the full
+output. See `modules/local/build_diamond/templates/08a_build_decoy_refs.py`'s docstring for the full
 mechanism.
 
 Optional `trim_gt` field (float, default 0.8): per-family override for
@@ -250,7 +242,7 @@ otherwise. Confirmed fusion candidates are routed to
 `refs/<family>.fusion_candidates.faa` — excluded from this family's own
 MAFFT alignment/HMM (a ~1000aa fused sequence would badly gap the
 alignment of ~800aa standalone sequences) but picked up by
-`pipeline/08d_build_fusion_refs.py`, which merges a pair's fusion
+`modules/local/build_diamond/templates/08d_build_fusion_refs.py`, which merges a pair's fusion
 candidates (deduped by UniProt accession) into one `<familyA>_<familyB>_fused`
 DIAMOND-only reference set. The same file also carries fused ORFs pulled
 out of a family's own NEGATIVE fetch under a bare locus tag — a fused ORF
@@ -267,8 +259,8 @@ Unlike a decoy reference, a fused-ORF hit is a
 is not added to `osmotool profile`/`annotate`'s exclusion lists. What a
 `_fused` hit should imply for the two individual family calls is
 complex-aware scoring logic that lives downstream in `osmotool`, not in
-this repo. See `pipeline/01c_check_length_outliers.py` and
-`pipeline/08d_build_fusion_refs.py` docstrings for the full mechanism.
+this repo. See `modules/local/release_refs/templates/01c_check_length_outliers.py` and
+`modules/local/build_diamond/templates/08d_build_fusion_refs.py` docstrings for the full mechanism.
 
 Optional `paralog_group: <name>` field: close paralogs in the panel that
 are expected to confuse each other at read level (e.g. the opu ATPases
@@ -403,7 +395,7 @@ minutes. Before committing to that, test-drive just the family/families
 you added:
 
 ```bash
-python pipeline/make_family_subset.py --families families.yaml \
+python modules/local/release_refs/templates/make_family_subset.py --families families.yaml \
     --only galE,mazG,murB --out families_test.yaml
 
 FAMILIES_FILE=families_test.yaml bash run_pipeline.sh all v3-test
@@ -424,14 +416,14 @@ everything together.
 | 1 | `01_fetch_refs.py` | Fetch positive + hard-negative sequences per family from UniProt |
 | 1b | `01b_check_negative_purity.py` | Flag/drop hard negatives that are actually true positives under a different gene symbol (DIAMOND identity check against the positive set; see `refs/negative_purity_manifest.tsv`) |
 | 1c | `01c_check_length_outliers.py` | Flag/drop sequences (positive or negative) whose length is way off their family's median -- likely a multi-domain fusion protein or a partial fragment, not a clean single-domain family member (see `refs/length_outlier_manifest.tsv`) |
-| 1d | *retired* | Merged local study sequences (`extra_sequences/`, gitignored, so not reproducible). Removed 2026-11-17; a rebuild from an older release's refs strips them with `pipeline/strip_ref_tag.py` (offline, re-clusters the four affected families, writes `refs/removed_tag_manifest.tsv`) |
+| 1d | *retired* | Merged local study sequences (`extra_sequences/`, gitignored, so not reproducible). Removed 2026-11-17; a rebuild from an older release's refs strips them with `modules/local/release_refs/templates/strip_ref_tag.py` (offline, re-clusters the four affected families, writes `refs/removed_tag_manifest.tsv`) |
 | 1e | `01e_add_refseq_positives.py` | For families opted in via `families.yaml`'s `refseq_gene_symbols` (only where UniProt's own gene-symbol population is already fully exhausted and a per-family novelty/contamination check confirmed it's safe), merge additional real positives from NCBI RefSeq into the fetched positive set (see `refs/refseq_positives_manifest.tsv`) |
 | 1f | `01f_build_random_background.py` | Sample a shared random bacterial background (default 5000 proteins carrying none of the panel's Pfam domains, minus any >= 70% identical to a panel positive) into `refs/random_background.faa`. Benchmark-only: never used for calibration or in either db. Step 9 simulates reads from it and step 11 reports each family's off-target false positives per million of those reads (see `refs/random_background_manifest.tsv`) |
 | 2 | `02_cluster_cdhit.sh` | CD-HIT cluster positives and negatives at 90% identity (remove redundancy, avoid train/test leakage from near-duplicates) |
 | 3 | `03_split_train_test.py` | Split positives three ways: train (builds the HMMs and DIAMOND db), calib (sets the HMM GA cutoffs, the DIAMOND bitscore cutoffs and, as simulated reads, the profile cascade config) and test (benchmark only). The held-out 20% (`--test-fraction`) is drawn as before, so train is unchanged from a two-way split; half of it (`--calib-fraction`) becomes calib. Up to v9 there was no calib set and the cutoffs were tuned on the benchmark's own positives. Also splits every family's negatives into train (cutoff calibration in steps 5-6 and 8b; decoy refs in step 8a) / test (benchmark negative reads), so the benchmark never scores negatives that set a cutoff. Non-decoy families hold out half their negatives (`--negative-test-fraction`, default 0.5); decoy families use `--test-fraction` |
 | 4 | `04_align_trim.sh` | MAFFT align + trimAl trim the TRAIN positives. trimAl's gap threshold defaults to 0.8 but can be overridden per family via `families.yaml`'s `trim_gt` |
 | 5 | `05_build_hmms.sh` | hmmbuild per family (or, for a family marked `pfam_model`, fetch that curated Pfam-A HMM directly instead); score the positive-calib and negative-train sets |
-| 6 | `06_calibrate_cutoffs.py` | Set per-family HMM GA (gathering) cutoffs (or, for `pfam_model` families, read and keep Pfam's own GA line, only flagging it if it doesn't separate this repo's own curated sets well). Where positives and negatives overlap, the cutoff is the median over 1000 seeded bootstrap resamples of the F1-optimal cutoff (`--cutoff-method sweep` for the plain F1 sweep): it moves less between builds (see `pipeline/cutoff_stability.py`). The manifest also records the plain sweep's cutoff, the bootstrap 10th-90th percentile range and `cutoff_range_wide` (the data do not pin the cutoff down) |
+| 6 | `06_calibrate_cutoffs.py` | Set per-family HMM GA (gathering) cutoffs (or, for `pfam_model` families, read and keep Pfam's own GA line, only flagging it if it doesn't separate this repo's own curated sets well). Where positives and negatives overlap, the cutoff is the median over 1000 seeded bootstrap resamples of the F1-optimal cutoff (`--cutoff-method sweep` for the plain F1 sweep): it moves less between builds (see `modules/local/build_hmms/templates/cutoff_stability.py`). The manifest also records the plain sweep's cutoff, the bootstrap 10th-90th percentile range and `cutoff_range_wide` (the data do not pin the cutoff down) |
 | 6b | `06b_qc_scorecard.py` | Consolidate negative-purity, length-outlier, and HMM-cutoff-overlap manifests into one per-family scorecard (`qc_scorecard.tsv`) flagging families that need review |
 | 7 | `07_press_hmms.sh` | Concatenate + hmmpress into one binary HMM database |
 | 8a | `08a_build_decoy_refs.py` | For families marked `decoy_from_negatives: true` (e.g. betL), turn their held-out negative-train split into searchable `<family>_decoy` DIAMOND references -- confusable paralogs (e.g. betT/caiT) that can win DIAMOND's best-hit contest away from a mislabeled call, since a single score threshold can't separate them (see betL's `families.yaml` entry) |
@@ -451,9 +443,9 @@ everything together.
 
 ### Gene catalogs
 
-(Running this on a cluster with a full-size gut catalog: `hpc/README.md`.
+(Running this on a cluster with a full-size gut catalog: `docs/hpc.md`.
 The prevalence-filtered GMGC catalogs are on Zenodo, record 10473258;
-`hpc/fetch_zenodo_member.py` downloads one habitat without the 19.3 GB zip.)
+`modules/local/fetch_gmgc/templates/fetch_zenodo_member.py` downloads one habitat without the 19.3 GB zip.)
 
 `osmotool profile --catalog NAME` assigns reads to a gene catalog the
 release ships under `catalogs/NAME/` before translated search, the approach
@@ -480,7 +472,7 @@ bash run_pipeline.sh catalog v10
   depend on the release, only on the gene file and the aligner. It is about
   3.4 bytes per byte of FASTA on the catalogs measured so far (a 137 MB
   sample of the human-gut catalog gave a 472 MB index); the size for a whole
-  gut catalog has not been measured (see `hpc/README.md`). It is built separately
+  gut catalog has not been measured (see `docs/hpc.md`). It is built separately
   and distributed on its own:
 
   ```bash
@@ -537,7 +529,7 @@ bash run_pipeline.sh markers v9        # builds + benchmarks releases/v9-markers
 
 `markers` is equivalent to
 `FAMILIES_FILE=markers.yaml bash run_pipeline.sh all v9-markers` followed by
-`python pipeline/12_package_markers.py --marker-release releases/v9-markers --release releases/v9`;
+`python modules/local/package_markers/templates/12_package_markers.py --marker-release releases/v9-markers --release releases/v9`;
 the packaging step can also add markers to an existing release (e.g. v8)
 without rebuilding it. Review `releases/<name>-markers/results/metrics/summary.tsv`
 before shipping: a marker with poor DIAMOND precision inflates the
@@ -553,10 +545,10 @@ per-family sensitivity coefficients from the simulated-read benchmark
 ## Real-genome validation
 
 The `benchmark` step above measures performance on reads simulated from
-UniProt-derived sequences. `pipeline/real_genome_validation/` holds a
+UniProt-derived sequences. `docs/real_genome_validation.md` holds a
 separate, complementary (semi-manual) workflow for checking gene calls
 against a real, independently-annotated genome instead — see
-`pipeline/real_genome_validation/README.md` for the full procedure.
+`docs/real_genome_validation.md` for the full procedure.
 
 ## Releasing a database for `osmotool` to use
 

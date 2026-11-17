@@ -1,0 +1,9 @@
+genome	family	orf_id
+ecoli_k12	nhaA	NC_000913.3_17
+ecoli_k12	kdpA	NC_000913.3_677
+ecoli_k12	otsA	NC_000913.3_1873
+ecoli_k12	otsB	NC_000913.3_1874
+ecoli_k12	proX	NC_000913.3_2633
+ecoli_k12	mscS	NC_000913.3_2871
+ecoli_k12	mscL	NC_000913.3_3219
+ecoli_k12	proP	NC_000913.3_4029

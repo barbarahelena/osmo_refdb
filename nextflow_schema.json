@@ -1,0 +1,180 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/barbarahelena/osmo_refdb/main/nextflow_schema.json",
+  "title": "osmo_refdb-hpc pipeline parameters",
+  "description": "osmo_refdb canonical build, catalog, BacDive and NaCl model on SLURM + Apptainer. Documents the parameters; not enforced (no nf-schema plugin).",
+  "type": "object",
+  "$defs": {
+    "input_output_options": {
+      "title": "Input and output options",
+      "type": "object",
+      "fa_icon": "fas fa-terminal",
+      "description": "",
+      "properties": {
+        "repo": {
+          "type": "string",
+          "description": "A clone of osmo_refdb at the commit to build (absolute path)",
+          "format": "directory-path"
+        },
+        "release": {
+          "type": "string",
+          "description": "Name of the NEW release; releases/<release> must not exist yet"
+        },
+        "reuse_refs_from": {
+          "type": "string",
+          "description": "Release snapshot to build from, relative to repo (refs/, alignments/, ...)",
+          "default": "releases/v10"
+        },
+        "catalog_genes": {
+          "type": "string",
+          "description": "Where the GMGC gene file goes or is: <dir>/GMGC10.human-gut.95nr.0.5.percent.prevalence.fna.gz (absolute)",
+          "pattern": "GMGC10\\.human-gut\\.95nr\\.0\\.5\\.percent\\.prevalence\\.fna\\.gz$"
+        },
+        "full_index_dir": {
+          "type": "string",
+          "description": "Where the full catalog index goes (absolute)",
+          "format": "directory-path"
+        },
+        "data_dir": {
+          "type": "string",
+          "description": "Release-independent BacDive data, under repo",
+          "default": "data/phenotype_validation"
+        },
+        "outdir": {
+          "type": "string",
+          "description": "-entry profile_samples writes <outdir>/profile",
+          "default": "results"
+        },
+        "samples": {
+          "type": "string",
+          "description": "-entry profile_samples: CSV with columns id,r1,r2",
+          "format": "file-path"
+        }
+      },
+      "required": [
+        "repo",
+        "release",
+        "reuse_refs_from",
+        "catalog_genes",
+        "full_index_dir"
+      ]
+    },
+    "catalog_options": {
+      "title": "Catalog options",
+      "type": "object",
+      "fa_icon": "fas fa-dna",
+      "description": "",
+      "properties": {
+        "catalog_name": {
+          "type": "string",
+          "description": "Name used by profile --catalog",
+          "default": "gmgc_gut"
+        },
+        "catalog_source": {
+          "type": "string",
+          "description": "Free-text source recorded in the catalog",
+          "default": "GMGC v1.0 human gut, prevalence > 0.5% (Ducarmon et al., Cayman)"
+        },
+        "catalog_source_url": {
+          "type": "string",
+          "description": "Source URL recorded in the catalog",
+          "default": "https://zenodo.org/records/10473258"
+        },
+        "catalog_force": {
+          "type": "boolean",
+          "description": "Rebuild the catalog annotation even if it exists",
+          "default": false
+        }
+      }
+    },
+    "run_options": {
+      "title": "Run options",
+      "type": "object",
+      "fa_icon": "fas fa-cogs",
+      "description": "",
+      "properties": {
+        "nchunks": {
+          "type": "integer",
+          "description": "Tasks per per-genome step (BacDive proteins, BacDive annotation)",
+          "default": 40,
+          "minimum": 1
+        },
+        "split_mode": {
+          "type": "string",
+          "description": "Calibration/test split of the release build",
+          "default": "random",
+          "enum": [
+            "random",
+            "taxonomy"
+          ]
+        },
+        "gate_passed": {
+          "type": "boolean",
+          "description": "The screen has been read and accepted: also run BacDive and the NaCl model",
+          "default": false
+        }
+      }
+    },
+    "cluster_options": {
+      "title": "Cluster options",
+      "type": "object",
+      "fa_icon": "fas fa-server",
+      "description": "",
+      "properties": {
+        "queue": {
+          "type": "string",
+          "description": "SLURM partition (default profile only); empty = the cluster's default"
+        },
+        "slurm_extra": {
+          "type": "string",
+          "description": "Extra sbatch options, e.g. '--account=myproject' (default profile only)",
+          "default": ""
+        },
+        "extra_binds": {
+          "type": "string",
+          "description": "Comma-separated directories outside repo that jobs read or write",
+          "default": ""
+        },
+        "work_dir": {
+          "type": "string",
+          "description": "Nextflow's work directory; empty = ./work (use scratch if repo is in $HOME)"
+        }
+      }
+    },
+    "institutional_config_options": {
+      "title": "Institutional config options",
+      "type": "object",
+      "fa_icon": "fas fa-university",
+      "description": "",
+      "properties": {
+        "custom_config_version": {
+          "type": "string",
+          "description": "Commit of nf-core/configs the institutional profiles come from",
+          "default": "0a2d887d8373bbf0746abd3eb3c4b0ca686c825f"
+        },
+        "custom_config_base": {
+          "type": "string",
+          "description": "Base URL or local clone of nf-core/configs",
+          "default": "https://raw.githubusercontent.com/nf-core/configs/0a2d887d8373bbf0746abd3eb3c4b0ca686c825f"
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "$ref": "#/$defs/input_output_options"
+    },
+    {
+      "$ref": "#/$defs/catalog_options"
+    },
+    {
+      "$ref": "#/$defs/run_options"
+    },
+    {
+      "$ref": "#/$defs/cluster_options"
+    },
+    {
+      "$ref": "#/$defs/institutional_config_options"
+    }
+  ]
+}
