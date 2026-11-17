@@ -27,7 +27,7 @@ DIAMOND_TRAINREFS / DIAMOND_MAKEDB folds into the DIAMOND db like any other fami
 Unlike 08a's decoy references, a fused-ORF hit is a REAL, reportable
 detection target (it genuinely carries both subunits), not a sink for
 mislabeled calls -- it is NOT added to the profile/annotate exclusion lists
-in write_scope_manifest.py. Complex-aware scoring for what a single
+in DIAMOND_SCOPE. Complex-aware scoring for what a single
 "<familyA>_<familyB>_fused" hit implies for both individual family calls
 lives downstream, in osmotool (Task 2), not in this repo.
 

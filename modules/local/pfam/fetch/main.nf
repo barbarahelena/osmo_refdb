@@ -20,7 +20,26 @@ process PFAM_FETCH {
 
     script:
     """
-    python ${moduleDir}/templates/fetch_pfam_hmm.py ${meta.pfam_model} ${meta.id} ${meta.id}.hmm
+    python3 <<'PYEOF'
+    # NAME and ACC are rewritten to the family's name: hmmpress's index needs both unique across the
+    # combined database, and several families can adopt one Pfam accession (trkH/ktrB/ktrD -> PF02386).
+    import gzip
+    import re
+
+    import requests
+
+    accession, family, hmm_file = "${meta.pfam_model}", "${meta.id}", "${meta.id}.hmm"
+    r = requests.get(f"https://www.ebi.ac.uk/interpro/api/entry/pfam/{accession}/",
+                     params={"annotation": "hmm"}, timeout=30)
+    r.raise_for_status()
+    text = gzip.decompress(r.content).decode()
+    text = re.sub(r"^NAME  .*\$", f"NAME  {family}", text, count=1, flags=re.MULTILINE)
+    if re.search(r"^ACC   ", text, flags=re.MULTILINE):
+        text = re.sub(r"^ACC   .*\$", f"ACC   {family}", text, count=1, flags=re.MULTILINE)
+    with open(hmm_file, "w") as fh:
+        fh.write(text)
+    print(f"[{family}] curated Pfam model {accession} -> {hmm_file}")
+    PYEOF
     """
 
     stub:

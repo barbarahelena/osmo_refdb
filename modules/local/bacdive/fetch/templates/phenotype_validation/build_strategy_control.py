@@ -16,7 +16,7 @@ accession, whether or not it has a halophily record, from:
   salt-in bacteria   order Halanaerobiales, genera Salinibacter and Salisaeta
 
 and writes <dir>/strategy_control/pilot_strains.tsv in build_table.py's
-format (plus <dir>/bacdive_classes.tsv, the class of every BacDive strain), so fetch_genomes.sh, run_random_panel.sh and run_annotate_cached.sh
+format (plus <dir>/bacdive_classes.tsv, the class of every BacDive strain), so BACDIVE_FETCH, BACDIVE_PROTEINS and BACDIVE_ANNOTATE
 run on that directory unchanged. Genomes already downloaded for the main
 analysis are linked, not fetched again. The salt-out bacterial reference is
 the main feature matrix; analyze_strategy_control.py joins the two.

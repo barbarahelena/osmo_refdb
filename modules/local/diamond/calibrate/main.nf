@@ -1,6 +1,5 @@
-// The DIAMOND database's release files besides the database itself: each family's bit-score cutoff
-// from its calibration searches (templates/calibrate_diamond_cutoffs.py --hits), and the families
-// kept out of profile's and annotate's output (templates/write_scope_manifest.py).
+// Each family's DIAMOND bit-score cutoff, from its calibration searches
+// (templates/calibrate_diamond_cutoffs.py --hits): <name>.diamond_cutoffs.tsv.
 process DIAMOND_CALIBRATE {
     tag "${name}"
     label 'process_single'
@@ -18,7 +17,6 @@ process DIAMOND_CALIBRATE {
 
     output:
     path("${name}.diamond_cutoffs.tsv"),                                                  emit: cutoffs
-    path("${name}.{profile,annotate}_excluded_families.txt"),                             emit: excluded
     tuple val("${task.process}"), val('python'), eval("python3 --version 2>&1 | cut -d' ' -f2"), topic: versions, emit: versions_python
     tuple val("${task.process}"), val('numpy'), eval("python3 -c 'import numpy; print(numpy.__version__)'"), topic: versions, emit: versions_numpy
     tuple val("${task.process}"), val('pyyaml'), eval("python3 -c 'import yaml; print(yaml.__version__)'"), topic: versions, emit: versions_pyyaml
@@ -28,13 +26,10 @@ process DIAMOND_CALIBRATE {
     mkdir -p hits
     python ${moduleDir}/templates/calibrate_diamond_cutoffs.py --refs ${refs} --release . \\
         --release-name ${name} --families ${families} --hits hits --out ${name}.diamond_cutoffs.tsv
-    python ${moduleDir}/templates/write_scope_manifest.py --families ${families} \\
-        --profile-out ${name}.profile_excluded_families.txt \\
-        --annotate-out ${name}.annotate_excluded_families.txt
     """
 
     stub:
     """
-    touch ${name}.diamond_cutoffs.tsv ${name}.profile_excluded_families.txt ${name}.annotate_excluded_families.txt
+    touch ${name}.diamond_cutoffs.tsv
     """
 }

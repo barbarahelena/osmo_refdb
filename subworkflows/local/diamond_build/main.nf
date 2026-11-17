@@ -4,7 +4,8 @@
 //   DIAMOND_TRAINREFS   the sequences the database is built from (<name>.train_refs.faa)
 //   DIAMOND_MAKEDB      <name>.dmnd
 //   DIAMOND_BLASTP      per family, its calibration sets against the database
-//   DIAMOND_CALIBRATE   the per-family bit-score cutoffs and the excluded-family lists
+//   DIAMOND_CALIBRATE   the per-family bit-score cutoffs
+//   DIAMOND_SCOPE       the families kept out of reported output (excluded-family lists)
 //
 include { diamond_sets; refs_kind } from '../utils_osmo_refdb_pipeline/main'
 include { DIAMOND_EXTRAREFS } from '../../../modules/local/diamond/extrarefs/main'
@@ -12,6 +13,7 @@ include { DIAMOND_TRAINREFS } from '../../../modules/local/diamond/trainrefs/mai
 include { DIAMOND_MAKEDB    } from '../../../modules/local/diamond/makedb/main'
 include { DIAMOND_BLASTP    } from '../../../modules/local/diamond/blastp/main'
 include { DIAMOND_CALIBRATE } from '../../../modules/local/diamond/calibrate/main'
+include { DIAMOND_SCOPE     } from '../../../modules/local/diamond/scope/main'
 
 workflow DIAMOND_BUILD {
     take:
@@ -39,9 +41,10 @@ workflow DIAMOND_BUILD {
         }
     DIAMOND_BLASTP(jobs, db)
     DIAMOND_CALIBRATE(name, refs, DIAMOND_BLASTP.out.hits.map { _meta, f -> f }.collect().ifEmpty([]), families)
+    DIAMOND_SCOPE(name, families)
 
     emit:
     extra         = extra                                            // the decoy and fused-ORF references
-    release_files = DIAMOND_TRAINREFS.out.fasta.mix(db, DIAMOND_CALIBRATE.out.cutoffs, DIAMOND_CALIBRATE.out.excluded)
+    release_files = DIAMOND_TRAINREFS.out.fasta.mix(db, DIAMOND_CALIBRATE.out.cutoffs, DIAMOND_SCOPE.out.excluded)
                         .flatten().collect()                         // the release's DIAMOND files
 }

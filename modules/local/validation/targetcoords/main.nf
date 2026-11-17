@@ -18,9 +18,39 @@ process VALIDATION_TARGETCOORDS {
 
     script:
     """
-    python ${moduleDir}/templates/real_genome_validation/extract_target_coords.py \\
-        --prodigal-faa ${proteins} --targets ${targets} --genome ${meta.id} \\
-        --out ${meta.id}.gene_regions.tsv
+    python3 <<'PYEOF'
+    # Prodigal's headers carry each ORF's coordinates: >contig_n # start # end # strand # attrs.
+    # target_orfs.tsv names the ORF of each target family in this genome.
+    import csv
+
+    genome = "${meta.id}"
+    with open("${targets}") as fh:
+        target_orfs = {r["family"]: r["orf_id"] for r in csv.DictReader(fh, delimiter="\\t")
+                       if r["genome"] == genome}
+    orf_to_family = {orf: fam for fam, orf in target_orfs.items()}
+
+    found = {}
+    with open("${proteins}") as fh:
+        for line in fh:
+            if not line.startswith(">"):
+                continue
+            parts = [p.strip() for p in line[1:].split("#")]
+            orf_id = parts[0].split()[0]
+            if orf_id in orf_to_family:
+                found[orf_to_family[orf_id]] = (orf_id.rsplit("_", 1)[0], int(parts[1]), int(parts[2]))
+
+    missing = set(target_orfs) - set(found)
+    if missing:
+        print(f"WARNING: no coordinates for {sorted(missing)}: are these the proteins of the annotate run "
+              f"that found them?")
+
+    with open(f"{genome}.gene_regions.tsv", "w", newline="") as fh:
+        writer = csv.writer(fh, delimiter="\\t")
+        writer.writerow(["family", "contig", "start", "end"])
+        for family, (contig, start, end) in sorted(found.items()):
+            writer.writerow([family, contig, start, end])
+            print(f"[{family}] {contig}:{start}-{end} ({end - start + 1}bp)")
+    PYEOF
     """
 
     stub:

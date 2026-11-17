@@ -22,11 +22,64 @@ process BACDIVE_ANNOTATE {
     tuple val("${task.process}"), val('hmmer'), eval("hmmsearch -h | grep -oE 'HMMER [0-9.]+' | cut -d' ' -f2"), topic: versions, emit: versions_hmmer
 
     script:
-    def run = "${moduleDir}/templates/phenotype_validation/run_annotate_cached.sh"
     """
+    # osmotool annotate per genome, <par> at a time, one thread each, from the Prodigal proteins
+    # BACDIVE_PROTEINS cached (<strains_dir>/<bid>/<bid>.faa.gz, Prodigal -p meta as annotate runs it),
+    # passed with --proteins so Prodigal is not rerun (checked on 3 genomes against v8: gene_counts,
+    # systems and gene_coordinates byte-identical to annotating the genome itself). One genome's failure
+    # is reported (rc=...) and does not stop the others. CHUNK=i/K: every K-th genome from the i-th.
+    annotate_genomes() (   # <genomes_dir> <strains_dir> <out_dir> <release> <parallel>
+    set +e -uo pipefail
+    GENOMES=\${1:?usage: annotate_genomes <genomes_dir> <strains_dir> <out_dir> <release> [par]}
+    STRAINS=\${2:?missing strains_dir}
+    OUT=\${3:?missing out_dir}
+    REL=\${4:?missing release dir}
+    PAR=\${5:-8}
+    mkdir -p "\$OUT"
+
+    one() {
+      g="\$1"; STRAINS="\$2"; OUT="\$3"; REL="\$4"
+      b=\$(basename "\$g"); bid=\${b%%_*}
+      d="\$OUT/\$bid"
+      [ -s "\$d/\$bid.gene_counts.tsv" ] && { echo "\$bid cached"; return 0; }
+      prot="\$STRAINS/\$bid/\$bid.faa.gz"
+      [ -s "\$prot" ] || { echo "\$bid rc=no_cached_proteins"; return 0; }
+      mkdir -p "\$d"
+      t0=\$SECONDS
+      input="\$g"
+      case "\$g" in
+        *.gz) input="\$d/\$bid.input.fna"
+              gunzip -c "\$g" > "\$input" || { echo "\$bid rc=gunzip_failed"; rm -f "\$input"; return 0; } ;;
+      esac
+      gunzip -c "\$prot" > "\$d/\$bid.input.faa" || { echo "\$bid rc=protein_gunzip_failed"; rm -f "\$d/\$bid.input.faa"; return 0; }
+      osmotool annotate "\$REL" "\$input" --proteins "\$d/\$bid.input.faa" \\
+        --out_prefix "\$d/\$bid" --threads 1 >"\$d/\$bid.log" 2>&1
+      rc=\$?
+      [ "\$input" != "\$g" ] && rm -f "\$input"
+      rm -f "\$d/\$bid.input.faa"
+      echo "\$bid rc=\$rc wall=\$((SECONDS-t0))s"
+      [ \$rc -ne 0 ] && tail -5 "\$d/\$bid.log"
+      return 0
+    }
+    export -f one
+
+    # CHUNK="i/K" (SLURM arrays): process only the genomes with (position - 1) % K == i,
+    # so K array tasks split the sorted genome list between them without overlap.
+    chunk_filter() {
+      if [ -n "\${CHUNK:-}" ]; then awk -v i="\${CHUNK%/*}" -v k="\${CHUNK#*/}" '(NR - 1) % k == i'; else cat; fi
+    }
+
+    T0=\$SECONDS
+    INPUTS="\$OUT/.inputs\${CHUNK:+.\${CHUNK%/*}}"
+    find "\$GENOMES/" -maxdepth 1 \\( -name '*.fna' -o -name '*.fna.gz' \\) | sort | chunk_filter > "\$INPUTS"
+    xargs -P "\$PAR" -I{} bash -c 'one "\$@"' _ {} "\$STRAINS" "\$OUT" "\$REL" < "\$INPUTS"
+    N=\$(wc -l < "\$INPUTS" | tr -d ' '); W=\$((SECONDS-T0))
+    echo "=== \${PAR}x1 (cached proteins): \${W}s wall for \$N genomes = \$(python3 -c "print(f'{\$W/\$N:.2f}')")s/genome ==="
+    )
+
     export CHUNK=${chunk}/${params.nchunks}
-    bash ${run} ${genomes} ${strains} annotate db ${task.cpus}
-    bash ${run} control_genomes ${control_strains} control_annotate db ${task.cpus}
+    annotate_genomes ${genomes} ${strains} annotate db ${task.cpus}
+    annotate_genomes control_genomes ${control_strains} control_annotate db ${task.cpus}
     """
 
     stub:

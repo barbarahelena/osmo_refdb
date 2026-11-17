@@ -67,7 +67,7 @@ URLs in the module's `container` line.
 ### Still to do (checked against the registry on 2026-11-17)
 
 - **To rebuild.** Seqera images have no `find`, `xargs`, `gzip`, `zcat` or `cmp`. `bacdive-fetch` needs
-  `conda-forge::gzip` and `conda-forge::findutils` (`fetch_genomes.sh`); its `environment.yml` lists them.
+  `conda-forge::gzip` and `conda-forge::findutils` (the genome download in `BACDIVE_FETCH`); its `environment.yml` lists them.
 - `python=3.11` resolved to 3.11.0 in every Seqera image. The osmotool image has 3.11.18. To have
   one Python everywhere, pin `python=3.11.18` and rebuild.
 

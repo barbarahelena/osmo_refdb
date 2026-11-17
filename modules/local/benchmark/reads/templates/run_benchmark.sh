@@ -100,7 +100,20 @@ if osmotool profile --help 2>/dev/null | grep -q -- "--no_markers"; then
     CASCADE_ARGS+=(--no_markers)
 fi
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# One sample's HMM pass: R1 and R2 together, OrfM's 6-frame ORFs, hmmscan against the HMM db.
+# No --cut_ga: the GA cutoffs were calibrated on full-length proteins, which a short read's ORF
+# fragment never reaches; compute_metrics.py sweeps the raw bit scores instead, as for DIAMOND.
+translate_and_hmmscan() (   # <R1> <R2> <hmm_db> <out_prefix> <threads>
+    set -euo pipefail
+    local_prefix="$4"
+    mkdir -p "$(dirname "${local_prefix}")"
+    zcat -f "$1" "$2" > "${local_prefix}.merged.fastq"
+    orfm "${local_prefix}.merged.fastq" > "${local_prefix}.orfs.faa"
+    hmmscan --cpu "${5:-4}" --tblout "${local_prefix}.hmmscan.tblout" --noali "$3" "${local_prefix}.orfs.faa" > /dev/null
+    rm -f "${local_prefix}.merged.fastq"
+    echo "  HMM hits: ${local_prefix}.hmmscan.tblout"
+)
+export -f translate_and_hmmscan
 
 mkdir -p "${OUT_DIR}/diamond" "${OUT_DIR}/hmm"
 
@@ -142,8 +155,8 @@ for R1 in "${READS_DIR}"/*_R1.fastq*; do
     [ -f "${R2}" ] || { echo "  SKIP ${SAMPLE}: no R2 found" >&2; continue; }
     printf '%s\t%s\t%s\n' "${R1}" "${R2}" "${OUT_DIR}/hmm/${SAMPLE}"
 done | xargs -P "${JOBS}" -L 1 bash -c \
-    'bash "$0" "$3" "$4" "$1" "$5" "$2"' \
-    "${SCRIPT_DIR}/translate_and_hmmscan.sh" "${HMM_DB}" "${HMM_THREADS}"
+    'translate_and_hmmscan "$3" "$4" "$1" "$5" "$2"' \
+    _ "${HMM_DB}" "${HMM_THREADS}"
 
 echo ""
 echo "Done. Now run: python compute_metrics.py --results ${OUT_DIR} --out ${OUT_DIR}/metrics"

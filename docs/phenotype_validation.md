@@ -429,33 +429,30 @@ within-genus partial r, which has the random-panel null, does not move.
 
 ## Running it
 
-Scripts live here. Output goes to `releases/<release>/phenotype_validation_full/`
-(git-ignored). Use osmotool v0.7.0 or later: older pins lack part of the
-43-family list, and `annotate` under-reports without it.
+The workflow runs it, after the gate (`--gate_passed true`, `docs/hpc.md`), on the frozen release:
+
+| Step | What it does |
+|---|---|
+| `BACDIVE_FETCH` | BacDive harvest (`harvest_bacdive.sh`, about 1,820 calls, 1.5 h; batches in `--bacdive_snapshot` are not fetched again), the phenotype table (`build_table.py`), the genomes from NCBI (gzipped, about 9.4 GB), and the within-domain salt-in control's strains and genomes (`build_strategy_control.py`) |
+| `BACDIVE_PROTEINS` | per genome, in chunks: genome size and GC, Prodigal proteins (`-p meta`, as osmotool annotate runs it; kept for the next step), the random-pool search (about 5.5 h at 8 jobs) |
+| `BACDIVE_ANNOTATE` | per genome, in the same chunks: osmotool annotate on those proteins, so Prodigal is not rerun |
+| `BACDIVE_MATRIX` | the feature matrix (`build_matrix.py`; drops assemblies under 1 Mb) |
+| `BACDIVE_ANALYZE` | tests 1-6 (`analyze.py`, `analyze_extended.py`) and the salt-in control, test 6b (`analyze_strategy_control.py`) |
+| `NACL_MODEL` | the NaCl model (`docs/nacl_model.md`) |
+
+Genomes, proteins and the pool search do not depend on the release: a run for another release reuses
+them through `-resume`. The release's results are published to `releases/<release>/phenotype_validation/`
+(the annotation, the matrix, the test tables and their printed reports, `*.txt`); the BacDive tables and
+harvested batches to `<repo>/<data_dir>`. The scripts each step runs are in its module
+(`modules/local/bacdive/<step>/`); the analysis scripts can also be run by hand on those published
+files (`--help`).
+
+The random-family pool is the one part that is not in the workflow: it is built once, by hand, and
+given to it as a snapshot (`--random_panel`, `pool.hmm` and `pool_families.tsv`):
 
 ```bash
-PV=releases/v8/phenotype_validation_full
-RP="$PV/random_panel"
-
-# 1. BacDive harvest (~1,820 calls, ~1.5 h). Cached batches are skipped, so a
-#    rerun only fetches what failed. Keep sweep and sample runs in separate dirs.
-bash  modules/local/bacdive/fetch/templates/phenotype_validation/harvest_bacdive.sh "$PV" sweep
-
-# 2. phenotype table, one row per strain with NaCl max and a genome accession
-python modules/local/bacdive/fetch/templates/phenotype_validation/build_table.py --dir "$PV"
-
-# 3. genomes from NCBI (kept gzipped, ~9.4 GB)
-PAR=8 bash modules/local/bacdive/fetch/templates/phenotype_validation/fetch_genomes.sh "$PV"
-
-# 4. osmotool annotate in the pinned image, one thread per job
-docker run --rm -v "$PWD":/work -w /work --entrypoint bash osmo_refdb:latest \
-    modules/local/bacdive/annotate/templates/phenotype_validation/run_annotate.sh "$PV" releases/v8 10 1
-
-# 5. feature matrix (drops assemblies under 1 Mb) and first readout
-python modules/local/bacdive/matrix/templates/build_matrix.py --dir "$PV"
-python modules/local/bacdive/analyze/templates/analyze.py      --dir "$PV"
-
-# 6. random-family pool from Pfam-A.hmm.gz, screened on the 43 pilot proteomes
+RP=data/phenotype_validation/random_panel
+# random-family pool from Pfam-A.hmm.gz, screened on the 43 pilot proteomes
 python modules/local/bacdive/proteins/templates/phenotype_validation/build_random_pool.py candidates \
     --pfam "$RP/Pfam-A.hmm.gz" --families families.yaml --out-dir "$RP" --n 6000
 hmmsearch --cut_ga --cpu 8 --noali --tblout "$RP/screen.tbl" -o /dev/null \
@@ -463,37 +460,10 @@ hmmsearch --cut_ga --cpu 8 --noali --tblout "$RP/screen.tbl" -o /dev/null \
 python modules/local/bacdive/proteins/templates/phenotype_validation/build_random_pool.py pool \
     --pfam "$RP/Pfam-A.hmm.gz" --out-dir "$RP" --screen "$RP/screen.tbl" \
     --osmo-matrix releases/v8/phenotype_validation/feature_matrix.tsv --n-genomes 43
-
-# 7. genome size, GC and pool search per genome (~5.5 h at 8 jobs), then
-#    tests 1-6 (needs numpy, pandas, scipy, scikit-learn, statsmodels)
-docker run --rm -v "$PWD":/work -w /work --entrypoint bash osmo_refdb:latest \
-    modules/local/bacdive/proteins/templates/phenotype_validation/run_random_panel.sh "$PV/genomes" "$PV/random_panel/strains" "$RP/pool.hmm" 8
-python modules/local/bacdive/analyze/templates/analyze_extended.py --dir "$PV"
 ```
 
 Notes:
 
-- **Another release.** Genomes, Prodigal proteins and the random-pool search
-  do not depend on the release. Make `releases/<rel>/phenotype_validation/`
-  with `genomes` and `random_panel` symlinked to the v8 folder and
-  `pilot_strains.tsv` copied in, then run `run_annotate_cached.sh` (which
-  reuses the cached Prodigal proteins), `build_matrix.py`, `analyze.py` and
-  `analyze_extended.py` on it.
-- **Within-domain salt-in control (test 6b).**
-  ```bash
-  python modules/local/bacdive/fetch/templates/phenotype_validation/build_strategy_control.py --dir "$PV"
-  PAR=4 bash modules/local/bacdive/fetch/templates/phenotype_validation/fetch_genomes.sh "$PV/strategy_control"
-  docker run --rm -v "$PWD":/work -w /work --entrypoint bash osmo_refdb:latest \
-      modules/local/bacdive/proteins/templates/phenotype_validation/run_random_panel.sh "$PV/strategy_control/genomes" "$PV/strategy_control/random_panel/strains" "$RP/pool.hmm" 3
-  # per release: symlink genomes + random_panel into
-  # releases/<rel>/phenotype_validation/strategy_control/, then
-  docker run --rm -v "$PWD":/work -w /work --entrypoint bash osmo_refdb:latest \
-      modules/local/bacdive/annotate/templates/phenotype_validation/run_annotate_cached.sh \
-      "$PV/strategy_control/genomes" "$PV/strategy_control/random_panel/strains" \
-      releases/<rel>/phenotype_validation/strategy_control/annotate releases/<rel> 3
-  python modules/local/bacdive/analyze/templates/analyze_strategy_control.py --dir "$PV" \
-      --osmo-dir releases/<rel>/phenotype_validation
-  ```
 - Run one thread per job and parallelise across genomes. In the pilot, extra
   threads per job made the HMM step slower (measured with hmmscan).
 - The feature matrix has 44 columns, one more than `families.yaml`. The extra

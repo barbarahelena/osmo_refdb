@@ -29,7 +29,7 @@ away from a weak betL hit. Adding them as "<family>_decoy"-labelled entries
 makes that existing best-hit contest competitive for real betT/caiT
 signal, instead of leaning on a threshold the calibration data proves can't
 work. Decoy hits are excluded from all reported output (see
-write_scope_manifest.py) -- they exist purely to be won against, never
+DIAMOND_SCOPE) -- they exist purely to be won against, never
 to be counted.
 
 Only families explicitly marked `decoy_from_negatives: true` in

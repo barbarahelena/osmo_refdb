@@ -132,7 +132,7 @@ it to tighten `conf/base.config`.
 |---|---|---|
 | GMGC human gut catalog (2.99 GB) | yes | `CATALOG_FETCH` (storeDir) -> `modules/local/catalog/fetch/templates/fetch_zenodo_member.py`, resumable, CRC-checked |
 | BacDive strain records | yes, no credentials | `BACDIVE_FETCH` (its template) -> `harvest_bacdive.sh sweep`; with `--bacdive_snapshot <dir>/bacdive_raw` its batches are not fetched again, so a shipped snapshot reproduces the published table (BacDive itself is live). The batches are published to `<repo>/<data_dir>/bacdive_raw` |
-| BacDive genomes (about 9.4 GB), salt-in control genomes (0.7 GB) | yes | `fetch_genomes.sh` from NCBI FTP, resumable |
+| BacDive genomes (about 9.4 GB), salt-in control genomes (0.7 GB) | yes | `BACDIVE_FETCH`, from NCBI FTP; a download is checked before it counts |
 | Pfam-A 39.0 | yes, added | `fetch_pfam.sh` (pinned URL); only needed to re-derive the random-panel pool |
 | random-panel pool (`pool.hmm`, `pool_families.tsv`, 13 MB) | **no: a snapshot** (`--random_panel`, default `<repo>/<data_dir>/random_panel`) | re-deriving it needs `screen_proteomes.faa`, which no script creates |
 | release snapshot (`refs/`, `alignments/`, ...) | **no: rsync** | UniProt/RefSeq are live, so the snapshot is the input |

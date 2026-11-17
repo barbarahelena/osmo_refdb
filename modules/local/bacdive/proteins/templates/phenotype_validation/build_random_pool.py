@@ -121,7 +121,7 @@ def cmd_pool(args) -> None:
     cands = {r["name"]: r for r in csv.DictReader(open(out / "candidates.tsv"), delimiter="\t")}
 
     # tblout: target(protein) - query(model) ... ; protein ids from the pilot
-    # proteomes are "<bacdive_id>|<prodigal id>" (see run_random_panel.sh)
+    # proteomes are "<bacdive_id>|<prodigal id>" (see BACDIVE_PROTEINS)
     genomes_hit: dict[str, set[str]] = {}
     for line in open(args.screen):
         if line.startswith("#"):

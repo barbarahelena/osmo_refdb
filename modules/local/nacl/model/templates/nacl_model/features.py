@@ -30,7 +30,7 @@ osmotool implementation is tested against.
 
 Two definitions differ between the training data and osmotool, see
 README.md: genome_bp in the BacDive training set counts A/C/G/T only
-(run_random_panel.sh), osmotool's header counts every sequence character.
+(BACDIVE_PROTEINS), osmotool's header counts every sequence character.
 """
 from __future__ import annotations
 

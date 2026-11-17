@@ -11,7 +11,7 @@
 # parallelism is the only kind that helped. osmotool v0.7.0 uses hmmsearch
 # instead; Prodigal is single-threaded and sets the per-genome floor.
 #
-# Genomes may be plain (.fna, the pilot) or gzipped (.fna.gz, fetch_genomes.sh
+# Genomes may be plain (.fna, the pilot) or gzipped (.fna.gz, BACDIVE_FETCH
 # now). osmotool can't read gzip, so a gzipped genome is unpacked into the
 # strain's output dir for the length of its job and deleted afterwards.
 #

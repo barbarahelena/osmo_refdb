@@ -37,4 +37,4 @@ tool. It is done once per genome, not per release:
 Every later release is then validated against the same curated truth. Only the source genome FASTAs
 belong in `test_genomes/`; the outputs are git-ignored release files.
 
-The scripts can also be run by hand (`python extract_target_coords.py --help`, and so on).
+The read-recall and system-check scripts can also be run by hand (`python real_read_truth.py --help`, and so on); the target coordinates are worked out in `VALIDATION_TARGETCOORDS` itself.
