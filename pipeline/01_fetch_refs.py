@@ -959,6 +959,9 @@ def main() -> None:
     # family fetches above.
     for decoy in load_hmm_decoys(args.families):
         dname = decoy["name"]
+        if decoy.get("from_negatives_of"):
+            # built from that family's negative.train (05b), nothing to fetch
+            continue
         print(f"[{dname}] (HMM decoy)")
         dec_fasta, n_dec, _ = fetch_set(
             decoy["query"], dname, "HMM decoy", max_seqs=decoy.get("max_seqs", 1500),

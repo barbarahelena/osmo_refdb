@@ -117,7 +117,11 @@
 # osmotool annotate's best-hit contest and are excluded from output (08c),
 # and a benchmark read best-hitting one counts as no call (11). `ga` only
 # has to sit below the competing families' own cutoffs. Names must end in
-# "_decoy". `competes_with` is documentation only.
+# "_decoy". `from_negatives_of: <family>` builds the decoy from that
+# family's negative.train instead of a `query` (05b). `decoy_aware_ga: true`
+# makes the GA calibration of the `competes_with` families decoy-aware (06):
+# a calibration sequence the decoy outscores is not called as the family.
+# Without it, `competes_with` is documentation only.
 
 families:
   - name: ectA
@@ -2023,3 +2027,21 @@ hmm_decoys:
     max_seqs: 1500
     ga: 100
     competes_with: [opuAA, opuBA, opuCA]
+  - name: betTcaiT_decoy
+    description: >
+      Choline (BetT) and carnitine (CaiT) BCCT transporters, betL's named
+      hard negatives. A single score threshold cannot separate them from
+      betL (v4: min positive 87 vs max negative 642 bits), so betL's
+      F1-calibrated GA sat at 570.8 bits and annotate HMM betL reached F1
+      0.55 (v10, precision 0.55, recall 0.56). Translated search avoids it
+      with DIAMOND decoy references from the same set (decoy_from_negatives),
+      but annotate and catalog-based profiling decide at full length with
+      the HMM, where catalogued strains brought betL from 0.87 to 0.46
+      (docs/catalog_benchmark.md). Every UniProt betT/caiT entry is already
+      in betL's negatives (1190 raw, 479 after QC), so the model is built
+      from betL.negative.train, the split the DIAMOND decoy uses, and betL's
+      GA is calibrated decoy-aware.
+    from_negatives_of: betL
+    ga: 100
+    competes_with: [betL]
+    decoy_aware_ga: true

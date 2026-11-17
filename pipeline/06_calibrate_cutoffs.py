@@ -48,6 +48,14 @@ that the number itself needs recalculating -- if that happens, remove
 pfam_model from that family in families.yaml and let it fall back to a
 normal custom-built, empirically-calibrated model instead.
 
+Decoy-aware GA: for a family a `decoy_aware_ga` HMM decoy competes with
+(families.yaml hmm_decoys; scored by 05b_build_hmm_decoys.py), a calibration
+sequence that the decoy outscores (and that reaches the decoy's own GA) is
+not called as the family, as in annotate's best-hit contest: such a
+positive counts as a miss at every cutoff, such a negative drops out. The
+cutoff then only has to separate what the decoy leaves, which lets a family
+whose confusers overlap it in score (betL vs betT/caiT) keep a lower GA.
+
 Usage: python 06_calibrate_cutoffs.py [--hmms hmms] [--families families.yaml]
 Output: updates hmms/<family>.hmm in place with a GA line (skipped for
         pfam_model families, whose GA line is Pfam's own)
@@ -82,6 +90,52 @@ def get_ga_line(hmm_path: Path) -> float | None:
     return float(match.group(1)) if match else None
 
 
+def parse_tblout_named(path: Path) -> dict[str, float]:
+    """{sequence name: full-sequence bit score} from an hmmsearch --tblout."""
+    out: dict[str, float] = {}
+    if not path.exists():
+        return out
+    with open(path) as fh:
+        for line in fh:
+            if line.startswith("#") or not line.strip():
+                continue
+            f = line.split()
+            out[f[0]] = max(out.get(f[0], float("-inf")), float(f[5]))
+    return out
+
+
+def load_aware_decoys(path: Path) -> dict[str, list[tuple[str, float]]]:
+    """{family: [(decoy name, decoy GA)]} for hmm_decoys with decoy_aware_ga."""
+    with open(path) as fh:
+        data = yaml.safe_load(fh)
+    out: dict[str, list[tuple[str, float]]] = {}
+    for d in data.get("hmm_decoys") or []:
+        if d.get("decoy_aware_ga"):
+            for fam in d.get("competes_with", []):
+                out.setdefault(fam, []).append((d["name"], float(d["ga"])))
+    return out
+
+
+def apply_decoys(score_dir: Path, family: str, decoys: list[tuple[str, float]]
+                 ) -> tuple[np.ndarray, np.ndarray, int, int]:
+    """The family's calibration scores after the decoy contest: (positive
+    scores the family keeps, negative scores it keeps, positives lost to a
+    decoy, negatives won by a decoy)."""
+    kept = {}
+    lost = {}
+    for kind in ("positive", "negative"):
+        own = parse_tblout_named(score_dir / f"{family}.{kind}.tblout")
+        rival: dict[str, float] = {}
+        for name, ga in decoys:
+            for seq, sc in parse_tblout_named(score_dir / f"{family}.{name}.{kind}.tblout").items():
+                if sc >= ga:
+                    rival[seq] = max(rival.get(seq, float("-inf")), sc)
+        won = {s for s, sc in own.items() if rival.get(s, float("-inf")) > sc}
+        kept[kind] = np.array([sc for s, sc in own.items() if s not in won])
+        lost[kind] = len(won)
+    return kept["positive"], kept["negative"], lost["positive"], lost["negative"]
+
+
 def parse_tblout_scores(path: Path) -> np.ndarray:
     """Parse full-sequence bit-scores from an hmmsearch --tblout file."""
     scores = []
@@ -101,7 +155,18 @@ def parse_tblout_scores(path: Path) -> np.ndarray:
 MIN_NEG_FOR_RELIABLE_F1 = 30
 
 
-def choose_cutoff(pos_scores: np.ndarray, neg_scores: np.ndarray, neg_file_exists: bool) -> tuple[float, str, float | None]:
+def choose_cutoff(pos_scores: np.ndarray, neg_scores: np.ndarray, neg_file_exists: bool,
+                  n_pos_lost: int = 0) -> tuple[float, str, float | None]:
+    """n_pos_lost: positives a decoy takes (decoy-aware GA); they count as
+    misses at every cutoff, so they lower F1 but never move the cutoff."""
+    if n_pos_lost:
+        if len(pos_scores) == 0:
+            return 0.0, "no_positive_scores", None
+        if len(neg_scores) == 0:
+            cutoff = max(float(np.min(pos_scores)) - 1.0, 0.0)
+            return cutoff, "decoy_aware_clean", 2 * len(pos_scores) / (2 * len(pos_scores) + n_pos_lost)
+        cutoff, f1 = choose_cutoff_by_f1(pos_scores, neg_scores, n_pos_lost)
+        return cutoff, "decoy_aware_f1_calibrated", f1
     if len(pos_scores) == 0:
         return 0.0, "no_positive_scores", None
 
@@ -145,7 +210,8 @@ def choose_cutoff(pos_scores: np.ndarray, neg_scores: np.ndarray, neg_file_exist
         return cutoff, "overlapping_distributions_f1_calibrated", f1
 
 
-def choose_cutoff_by_f1(pos_scores: np.ndarray, neg_scores: np.ndarray) -> tuple[float, float]:
+def choose_cutoff_by_f1(pos_scores: np.ndarray, neg_scores: np.ndarray,
+                        n_pos_lost: int = 0) -> tuple[float, float]:
     """
     Sweep every distinct score in the combined positive+negative
     population as a candidate cutoff (>=) and return the one that
@@ -157,7 +223,7 @@ def choose_cutoff_by_f1(pos_scores: np.ndarray, neg_scores: np.ndarray) -> tuple
     balance point is genuinely ambiguous, rather than an arbitrary
     numpy-sort-order tiebreak.
     """
-    n_pos_total = len(pos_scores)
+    n_pos_total = len(pos_scores) + n_pos_lost
     candidates = sorted(set(pos_scores.tolist()) | set(neg_scores.tolist()))
 
     best_f1 = -1.0
@@ -198,6 +264,7 @@ def main() -> None:
     score_dir = hmm_dir / "scores"
     families = load_family_names(args.families)
     pfam_model_families = load_pfam_model_families(args.families)
+    aware_decoys = load_aware_decoys(args.families)
 
     manifest_rows = []
 
@@ -216,6 +283,12 @@ def main() -> None:
         # actually run against a non-empty negative FASTA; distinguishing
         # "ran but found nothing" from "never ran" changes the interpretation.
         neg_file_exists = neg_path.exists() and neg_path.stat().st_size > 0
+        n_pos_lost = n_neg_won = 0
+        if family in aware_decoys:
+            pos_scores, neg_scores, n_pos_lost, n_neg_won = apply_decoys(
+                score_dir, family, aware_decoys[family])
+            print(f"[{family}] decoy-aware: {', '.join(n for n, _ in aware_decoys[family])} "
+                  f"takes {n_pos_lost} calibration positives and {n_neg_won} negatives")
 
         if family in pfam_model_families:
             cutoff = get_ga_line(hmm_path)
@@ -240,7 +313,8 @@ def main() -> None:
                 f1_at_cutoff = (2 * precision * recall / (precision + recall)
                                  if (precision + recall) else None)
         else:
-            cutoff, status, f1_at_cutoff = choose_cutoff(pos_scores, neg_scores, neg_file_exists)
+            cutoff, status, f1_at_cutoff = choose_cutoff(pos_scores, neg_scores, neg_file_exists,
+                                                         n_pos_lost)
             set_ga_line(hmm_path, cutoff)
 
         f1_str = f"{f1_at_cutoff:.3f}" if f1_at_cutoff is not None else "n/a"
@@ -256,6 +330,8 @@ def main() -> None:
             "n_negative_scored": len(neg_scores),
             "min_positive_score": round(float(np.min(pos_scores)), 2) if len(pos_scores) else "",
             "max_negative_score": round(float(np.max(neg_scores)), 2) if len(neg_scores) else "",
+            "positives_lost_to_decoy": n_pos_lost,
+            "negatives_won_by_decoy": n_neg_won,
         })
 
     manifest_path = hmm_dir / "cutoff_manifest.tsv"
