@@ -16,9 +16,6 @@ process TRIMAL {
     tuple val(meta), path("${prefix}.trimmed.fasta"), emit: trimmed
     tuple val("${task.process}"), val('trimal'), eval("trimal --version 2>&1 | grep -oE 'v[0-9][0-9.a-z]*' | head -1 | sed 's/^v//'"), topic: versions, emit: versions_trimal
 
-    when:
-    task.ext.when == null || task.ext.when
-
     script:
     def args = task.ext.args ?: ''
     prefix   = task.ext.prefix ?: "${meta.id}"

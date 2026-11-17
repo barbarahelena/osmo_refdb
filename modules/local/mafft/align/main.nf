@@ -16,9 +16,6 @@ process MAFFT_ALIGN {
     tuple val(meta), path("${prefix}.aln.fasta"), emit: alignment
     tuple val("${task.process}"), val('mafft'), eval("mafft --version 2>&1 | grep -oE 'v[0-9.]+' | head -1"), topic: versions, emit: versions_mafft
 
-    when:
-    task.ext.when == null || task.ext.when
-
     script:
     def args = task.ext.args ?: ''
     prefix   = task.ext.prefix ?: "${meta.id}"

@@ -133,6 +133,10 @@ def main() -> None:
     ap.add_argument("--hmms", type=Path, default=Path("hmms"))
     ap.add_argument("--families", type=Path, default=Path("families.yaml"))
     ap.add_argument("--threads", type=int, default=4)
+    ap.add_argument("--select-only", action="store_true",
+                    help="only write each decoy's input set, <out>/<decoy>.hmm_decoy.faa (the Nextflow "
+                         "pipeline clusters, aligns, trims and builds it with its own steps)")
+    ap.add_argument("--out", type=Path, default=None, help="with --select-only: where (default: --refs)")
     ap.add_argument("--reuse-alignments", action="store_true",
                     help="Keep an existing decoy clustering + alignment when the "
                          "decoy's input sequences are unchanged.")
@@ -144,7 +148,7 @@ def main() -> None:
         print("No hmm_decoys in families.yaml; nothing to build.")
         return
 
-    set_ga_line = load_set_ga_line()
+    set_ga_line = None if args.select_only else load_set_ga_line()
     used = used_accessions(args.refs)
     tested = test_accessions(args.refs)
     args.aln.mkdir(parents=True, exist_ok=True)
@@ -170,6 +174,12 @@ def main() -> None:
                   f"(accession already in another refs set), {len(kept)} kept")
         if len(kept) < 50:
             raise SystemExit(f"ERROR: [{name}] only {len(kept)} sequences left to build from")
+
+        if args.select_only:
+            out = args.out or args.refs
+            out.mkdir(parents=True, exist_ok=True)
+            (out / f"{name}.hmm_decoy.faa").write_text("".join(f">{h}\n{s}\n" for h, s in kept))
+            continue
 
         filtered = args.refs / f"{name}.hmm_decoy.faa"
         clustered = args.refs / f"{name}.hmm_decoy.clustered.faa"

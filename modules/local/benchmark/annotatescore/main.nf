@@ -1,5 +1,5 @@
 // Scores osmotool annotate's calls on the benchmark protein set, per family and paralog group
-// (bin/benchmark_annotate.py --calls-from). Writes annotate/ as the release keeps it in results/.
+// (benchmark/templates/benchmark_annotate.py, shared with the other annotate benchmark step; --calls-from). Writes annotate/ as the release keeps it in results/.
 process BENCHMARK_ANNOTATESCORE {
     label 'process_single'
 
@@ -20,7 +20,7 @@ process BENCHMARK_ANNOTATESCORE {
 
     script:
     """
-    benchmark_annotate.py --refs ${refs} --families ${families} --out annotate --calls-from calls
+    python ${moduleDir}/../templates/benchmark_annotate.py --refs ${refs} --families ${families} --out annotate --calls-from calls
     cp -L calls/* annotate/
     """
 

@@ -21,9 +21,6 @@ process OSMOTOOL_ANNOTATE {
     tuple val("${task.process}"), val('hmmer'), eval("hmmsearch -h | grep -oE 'HMMER [0-9.]+' | cut -d' ' -f2"), topic: versions, emit: versions_hmmer
     tuple val("${task.process}"), val('prodigal'), eval("prodigal -v 2>&1 | grep -oE 'V[0-9.]+' | tr -d V"), topic: versions, emit: versions_prodigal
 
-    when:
-    task.ext.when == null || task.ext.when
-
     script:
     def args = task.ext.args ?: ''
     prefix   = task.ext.prefix ?: "${meta.id}"

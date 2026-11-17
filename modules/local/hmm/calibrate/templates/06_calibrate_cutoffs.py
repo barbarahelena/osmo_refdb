@@ -165,6 +165,11 @@ def apply_decoys(score_dir: Path, family: str, decoys: list[tuple[str, float]]
     return kept["positive"], kept["negative"], lost["positive"], lost["negative"]
 
 
+def load_hmm_decoys(families_yaml: Path) -> list[dict]:
+    with open(families_yaml) as fh:
+        return yaml.safe_load(fh).get("hmm_decoys") or []
+
+
 def parse_tblout_scores(path: Path) -> np.ndarray:
     """Parse full-sequence bit-scores from an hmmsearch --tblout file."""
     scores = []
@@ -448,6 +453,13 @@ def main() -> None:
                                   and (details["cutoff_p90"] - details["cutoff_p10"]) > 0.25 * cutoff
                                   else ""),
         })
+
+    # HMM decoys get their fixed GA from families.yaml (05b sets it too when it builds them)
+    for decoy in load_hmm_decoys(args.families):
+        hmm_path = hmm_dir / f"{decoy['name']}.hmm"
+        if hmm_path.exists():
+            set_ga_line(hmm_path, float(decoy["ga"]))
+            print(f"[{decoy['name']}] decoy GA={float(decoy['ga']):.1f} (fixed, families.yaml)")
 
     manifest_path = hmm_dir / "cutoff_manifest.tsv"
     if not manifest_rows:

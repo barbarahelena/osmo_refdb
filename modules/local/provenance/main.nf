@@ -16,8 +16,8 @@ process PROVENANCE {
     input:
     val(release_name)
     path(refs)                                          // BUILD_DIAMOND
-    path(alignments)                                    // BUILD_HMMS
-    path(hmms)                                          // BUILD_HMMS
+    path(alignments)                                    // ALIGNMENTS_RECORD
+    path(hmms)                                          // HMM_CALIBRATE
     path(release_files, stageAs: 'files/*')             // BUILD_DIAMOND: the DIAMOND database and its files
     path(cascade, stageAs: 'files/*')                   // the calibrated cascade config and report levels
     tuple val(meta), path(catalog)                      // CATALOG_PACKAGE

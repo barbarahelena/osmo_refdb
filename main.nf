@@ -22,7 +22,7 @@
  *
  * Layout follows the nf-core template: workflows/, subworkflows/local/, modules/local/<tool>/<subtool>/
  * (osmotool/annotate, osmotool/profile, hmmer/hmmscan, ...; pipeline steps grouped as bacdive/, benchmark/,
- * validation/, catalog/), bin/,
+ * validation/, catalog/),
  * conf/base.config (resources), conf/modules.config (per-step settings). What it does not use: the
  * nf-schema plugin (nextflow_schema.json documents the parameters but is not enforced), conda
  * (osmotool is only distributed as a container), nf-core utility subworkflows, nf-test.

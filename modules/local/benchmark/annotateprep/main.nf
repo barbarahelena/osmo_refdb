@@ -1,5 +1,5 @@
 // The protein set for the annotate benchmark: held-out positives, hard negatives and background,
-// each on its own one-gene contig with a Prodigal-style header (bin/benchmark_annotate.py --prepare).
+// each on its own one-gene contig with a Prodigal-style header (benchmark/templates/benchmark_annotate.py, shared with the other annotate benchmark step; --prepare).
 process BENCHMARK_ANNOTATEPREP {
     label 'process_single'
 
@@ -19,7 +19,7 @@ process BENCHMARK_ANNOTATEPREP {
 
     script:
     """
-    benchmark_annotate.py --prepare --refs ${refs} --families ${families} --out annotate
+    python ${moduleDir}/../templates/benchmark_annotate.py --prepare --refs ${refs} --families ${families} --out annotate
     """
 
     stub:

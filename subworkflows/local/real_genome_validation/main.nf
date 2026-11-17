@@ -18,7 +18,7 @@ include { VALIDATION_READRECALL   } from '../../../modules/local/validation/read
 workflow REAL_GENOME_VALIDATION {
     take:
     db          // the release as osmotool reads it
-    hmms        // BUILD_HMMS: the pressed HMM database, for hmmscan on the reads
+    hmms        // HMM_CALIBRATE: the pressed HMM database, for hmmscan on the reads
 
     main:
     targets  = file("${projectDir}/assets/real_genome_validation/target_orfs.tsv", checkIfExists: true)

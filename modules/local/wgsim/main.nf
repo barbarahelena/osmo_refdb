@@ -15,9 +15,6 @@ process WGSIM {
     tuple val(meta), path("${prefix}_R{1,2}.fastq"), emit: reads
     tuple val("${task.process}"), val('wgsim'), eval("wgsim 2>&1 | sed -n 's/^Version: *//p'"), topic: versions, emit: versions_wgsim
 
-    when:
-    task.ext.when == null || task.ext.when
-
     script:
     def args = task.ext.args ?: ''
     prefix   = task.ext.prefix ?: "${meta.id}"

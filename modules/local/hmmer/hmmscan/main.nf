@@ -17,9 +17,6 @@ process HMMER_HMMSCAN {
     tuple val(meta), path("${prefix}.hmmscan.tblout"), emit: tblout
     tuple val("${task.process}"), val('hmmer'), eval("hmmscan -h | grep -oE 'HMMER [0-9.]+' | cut -d' ' -f2"), topic: versions, emit: versions_hmmer
 
-    when:
-    task.ext.when == null || task.ext.when
-
     script:
     def args = task.ext.args ?: ''
     prefix   = task.ext.prefix ?: "${meta.id}"

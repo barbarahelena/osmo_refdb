@@ -4,12 +4,9 @@
 // Every part is passed on as it is made; the steps that make a part of the release publish it into
 // releases/<release> (conf/modules.config).
 //
-include { family_metas; alignment_plan; sha256 } from '../utils_osmo_refdb_pipeline/main'
+include { HMM_BUILD          } from '../hmm_build/main'
 include { RELEASE_REFS       } from '../../../modules/local/release_refs/main'
 include { SPLIT_REFS         } from '../../../modules/local/split_refs/main'
-include { MAFFT_ALIGN        } from '../../../modules/local/mafft/align/main'
-include { TRIMAL             } from '../../../modules/local/trimal/main'
-include { BUILD_HMMS         } from '../../../modules/local/build_hmms/main'
 include { BUILD_DIAMOND      } from '../../../modules/local/build_diamond/main'
 include { BENCHMARK_SIMULATE as BENCHMARK_SIMULATE_CALIB } from '../../../modules/local/benchmark/simulate/main'
 include { BENCHMARK_SIMULATE as BENCHMARK_SIMULATE_TEST  } from '../../../modules/local/benchmark/simulate/main'
@@ -32,40 +29,13 @@ workflow RELEASE_BUILD {
     RELEASE_REFS(families, source)
     SPLIT_REFS(RELEASE_REFS.out.refs, families)
 
-    // ---- alignments, one family at a time: the families in families.yaml that have a train set
-    metas = families.flatMap { f -> family_metas(f) }.map { meta -> tuple(meta.id, meta) }
-    train = SPLIT_REFS.out.train.flatten().map { f -> tuple(f.name - '.positive.train.faa', f) }
-    planned = metas.join(train)
-        .combine(source)
-        .map { _id, meta, f, src -> tuple(meta, f, alignment_plan(meta, f, src), src) }
-    plan = planned.branch { _meta, _f, how, _src ->
-        reuse: how == 'reuse'
-        align: how == 'align'
-        skip:  true
-    }
-    MAFFT_ALIGN(plan.align.map { meta, f, _how, _src -> tuple(meta, f) })
-    TRIMAL(MAFFT_ALIGN.out.alignment)
-    reused = plan.reuse.flatMap { meta, _f, _how, src ->
-        ['aln.fasta', 'trimmed.fasta'].collect { ext -> src.resolve("alignments/${meta.id}.${ext}") }
-    }
-    // what each family's alignment is, for the next build to check (see alignment_plan)
-    manifest = planned
-        .map { meta, f, how, src ->
-            def what = how == 'reuse' ? "reused from ${src.name}" : how == 'align' ? 'aligned' : 'none (fewer than 2 sequences)'
-            "${meta.id}\t${sha256(f)}\t${meta.trim_gt}\t${what}"
-        }
-        .collectFile(name: 'manifest.tsv', newLine: true, sort: true, seed: "family\ttrain_sha256\ttrim_gt\talignment")
-    // the source's HMM-decoy alignments: BUILD_HMMS (05b) reuses them when the decoy's input is unchanged
-    decoy_alignments = source.flatMap { src -> files("${src}/alignments/*.aln") }
-    alignments = MAFFT_ALIGN.out.alignment.mix(TRIMAL.out.trimmed).map { _meta, f -> f }
-        .mix(reused, decoy_alignments, manifest)
-        .collect()
+    // alignments and HMMs, one family (or decoy) at a time
+    HMM_BUILD(families, source, SPLIT_REFS.out.refs, SPLIT_REFS.out.train, SPLIT_REFS.out.faa)
+    hmms = HMM_BUILD.out.hmms
 
-    BUILD_HMMS(SPLIT_REFS.out.refs, alignments, families)
-    BUILD_DIAMOND(BUILD_HMMS.out.refs, families)
+    BUILD_DIAMOND(SPLIT_REFS.out.refs, families)
     refs          = BUILD_DIAMOND.out.refs
     release_files = BUILD_DIAMOND.out.release_files
-    hmms          = BUILD_HMMS.out.hmms
 
     // ---- the benchmark. osmotool reads one directory (DATABASE): each osmotool step is given the
     // DIAMOND files, the cascade and hmms/ as one list, staged as that directory
@@ -94,7 +64,7 @@ workflow RELEASE_BUILD {
     emit:
     db            = db                            // the release as osmotool reads it: [files..., hmms/]
     refs          = refs
-    alignments    = BUILD_HMMS.out.alignments
+    alignments    = HMM_BUILD.out.alignments
     hmms          = hmms
     release_files = release_files                 // the DIAMOND database and its files
     cascade       = cascade                       // cascade config and report levels

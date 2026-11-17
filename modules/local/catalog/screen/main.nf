@@ -12,7 +12,7 @@ process CATALOG_SCREEN {
         'community.wave.seqera.io/library/python_pyyaml:9e6e168c801c7a81' }"
 
     input:
-    path(hmms)                          // BUILD_HMMS: the calibration scores, hmms/scores/
+    path(hmms)                          // HMM_CALIBRATE: the calibration scores, hmms/scores/
     tuple val(meta), path(catalog)      // CATALOG_PACKAGE: catalog.annotation.tsv
     path(families)                      // the HMM decoys
 

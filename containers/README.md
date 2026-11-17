@@ -27,13 +27,14 @@ the index exists, so it writes its versions into the index directory instead.
 |---|---|
 | `docker.io/barbarahelena/osmotool:0.8.0` | `OSMOTOOL_ANNOTATE` (aliases `_GENOME`, `_BENCHMARK`), `OSMOTOOL_PROFILE` (and `_RECALL`), `OSMOTOOL_BUILDCATALOG`, `OSMOTOOL_INDEXCATALOG`, `BACDIVE_PROTEINS` and `BACDIVE_ANNOTATE` (Prodigal and hmmsearch must be osmotool's own: the cached proteins are what `annotate --proteins` reads), `BENCHMARK_READS` (osmotool profile, orfm and hmmscan over a whole read set) |
 | `biocontainers/orfm:2.1.1--h54198d6_1` | `ORFM` (same build as in the osmotool image) |
-| `biocontainers/hmmer:3.4--h7d74f8d_5` | `HMMER_HMMSCAN` (same build as in the osmotool image) |
+| `biocontainers/hmmer:3.4--h7d74f8d_5` | `HMMER_HMMBUILD` (and `_DECOY`), `HMMER_HMMSEARCH`, `HMMER_HMMSCAN` (same build as in the osmotool image) |
+| `biocontainers/cd-hit:4.8.1--h5ca1c30_13` | `CDHIT_DECOY` |
 | `biocontainers/wgsim:1.0--h577a1d6_10` | `WGSIM` |
-| `biocontainers/python:3.11` | Python standard library only: `CATALOG_FETCH`, `CATALOG_PACKAGE`, `VALIDATION_CHECKSYSTEMS`, `VALIDATION_TARGETCOORDS`, `VALIDATION_READRECALL` |
-| Seqera `py-yaml` | `SPLIT_REFS`, `CATALOG_SCREEN`, `BENCHMARK_ANNOTATEPREP`, `BENCHMARK_ANNOTATESCORE` |
-| Seqera `refs` | `RELEASE_REFS` |
-| Seqera `align` | `MAFFT_ALIGN`, `TRIMAL` (mafft 7.526 is not on biocontainers) |
-| Seqera `hmms` | `BUILD_HMMS` |
+| `biocontainers/python:3.11` | Python standard library only: `CATALOG_FETCH`, `CATALOG_PACKAGE`, `VALIDATION_CHECKSYSTEMS`, `VALIDATION_TARGETCOORDS`, `VALIDATION_READRECALL`, `ALIGNMENTS_RECORD` |
+| Seqera `py-yaml` | `SPLIT_REFS`, `HMM_DECOYSELECT`, `CATALOG_SCREEN`, `BENCHMARK_ANNOTATEPREP`, `BENCHMARK_ANNOTATESCORE` |
+| Seqera `refs` | `RELEASE_REFS`, `PFAM_FETCH` |
+| Seqera `align` | `MAFFT_ALIGN`, `TRIMAL` (and their `_DECOY` aliases; mafft 7.526 is not on biocontainers) |
+| Seqera `hmms` | `HMM_CALIBRATE` (hmmpress, python, numpy, pyyaml; its mafft, trimal and cd-hit are no longer used) |
 | Seqera `diamond-py` | `BUILD_DIAMOND` |
 | Seqera `simulate` | `BENCHMARK_SIMULATE_CALIB`, `BENCHMARK_SIMULATE_TEST` |
 | Seqera `metrics` | `BENCHMARK_METRICS_CALIB`, `BENCHMARK_METRICS_TEST` |
