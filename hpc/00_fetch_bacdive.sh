@@ -1,5 +1,6 @@
 #!/bin/bash
-# BacDive strains and their genomes, into <DATA_DIR> (login node, internet; no credentials).
+# BacDive strains and their genomes, into <DATA_DIR> (needs internet, no credentials). Run by the
+# FETCH_BACDIVE step of hpc/nextflow (or by hand).
 #   1. BacDive harvest (sweep, ~1,820 API calls, about 1.5 h measured): batches already in
 #      <DATA_DIR>/bacdive_raw are skipped, so putting the shipped snapshot there first makes
 #      this reproduce the published table instead of today's BacDive.

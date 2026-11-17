@@ -2189,3 +2189,18 @@ changed them). Reads are no longer identical to any release built before this
 change, and the canonical build is a fresh build anyway. After this a rebuild
 with a changed family differs in the benchmark only where that family, or a
 family that competes with it, changed.
+
+### HPC: one Nextflow workflow instead of bash and sbatch scripts (branch `rebuild-decoys-nostudy`)
+
+`hpc/nextflow/` replaces `hpc/launch.sh`, `hpc/slurm/` and the Apptainer recipe. It follows the nf-core
+layout (`workflows/`, `subworkflows/local/`, `modules/local/<step>/`, `conf/base.config`,
+`conf/modules.config`, a parameter schema) without the nf-schema plugin, conda or nf-test. Every step is a
+SLURM job in a container of its own, declared in its module; nothing runs on a login node except the
+`sbatch` that starts the head job. The gene file and the full catalog index use `storeDir`. The gate
+(reading the catalog screen) is a stop between two invocations: `-resume --gate_passed true` continues.
+Institutional profiles come from nf-core/configs, pinned to a commit. Checked with `-stub-run` under
+Nextflow 25.04.6 and 26.10.6 only; no cluster run, and the container images are placeholders until they
+are built (`hpc/containers/README.md`).
+
+Found on the way: `environment.yml` had no classic `bwa`, which the full catalog index needs (added), and
+the simulated reads of every family depended on all families before it (see the read-simulation entry above).

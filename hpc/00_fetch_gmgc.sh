@@ -1,6 +1,6 @@
 #!/bin/bash
 # Download the human-gut GMGC catalog (2.99 GB) from Zenodo, without the
-# other 16 GB of the zip. Run on a login/transfer node with internet.
+# other 16 GB of the zip. Run by the FETCH_GMGC step of hpc/nextflow (or by hand).
 #   bash hpc/00_fetch_gmgc.sh /path/to/dest_dir            # the full file
 #   bash hpc/00_fetch_gmgc.sh /path/to/dest_dir 40000000   # first 40 MB only: a smoke-test sample
 set -euo pipefail

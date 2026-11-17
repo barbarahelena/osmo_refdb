@@ -13,3 +13,9 @@ pipeline/*/archive
 
 # release-independent input data (BacDive genomes etc.)
 /data/
+
+# Nextflow (hpc/nextflow)
+.nextflow*
+work/
+pipeline_info/
+osmo_nf_*.log

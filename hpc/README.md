@@ -1,9 +1,12 @@
-# Running the catalog pipeline on an HPC cluster (SLURM + Apptainer)
+# Running the whole pipeline on an HPC cluster (Nextflow, SLURM + Apptainer)
 
-For building and benchmarking `osmotool profile --catalog` against a full-size
-gut gene catalog. Everything here is **untested on a cluster**: the scripts
-are small, parametrised and meant to be adjusted on first contact (partition,
-memory, time, bind paths).
+For the canonical release build, the catalog, the BacDive validation and the NaCl model, and for
+benchmarking `osmotool profile --catalog` against a full-size gut gene catalog. The workflow is
+`hpc/nextflow/` (nf-core layout: `workflows/`, `subworkflows/local/`, `modules/local/`, `conf/`).
+It has been run in `-stub-run` mode only, under Nextflow 25.04.6 and 26.10.6, so the wiring (what runs
+when, what waits for what, the gate, storeDir) is checked; **nothing has run on a cluster**, and the
+containers do not exist yet (`hpc/containers/README.md`). Resources, bind paths and queues are meant to
+be adjusted on first contact.
 
 ## What is measured, and what is not
 
@@ -58,54 +61,51 @@ full catalog index   (needs only the gene file: starts at once, in parallel)
 
 ## Steps
 
-1. **Image** (login node with internet; Apptainer >= 1.2 for `--build-arg`):
+1. **Containers.** One per step, declared in each module; `hpc/containers/README.md` lists what each
+   needs. `grep -rn todo.invalid hpc/nextflow/modules` shows what is not filled in yet.
+2. **Snapshot** (not in git; about 2 GB from `releases/v10/` on the laptop): `refs/`, `alignments/`, and
+   what the build reads from the source release (`osmo_refdb.train_refs.faa`, `markers/`, ...). `rsync -a`
+   it to `<clone>/releases/<snapshot>/`. Also `<repo>/data/phenotype_validation/random_panel/pool.hmm`
+   (+ `pool_families.tsv`, `Pfam.version`) and, to reproduce the published BacDive table rather than
+   today's, `bacdive_raw/`.
+3. **Parameters**: copy `hpc/nextflow/params.example.yaml`, edit. Paths outside the clone that jobs use go
+   in `extra_binds`.
+4. **Run** (from the clone's root; the head job is itself a small SLURM job, so nothing runs on a login node):
    ```bash
-   git clone -b <branch> https://github.com/barbarahelena/osmo_refdb.git && cd osmo_refdb
-   apptainer build --fakeroot ~/osmo_refdb_hpc.sif hpc/apptainer/osmo_refdb_hpc.def
+   sbatch hpc/nextflow/run_nextflow.sbatch -params-file my_params.yaml
+   # at a site with an nf-core/configs profile:  ... -params-file my_params.yaml -profile <institution>
    ```
-   The image holds the conda env (`environment.yml`: mafft, hmmer, diamond,
-   bwa-mem3, ...) and osmotool from `OSMOTOOL_REF` (a tag or commit for a real
-   release). bwa-mem3 needs AVX2 on x86-64 (or ARM NEON). Compute nodes
-   usually have no internet: everything is installed here.
-2. **Snapshot** (not in git; about 2 GB from `releases/v10/` on the laptop):
-   `refs/`, `alignments/`, and what the build reads from the source release
-   (`osmo_refdb.train_refs.faa`, `markers/`, ...). `rsync -a` it to
-   `<clone>/releases/<snapshot>/`.
-3. **Catalog** (login or transfer node):
+   It downloads the GMGC catalog and BacDive, then runs in parallel: the full catalog index, the BacDive
+   proteins (an array of `nchunks`), and the release build -> catalog annotation -> screen. It stops there.
+5. **The gate**: the screen's report is printed at the end of the head job's log, with
+   `releases/<release>/catalogs/<name>/screen.tsv` to read. A flag means "look at those genes"; a real
+   confuser class means a decoy and a rebuild (a new `release` name); a false alarm means carry on:
    ```bash
-   bash hpc/00_fetch_gmgc.sh /data/gmgc 40000000   # 40 MB smoke-test sample first
-   bash hpc/00_fetch_gmgc.sh /data/gmgc            # the whole human-gut file, CRC-checked
+   sbatch hpc/nextflow/run_nextflow.sbatch -params-file my_params.yaml -resume --gate_passed true
    ```
-   `fetch_zenodo_member.py` reads one member out of the 19.3 GB zip with HTTP
-   range requests, resumably (`<out>.part`).
-4. **Smoke test on the sample**, to size the real jobs: decompress the `.head`
-   file and cut it at a record boundary (a truncated gzip ends mid-record),
-   build a catalog from it and note the `sacct` numbers.
-5. **Environment file**: copy `hpc/slurm/env.sh.example` to `env.sh`, edit,
-   `source` it. Any path you pass to a job (`R1`, `R2`, `OUT`, the catalog)
-   must lie under a directory in `APPTAINER_BIND`.
-6. **Launch** (everything below is one script, `hpc/launch.sh`):
-   ```bash
-   source hpc/slurm/env.sh
-   export RELEASE=v10-canonical REUSE_REFS_FROM=releases/v10
-   bash hpc/launch.sh fetch      # login node: GMGC + BacDive strains and genomes
-   bash hpc/launch.sh build      # submits the whole chain up to the gate
-   bash hpc/launch.sh analyze    # after the gate: BacDive annotation -> analysis + NaCl model
-   ```
-   `build` submits, with SLURM dependencies: the full catalog index and the BacDive
-   proteins (independent of the release, start at once) and the release build ->
-   catalog annotation -> screen.
-7. **The gate**: read the screen's log and `catalogs/<name>/screen.tsv`.
-8. **Still to do on the frozen release** (not scripted yet): the catalog benchmark with
-   the real catalog as background (`11d` is not extended), and per-sample
-   `sbatch hpc/slurm/30_profile_sample.sbatch`.
+   The cached steps are skipped; BacDive annotation (an array), the analysis, the NaCl model and the
+   provenance receipt follow.
+6. **Samples**: `-entry profile_samples --samples samples.csv` (columns `id,r1,r2`) profiles each sample
+   as its own job against the release's catalog and the full index; results in `<outdir>/profile`.
+7. **Still to do on the frozen release** (not in the workflow): the catalog benchmark with the real
+   catalog as background (`11d` is not extended).
+
+**What is stored, what is cached.** The gene file and the full catalog index are release-independent and
+expensive, so they use `storeDir`: they live in their permanent place, and a step whose product is
+already there is skipped whatever the cache says. The release, the per-genome BacDive data and the catalog
+annotation are written in place under the clone (several steps mutate them, and a download must be able to
+resume half-done); their tasks pass small "done" tokens to order the steps and check that the product
+exists. `-resume` trusts those tokens: if you delete a release, delete `work/` (or run without `-resume`)
+too. A failed `BUILD_RELEASE` is not retried automatically and leaves a partial `releases/<name>`; remove
+it before running again. `pipeline_info/` gets a trace per invocation, including each task's image, peak
+memory and time: use it to tighten `conf/base.config`.
 
 ## What is downloaded by a script, and what is not
 
 | input | scripted? | how |
 |---|---|---|
-| GMGC human gut catalog (2.99 GB) | yes | `launch.sh fetch` -> `00_fetch_gmgc.sh`, resumable, CRC-checked |
-| BacDive strain records | yes, no credentials | `00_fetch_bacdive.sh` -> `harvest_bacdive.sh sweep`; batches already present are skipped, so a shipped `bacdive_raw/` snapshot reproduces the published table (BacDive itself is live) |
+| GMGC human gut catalog (2.99 GB) | yes | `FETCH_GMGC` (storeDir) -> `00_fetch_gmgc.sh`, resumable, CRC-checked |
+| BacDive strain records | yes, no credentials | `FETCH_BACDIVE` -> `00_fetch_bacdive.sh` -> `harvest_bacdive.sh sweep`; batches already present are skipped, so a shipped `bacdive_raw/` snapshot reproduces the published table (BacDive itself is live) |
 | BacDive genomes (about 9.4 GB), salt-in control genomes (0.7 GB) | yes | `fetch_genomes.sh` from NCBI FTP, resumable |
 | Pfam-A 39.0 | yes, added | `00_fetch_pfam.sh` (pinned URL); only needed to re-derive the random-panel pool |
 | random-panel pool (`pool.hmm`, 13 MB) | **no: a snapshot** | re-deriving it needs `screen_proteomes.faa`, which no script creates |
@@ -119,20 +119,20 @@ Every figure is either **measured** (on the laptop: 10 CPUs, 7.65 GiB VM) or **s
 measured constant by the size of the full catalog (75-86x the 133 Mbp sample, from two
 independent gene counts: 13.8 M genes in the Cayman paper, 11.9 M from the file's compressed
 size); the basis is stated. Nothing here is a guess about the cluster. Requests carry a
-margin; run once and tighten them from `sacct`.
+margin; run once and tighten them from `pipeline_info/*.trace.tsv`.
 
 | job | cores | memory | wall | basis |
 |---|---|---|---|---|
-| fetch GMGC (login node) | 1 | - | about 20-35 min | download rate seen here 1.4-2.7 MB/s for 2.99 GB |
-| fetch BacDive + genomes (login node) | 8 | - | about 1.5 h + 50 min | **measured** (harvest 1.5 h; 9.4 GB genome fetch at 8 parallel) |
-| release build + benchmarks (`05`) | 16 | 32 GB | request 8 h | **measured** 2.5 h on 10 CPUs inside 7.65 GiB |
-| catalog annotation (`10`) | 16 | 24 GB | request 6 h | **scaled**: translation 10-12 min (1 thread), hmmsearch 21-25 min at 4 threads, Python 2.4-2.8 GB |
-| full catalog index (`11`, classic bwa) | 1 | 32 GB | request 6 h | **scaled**: classic bwa 92 s and 203 MB for 133 Mbp -> about 2 h and 15-17 GB |
-| catalog screen (`15`) | 1 | 8 GB | 30 min | reads one TSV |
-| BacDive proteins (`40`) | 40 x 4 | 8 GB each | 2 h each | **measured** 44 core-hours in all (19,965 s at 8 jobs) |
-| BacDive annotation (`41`) | 40 x 2 | 4 GB each | 1 h each | **measured** 3.6 core-hours in all (4,365 s at 3 jobs) |
-| analysis + NaCl model (`42`) | 8 | 16 GB | request 3 h | **measured** about 16 min analysis + about 30 min NaCl |
-| profile, one sample of <= 20M reads (`30`) | 8 | 32 GB | request 6 h | memory **scaled** (mapping loads the index, about 18-21 GB); time **not measured** at this scale |
+| `FETCH_GMGC` | 1 | - | about 20-35 min | download rate seen here 1.4-2.7 MB/s for 2.99 GB |
+| `FETCH_BACDIVE` | 8 | - | about 1.5 h + 50 min | **measured** (harvest 1.5 h; 9.4 GB genome fetch at 8 parallel) |
+| `BUILD_RELEASE` | 16 | 32 GB | request 8 h | **measured** 2.5 h on 10 CPUs inside 7.65 GiB |
+| `ANNOTATE_CATALOG` | 16 | 24 GB | request 6 h | **scaled**: translation 10-12 min (1 thread), hmmsearch 21-25 min at 4 threads, Python 2.4-2.8 GB |
+| `INDEX_CATALOG` (classic bwa) | 1 | 32 GB | request 6 h | **scaled**: classic bwa 92 s and 203 MB for 133 Mbp -> about 2 h and 15-17 GB |
+| `SCREEN` | 1 | 8 GB | 30 min | reads one TSV |
+| `BACDIVE_PROTEINS` | 40 x 4 | 8 GB each | 2 h each | **measured** 44 core-hours in all (19,965 s at 8 jobs) |
+| `BACDIVE_ANNOTATE` | 40 x 2 | 4 GB each | 1 h each | **measured** 3.6 core-hours in all (4,365 s at 3 jobs) |
+| `ANALYZE_NACL` | 8 | 16 GB | request 3 h | **measured** about 16 min analysis + about 30 min NaCl |
+| `PROFILE_SAMPLE`, one sample of <= 20M reads | 8 | 32 GB | request 6 h | memory **scaled** (mapping loads the index, about 18-21 GB); time **not measured** at this scale |
 
 **Why classic bwa for the full index.** On the same 133 Mbp: bwa-mem3 builds in 33 s but peaks at
 1.37 GB (10.3 bytes per base), classic bwa takes 92 s and peaks at 0.2 GB (1.5 bytes per base).
@@ -151,8 +151,8 @@ of 100 core-hours, none of it needing more than 32 GB per job.
 
 ## What to record
 
-For every job: `sacct -j <id> --format=JobID,Elapsed,TotalCPU,MaxRSS,ReqMem`.
-At minimum:
+Every invocation writes `pipeline_info/<time>_<job>.trace.tsv` (wall time, peak RSS, image, per task),
+plus a timeline and a report. At minimum look at:
 
 | job | threads | wall | peak RSS | notes |
 |---|---|---|---|---|
@@ -174,21 +174,21 @@ itself; these are the things that do, and the things that stay out of reach.
   each. Whether scores differ in the last digits has not been measured; a
   canonical x86-64 build removes the question for the release.
 - *Environment.* `environment.yml` pins only lower bounds, so rebuilding an
-  image can change tool versions. The image bakes in its exact package list
-  (`/opt/osmo_refdb/conda-explicit.txt`, `pip-freeze.txt`), is built once per
-  release and kept, and its SHA-256 goes into the release's provenance.
-- *Code.* Build from a committed checkout, with osmotool installed at a tag or
-  commit in the image. Local builds used osmotool from a working tree on
-  `PYTHONPATH`, which shadows the installed package; `write_provenance.py`
-  detects and records that.
+  image can change tool versions. Each module names its image in the repo, so the commit recorded
+  in `PROVENANCE.json` fixes which image every step used (and `pipeline_info/` records them per task).
+  Use images pinned by a content-addressed tag or digest, and do not rebuild them for a rerun.
+- *Code.* Build from a committed checkout (the `PIN` step records the commit and a checksum of any
+  uncommitted change, and a change to either makes `-resume` rebuild), with osmotool from the image's
+  tag. Local builds used osmotool from a working tree on `PYTHONPATH`, which shadows the installed
+  package; `write_provenance.py` detects and records that.
 - *Record.* `PROVENANCE.json`, written next to the release by
   `pipeline/write_provenance.py`, is the build's receipt. It changes nothing
   and nothing reads it to build anything; it answers "what exactly made this
   release?" so that two builds can be compared and a difference traced to a
   cause. It holds, in four blocks: **code** (the osmo_refdb commit and any
   uncommitted files, the osmotool commit and whether a working tree shadowed
-  the installed one), **environment** (machine type, container and the image's
-  checksum, the version of every tool called), **inputs** (families.yaml's
+  the installed one), **environment** (machine type, the version of every tool
+  called, in the build image), **inputs** (families.yaml's
   checksum, the UniProt release and fetch dates, which snapshot it was built
   from, a checksum over `refs/` and `alignments/`) and **outputs** (a checksum
   of every HMM, the DIAMOND database, the cutoff files and each catalog's
@@ -200,8 +200,7 @@ itself; these are the things that do, and the things that stay out of reach.
   whatever they hold that day: a different database vintage, not v10 again.
   The input of a build is therefore the release's `refs/` snapshot
   (`REUSE_REFS_FROM`); the snapshot is shipped with the release. A fetch from
-  scratch makes a new release, and its `refs/` is then archived. Compute
-  nodes may not have internet, so the fetch runs on a login node anyway.
+  scratch makes a new release, and its `refs/` is then archived.
 - *MAFFT with several threads is not reproducible run to run* (18 of 44 v9
   models differed when realigned from identical input). Alignments are
   therefore inputs: reused from the snapshot, realigned only for families
@@ -215,11 +214,10 @@ HMM that differs is betL, which was changed on purpose. **Not measured:** the
 same build on arm64 versus x86-64, and the same build twice on the cluster.
 
 **Procedure**
-1. Build the image once (`hpc/apptainer/osmo_refdb_hpc.def`, `OSMOTOOL_REF` = tag
-   or commit) and keep it.
+1. Build the images once (`hpc/containers/README.md`), put them in the modules, commit, and keep them.
 2. Clean checkout of the commit; put the snapshot at `releases/<snapshot>/`.
-3. `sbatch hpc/slurm/05_pipeline.sbatch` with `RELEASE` and `REUSE_REFS_FROM`
-   set (see the script).
+3. `sbatch hpc/nextflow/run_nextflow.sbatch -params-file ...` with `release` and `reuse_refs_from`
+   set; from an empty `work/` (use `-resume` only for the run after the gate).
 4. Before releasing, rebuild once more from the first build's `refs/` and
    `alignments/` and run
    `python hpc/verify_reproducible.py releases/A releases/B`. It must print
