@@ -9,7 +9,7 @@
 // What can be reused from the source release is decided per family in the workflow
 // (alignment_plan, decoy_plan), and recorded in alignments/manifest.tsv.
 //
-include { family_metas; decoy_metas; scoring_sets; alignment_plan; decoy_plan; source_decoy_files; sha256 } from '../utils_osmo_refdb_pipeline/main'
+include { family_metas; decoy_metas; scoring_sets; refs_kind; alignment_plan; decoy_plan; source_decoy_files; sha256 } from '../utils_osmo_refdb_pipeline/main'
 include { MAFFT_ALIGN                              } from '../../../modules/local/mafft/align/main'
 include { MAFFT_ALIGN    as MAFFT_ALIGN_DECOY      } from '../../../modules/local/mafft/align/main'
 include { TRIMAL                                   } from '../../../modules/local/trimal/main'
@@ -76,7 +76,7 @@ workflow HMM_BUILD {
     // ---- scoring: each model on its family's calibration sets ...
     by_family = sets.flatten()
         .filter { f -> f.size() > 0 }
-        .map { f -> def parts = f.name.tokenize('.'); tuple(parts[0], parts[1..-2].join('.'), f) }
+        .map { f -> refs_kind(f) }
         .groupTuple()
         .map { fam, kinds, files -> tuple(fam, [kinds, files].transpose().collectEntries()) }
     family_jobs = models.map { meta, hmm -> tuple(meta.id, hmm) }
@@ -129,4 +129,5 @@ workflow HMM_BUILD {
     hmms       = HMM_CALIBRATE.out.hmms                  // the release's hmms/
     qc         = HMM_CALIBRATE.out.qc                    // qc_scorecard.tsv
     alignments = ALIGNMENTS_RECORD.out.alignments        // the release's alignments/
+    decoy_refs = ALIGNMENTS_RECORD.out.decoy_refs        // the decoys' input and clustered sets
 }

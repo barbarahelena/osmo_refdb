@@ -9,7 +9,7 @@ process BENCHMARK_ANNOTATESCORE {
         'community.wave.seqera.io/library/python_pyyaml:9e6e168c801c7a81' }"
 
     input:
-    path(refs)
+    path(refs, stageAs: 'refs/*')
     path(families)
     path(annotations, stageAs: 'calls/*')   // annotate_<method>.* from OSMOTOOL_ANNOTATE
 
@@ -20,7 +20,7 @@ process BENCHMARK_ANNOTATESCORE {
 
     script:
     """
-    python ${moduleDir}/../templates/benchmark_annotate.py --refs ${refs} --families ${families} --out annotate --calls-from calls
+    python ${moduleDir}/../templates/benchmark_annotate.py --refs refs --families ${families} --out annotate --calls-from calls
     cp -L calls/* annotate/
     """
 

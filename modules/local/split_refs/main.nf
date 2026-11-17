@@ -12,6 +12,7 @@ process SPLIT_REFS {
 
     output:
     path('refs'), emit: refs
+    path('refs/*'), emit: files   // the same, as files: the release's refs/ is these and the other steps' references
     path('refs/*.positive.train.faa'), emit: train   // per family: what its alignment and HMM are built from
     path('refs/*.faa'),                emit: faa     // every set, for the HMMs' calibration scoring
     tuple val("${task.process}"), val('python'), eval("python3 --version 2>&1 | cut -d' ' -f2"), topic: versions, emit: versions_python
@@ -32,5 +33,6 @@ process SPLIT_REFS {
     printf '>a\\nMK\\n' > refs/ectC.positive.train.faa
     printf '>p\\nMK\\n' > refs/ectA.positive.calib.faa
     printf '>n\\nMW\\n' > refs/ectA.negative.train.faa
+    printf 'family\\tstatus\\n' > refs/negative_purity_manifest.tsv
     """
 }

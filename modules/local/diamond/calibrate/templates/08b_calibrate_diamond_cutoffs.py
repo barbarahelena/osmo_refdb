@@ -39,6 +39,7 @@ from __future__ import annotations
 import argparse
 import csv
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
@@ -55,7 +56,8 @@ def load_family_names(path: Path) -> list[str]:
 
 
 def best_family_restricted_scores(
-    query_faa: Path, db: Path, target_family: str, threads: int, tmp_dir: Path
+    query_faa: Path, db: Path, target_family: str, threads: int, tmp_dir: Path,
+    hits: Path | None = None,
 ) -> np.ndarray:
     """
     Query *query_faa* against the full combined DIAMOND *db* with permissive
@@ -68,15 +70,20 @@ def best_family_restricted_scores(
     if not query_faa.exists() or query_faa.stat().st_size == 0:
         return np.array([])
 
-    out_path = tmp_dir / f"{target_family}.diamond_calib.tsv"
-    subprocess.run(
-        ["diamond", "blastp",
-         "--query", str(query_faa), "--db", str(db),
-         "--out", str(out_path), "--outfmt", "6", "qseqid", "sseqid", "bitscore",
-         "--id", "0", "--query-cover", "0", "--evalue", "10",
-         "--max-target-seqs", "0", "--threads", str(threads), "--quiet"],
-        check=True,
-    )
+    out_path = hits or tmp_dir / f"{target_family}.diamond_calib.tsv"
+    if hits is not None:
+        # the same search, run beforehand (the Nextflow pipeline's DIAMOND_BLASTP)
+        if not hits.exists():
+            sys.exit(f"ERROR: {hits} not found (the search of {query_faa.name})")
+    else:
+        subprocess.run(
+            ["diamond", "blastp",
+             "--query", str(query_faa), "--db", str(db),
+             "--out", str(out_path), "--outfmt", "6", "qseqid", "sseqid", "bitscore",
+             "--id", "0", "--query-cover", "0", "--evalue", "10",
+             "--max-target-seqs", "0", "--threads", str(threads), "--quiet"],
+            check=True,
+        )
 
     best_per_query: dict[str, float] = {}
     n_queries = 0
@@ -128,10 +135,16 @@ def main() -> None:
     ap.add_argument("--release-name", default="osmo_refdb")
     ap.add_argument("--families", type=Path, default=Path("families.yaml"))
     ap.add_argument("--threads", type=int, default=4)
+    ap.add_argument("--hits", type=Path, default=None,
+                    help="the searches already run: <family>.positive.tsv and <family>.negative.tsv "
+                         "(diamond blastp --outfmt 6 qseqid sseqid bitscore, the settings above) "
+                         "instead of running them")
+    ap.add_argument("--out", type=Path, default=None,
+                    help="default: <release>/<release-name>.diamond_cutoffs.tsv")
     args = ap.parse_args()
 
     db = args.release / f"{args.release_name}.dmnd"
-    if not db.exists():
+    if args.hits is None and not db.exists():
         print(f"ERROR: {db} not found -- run 08_build_diamond_db.sh first.")
         return
 
@@ -158,8 +171,9 @@ def main() -> None:
                 print(f"[{family}] WARNING: no negative.train split, calibrating on "
                       f"the full negative.faa (benchmark negatives overlap)")
 
-            pos_scores = best_family_restricted_scores(pos_test, db, family, args.threads, tmp_dir)
-            neg_scores = best_family_restricted_scores(neg, db, family, args.threads, tmp_dir)
+            hits = {k: args.hits / f"{family}.{k}.tsv" if args.hits else None for k in ("positive", "negative")}
+            pos_scores = best_family_restricted_scores(pos_test, db, family, args.threads, tmp_dir, hits["positive"])
+            neg_scores = best_family_restricted_scores(neg, db, family, args.threads, tmp_dir, hits["negative"])
 
             cutoff, status = choose_cutoff(pos_scores, neg_scores)
 
@@ -180,7 +194,7 @@ def main() -> None:
         print("No families calibrated.")
         return
 
-    manifest_path = args.release / f"{args.release_name}.diamond_cutoffs.tsv"
+    manifest_path = args.out or args.release / f"{args.release_name}.diamond_cutoffs.tsv"
     with open(manifest_path, "w", newline="") as fh:
         writer = csv.DictWriter(fh, fieldnames=list(manifest_rows[0].keys()), delimiter="\t")
         writer.writeheader()

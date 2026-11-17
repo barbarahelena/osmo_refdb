@@ -1,12 +1,10 @@
 ---
 # yaml-language-server: $schema=https://raw.githubusercontent.com/nf-core/modules/master/modules/environment-schema.json
-# Image: Seqera diamond_numpy_python_pyyaml. (exists; versions read from the image)
+# Image: Seqera python_pyyaml (exists; versions read from the image)
 channels:
   - conda-forge
   - bioconda
 dependencies:
-  - bioconda::diamond=2.2.8
   - conda-forge::python=3.11.0
-  - conda-forge::numpy=2.4.6
   - conda-forge::pyyaml=6.0.3
   - conda-forge::procps-ng=4.0.6

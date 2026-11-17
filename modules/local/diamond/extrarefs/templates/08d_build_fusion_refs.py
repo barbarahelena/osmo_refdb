@@ -132,7 +132,11 @@ def main() -> None:
                                   formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--refs", type=Path, default=Path("refs"))
     ap.add_argument("--families", type=Path, default=Path("families.yaml"))
+    ap.add_argument("--out", type=Path, default=None,
+                    help="where to write <a>_<b>_fused.faa (default: --refs)")
     args = ap.parse_args()
+    out_dir = args.out or args.refs
+    out_dir.mkdir(parents=True, exist_ok=True)
 
     pairs = load_fusion_pairs(args.families)
     if not pairs:
@@ -157,7 +161,7 @@ def main() -> None:
         for header, seq in parse_fasta(dedicated_path):
             by_accession.setdefault(header_accession(header), (header, seq))
 
-        out_path = args.refs / f"{label}.faa"
+        out_path = out_dir / f"{label}.faa"
         if not by_accession:
             note = ""
             if out_path.exists():

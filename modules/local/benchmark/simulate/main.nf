@@ -10,7 +10,7 @@ process BENCHMARK_SIMULATE {
     label 'process_low'
     tag "${split}"
     input:
-    path(refs)
+    path(refs, stageAs: 'refs/*')
     path(families)
     val(split)
 

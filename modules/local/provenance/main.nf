@@ -15,10 +15,10 @@ process PROVENANCE {
 
     input:
     val(release_name)
-    path(refs)                                          // BUILD_DIAMOND
+    path(refs, stageAs: 'refs/*')                       // the release's refs/
     path(alignments)                                    // ALIGNMENTS_RECORD
     path(hmms)                                          // HMM_CALIBRATE
-    path(release_files, stageAs: 'files/*')             // BUILD_DIAMOND: the DIAMOND database and its files
+    path(release_files, stageAs: 'files/*')             // DIAMOND_BUILD: the DIAMOND database and its files
     path(cascade, stageAs: 'files/*')                   // the calibrated cascade config and report levels
     tuple val(meta), path(catalog)                      // CATALOG_PACKAGE
     path(versions, stageAs: 'collected_versions.yml')   // software_versions.yml (the versions topic)
@@ -35,7 +35,7 @@ process PROVENANCE {
     cp -L ${versions} software_versions.yml
     REUSE_REFS_FROM="${params.reuse_refs_from}" SPLIT_MODE="${params.split_mode}" \\
     python ${moduleDir}/templates/write_provenance.py --release-name ${release_name} \\
-        --refs ${refs} --alignments ${alignments} --hmms ${hmms} --files files/* --catalogs ${catalog} \\
+        --refs refs --alignments ${alignments} --hmms ${hmms} --files files/* --catalogs ${catalog} \\
         --repo ${pipeline} --families ${families} --versions software_versions.yml --out PROVENANCE.json
     """
 

@@ -9,7 +9,7 @@ process BENCHMARK_ANNOTATEPREP {
         'community.wave.seqera.io/library/python_pyyaml:9e6e168c801c7a81' }"
 
     input:
-    path(refs)
+    path(refs, stageAs: 'refs/*')
     path(families)
 
     output:
@@ -19,7 +19,7 @@ process BENCHMARK_ANNOTATEPREP {
 
     script:
     """
-    python ${moduleDir}/../templates/benchmark_annotate.py --prepare --refs ${refs} --families ${families} --out annotate
+    python ${moduleDir}/../templates/benchmark_annotate.py --prepare --refs refs --families ${families} --out annotate
     """
 
     stub:

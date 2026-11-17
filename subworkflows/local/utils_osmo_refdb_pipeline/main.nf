@@ -46,6 +46,23 @@ def scoring_sets(family, sets) {
     [positive: pos ? sets[pos] : null, negative: neg ? sets[neg] : null]
 }
 
+// A refs file's family and kind: <family>.<kind>.faa (ectA.positive.calib.faa -> ectA, positive.calib).
+def refs_kind(f) {
+    def base = f.name - ~/\.faa$/
+    def i = base.indexOf('.')
+    i < 0 ? tuple(base, '', f) : tuple(base.substring(0, i), base.substring(i + 1), f)
+}
+
+// The sets a family's DIAMOND cutoff is calibrated on, as 08b_calibrate_diamond_cutoffs.py picks them
+// from the family's refs files by kind ([kind: file], empty files included): positive.calib if it exists,
+// else positive.test; negative.train if it exists, else all negatives. An empty or missing set is not
+// searched (08b scores it as no sequences).
+def diamond_sets(sets) {
+    def pos = sets['positive.calib'] ?: sets['positive.test']
+    def neg = sets['negative.train'] ?: sets['negative']
+    [positive: pos, negative: neg].findAll { _kind, f -> f && f.size() > 0 }
+}
+
 def source_manifest_row(source, id) {
     def manifest = source.resolve('alignments/manifest.tsv')
     if( !manifest.exists() )

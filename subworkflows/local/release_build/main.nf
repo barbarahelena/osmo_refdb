@@ -7,7 +7,7 @@
 include { HMM_BUILD          } from '../hmm_build/main'
 include { RELEASE_REFS       } from '../../../modules/local/release_refs/main'
 include { SPLIT_REFS         } from '../../../modules/local/split_refs/main'
-include { BUILD_DIAMOND      } from '../../../modules/local/build_diamond/main'
+include { DIAMOND_BUILD      } from '../diamond_build/main'
 include { BENCHMARK_SIMULATE as BENCHMARK_SIMULATE_CALIB } from '../../../modules/local/benchmark/simulate/main'
 include { BENCHMARK_SIMULATE as BENCHMARK_SIMULATE_TEST  } from '../../../modules/local/benchmark/simulate/main'
 include { BENCHMARK_READS    as BENCHMARK_READS_CALIB    } from '../../../modules/local/benchmark/reads/main'
@@ -33,9 +33,13 @@ workflow RELEASE_BUILD {
     HMM_BUILD(families, source, SPLIT_REFS.out.refs, SPLIT_REFS.out.train, SPLIT_REFS.out.faa)
     hmms = HMM_BUILD.out.hmms
 
-    BUILD_DIAMOND(SPLIT_REFS.out.refs, families)
-    refs          = BUILD_DIAMOND.out.refs
-    release_files = BUILD_DIAMOND.out.release_files
+    // the DIAMOND database and its files
+    DIAMOND_BUILD(families, SPLIT_REFS.out.refs, SPLIT_REFS.out.train, SPLIT_REFS.out.faa)
+    release_files = DIAMOND_BUILD.out.release_files
+
+    // the release's refs/: the split sets, the DIAMOND decoy and fused-ORF references, the HMM decoys'
+    // sets; given to the benchmark and provenance as one list, staged as refs/
+    refs = SPLIT_REFS.out.files.mix(DIAMOND_BUILD.out.extra, HMM_BUILD.out.decoy_refs).flatten().collect()
 
     // ---- the benchmark. osmotool reads one directory (DATABASE): each osmotool step is given the
     // DIAMOND files, the cascade and hmms/ as one list, staged as that directory

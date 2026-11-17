@@ -31,11 +31,12 @@ the index exists, so it writes its versions into the index directory instead.
 | `biocontainers/cd-hit:4.8.1--h5ca1c30_13` | `CDHIT_DECOY` |
 | `biocontainers/wgsim:1.0--h577a1d6_10` | `WGSIM` |
 | `biocontainers/python:3.11` | Python standard library only: `CATALOG_FETCH`, `CATALOG_PACKAGE`, `VALIDATION_CHECKSYSTEMS`, `VALIDATION_TARGETCOORDS`, `VALIDATION_READRECALL`, `ALIGNMENTS_RECORD` |
-| Seqera `py-yaml` | `SPLIT_REFS`, `HMM_DECOYSELECT`, `CATALOG_SCREEN`, `BENCHMARK_ANNOTATEPREP`, `BENCHMARK_ANNOTATESCORE` |
+| Seqera `py-yaml` | `SPLIT_REFS`, `HMM_DECOYSELECT`, `DIAMOND_EXTRAREFS`, `CATALOG_SCREEN`, `BENCHMARK_ANNOTATEPREP`, `BENCHMARK_ANNOTATESCORE` |
 | Seqera `refs` | `RELEASE_REFS`, `PFAM_FETCH` |
 | Seqera `align` | `MAFFT_ALIGN`, `TRIMAL` (and their `_DECOY` aliases; mafft 7.526 is not on biocontainers) |
 | Seqera `hmms` | `HMM_CALIBRATE` (hmmpress, python, numpy, pyyaml; its mafft, trimal and cd-hit are no longer used) |
-| Seqera `diamond-py` | `BUILD_DIAMOND` |
+| Seqera `diamond-py` | `DIAMOND_CALIBRATE` (python, numpy, pyyaml) |
+| `biocontainers/diamond:2.2.8--he361c42_0` | `DIAMOND_TRAINREFS`, `DIAMOND_MAKEDB`, `DIAMOND_BLASTP` (the build in the osmotool image) |
 | Seqera `simulate` | `BENCHMARK_SIMULATE_CALIB`, `BENCHMARK_SIMULATE_TEST` |
 | Seqera `metrics` | `BENCHMARK_METRICS_CALIB`, `BENCHMARK_METRICS_TEST` |
 | Seqera `nacl` | `BACDIVE_MATRIX`, `BACDIVE_ANALYZE`, `NACL_MODEL` |

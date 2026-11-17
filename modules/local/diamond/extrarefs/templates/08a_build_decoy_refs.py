@@ -133,7 +133,11 @@ def main() -> None:
                                   formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--refs", type=Path, default=Path("refs"))
     ap.add_argument("--families", type=Path, default=Path("families.yaml"))
+    ap.add_argument("--out", type=Path, default=None,
+                    help="where to write <family>.decoy.faa (default: --refs)")
     args = ap.parse_args()
+    out_dir = args.out or args.refs
+    out_dir.mkdir(parents=True, exist_ok=True)
 
     decoy_families = load_decoy_families(args.families)
     if not decoy_families:
@@ -145,7 +149,7 @@ def main() -> None:
 
     for family in decoy_families:
         neg_path = args.refs / f"{family}.negative.train.faa"
-        decoy_path = args.refs / f"{family}.decoy.faa"
+        decoy_path = out_dir / f"{family}.decoy.faa"
 
         if not neg_path.exists() or neg_path.stat().st_size == 0:
             print(f"[{family}] SKIP: no negative train split found at {neg_path} "
