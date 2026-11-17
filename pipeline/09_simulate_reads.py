@@ -24,8 +24,17 @@ default, so two runs against identical held-out input sequences previously
 produced slightly different actual reads (different read counts, sequencing
 errors, sampled positions) purely from the simulator's own unseeded
 internal RNG. Each family/label's simulator invocation now gets a
-deterministic seed drawn from this script's own RANDOM_SEED-seeded rng, so
-a re-run against unchanged upstream data reproduces byte-identical reads.
+deterministic seed, and so does everything else random here (shuffle order,
+flanking DNA).
+
+Every (family, label) draws from its own rng, seeded from RANDOM_SEED plus the
+family's name and label. Earlier versions drew from one rng shared by all
+families in turn, so adding or removing one sequence in one family changed the
+reads of every family after it in families.yaml. A rebuild with a single
+changed family then differed in the benchmark everywhere, and the differences
+could not be told apart from real effects. Now a family's reads change only
+when that family's own sequences do. (Reads are not byte-identical to builds
+made before this change.)
 
 Usage:
   python 09_simulate_reads.py --refs refs --families families.yaml \\
@@ -38,6 +47,7 @@ import argparse
 import csv
 import random
 import shutil
+import zlib
 import subprocess
 import sys
 from pathlib import Path
@@ -163,7 +173,6 @@ def main() -> None:
     ap.add_argument("--out", required=True, type=Path)
     args = ap.parse_args()
 
-    rng = random.Random(RANDOM_SEED)
     families = load_family_names(args.families)
     args.out.mkdir(parents=True, exist_ok=True)
     read_lengths = ([int(x) for x in args.read_lengths.split(",")]
@@ -207,8 +216,8 @@ def main() -> None:
 
     # Shared random bacterial background (01f_build_random_background.py):
     # unrelated proteins, scored in 11_compute_metrics.py as off-target
-    # false positives per family. Appended last so every family's rng draws
-    # above are identical whether or not the background exists.
+    # false positives per family. Appended last; it has its own rng, so it
+    # changes nothing for the families.
     if args.split == "calib":
         pass
     elif (args.refs / RANDOM_BG_FASTA).exists():
@@ -222,6 +231,8 @@ def main() -> None:
         if not records:
             continue
 
+        # Per-(family, label) rng: independent of every other family's data.
+        rng = random.Random(zlib.crc32(f"{RANDOM_SEED}|{family}|{label}".encode()))
         rng.shuffle(records)
         held_out = records  # both files are already held-out splits
 
@@ -252,13 +263,13 @@ def main() -> None:
                 simulate_with_wgsim(genome_fasta, out_prefix, n_reads, sim_seed, read_length=length)
         else:
             out_prefix = args.out / f"{family}.{label}"
-            # Deterministic per-(family, label) seed, drawn from the
-            # module's own seeded rng -- reproducible given the same
-            # RANDOM_SEED and families.yaml iteration order, without
-            # wgsim/iss's own internal RNGs (which neither tool seeds
-            # by default) silently making every run's actual simulated
-            # reads different even when the held-out input sequences
-            # are identical.
+            # Deterministic per-(family, label) seed, drawn from that
+            # pair's own rng -- reproducible given the same RANDOM_SEED
+            # and the same input sequences, without wgsim/iss's own
+            # internal RNGs (which neither tool seeds by default)
+            # silently making every run's actual simulated reads
+            # different even when the held-out input sequences are
+            # identical.
             sim_seed = rng.randint(0, 2**31 - 1)
             print(f"[{family}/{label}] {len(held_out)} sequences -> "
                   f"~{n_reads} simulated read pairs ({simulator}, seed={sim_seed})")

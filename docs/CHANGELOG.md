@@ -2170,3 +2170,22 @@ uploaded. Open decisions:
   the F1 sweep is the problem.
 - Still open from before: opuBA; the mrpB DIAMOND cutoff; the PF08886 gshA
   family; MAFFT reproducibility. (The Dockerfile pin is now v0.8.0.)
+
+### Read simulation: one random stream per family (branch `rebuild-decoys-nostudy`)
+
+`09_simulate_reads.py` used one random generator shared by all families in
+`families.yaml` order. Changing one sequence in one family therefore changed
+the simulated reads of every family after it. The local `v10-rebuild` dry run
+showed it: only mazG, mscS, trkA and trkH had changed training sets, but the
+calibration reads of all 32 families from mscS onward (64 of 64 read files)
+differed from `v10-betl-decoy`, and so did 114 rows of
+`summary_by_report_unit.tsv`. How much of those 114 is new random reads and
+how much is real change was not separated.
+
+Each (family, label) now draws from its own generator, seeded from `RANDOM_SEED`
+and the family's name and label. Checked with two toy families: dropping one
+sequence from family A leaves family B's reads byte-identical (the old script
+changed them). Reads are no longer identical to any release built before this
+change, and the canonical build is a fresh build anyway. After this a rebuild
+with a changed family differs in the benchmark only where that family, or a
+family that competes with it, changed.
