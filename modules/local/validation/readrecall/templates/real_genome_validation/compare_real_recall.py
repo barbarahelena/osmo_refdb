@@ -27,6 +27,8 @@ import re
 from pathlib import Path
 
 ORF_SUFFIX_RE = re.compile(r"^(.*/[12])_\d+_\d+_\d+$")
+# osmotool tags paired read IDs with their mate (<read>/1_R1); the truth has <read>/1
+MATE_TAG_RE = re.compile(r"^(.*/[12])_R[12]$")
 
 
 def load_truth(path: Path) -> dict[str, str]:
@@ -45,6 +47,7 @@ def load_diamond_best_hits(path: Path) -> dict[str, tuple[str, float]]:
         for line in fh:
             parts = line.rstrip("\n").split("\t")
             qseqid, sseqid, bitscore = parts[0], parts[1], float(parts[-1])
+            qseqid = MATE_TAG_RE.sub(r"\1", qseqid)
             family = sseqid.split("|")[0]
             if qseqid not in best or bitscore > best[qseqid][1]:
                 best[qseqid] = (family, bitscore)
