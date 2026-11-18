@@ -17,6 +17,10 @@ include { BENCHMARK_METRICS  as BENCHMARK_METRICS_TEST   } from '../../../module
 include { BENCHMARK_ANNOTATEPREP  } from '../../../modules/local/benchmark/annotateprep/main'
 include { OSMOTOOL_ANNOTATE as OSMOTOOL_ANNOTATE_BENCHMARK } from '../../../modules/local/osmotool/annotate/main'
 include { BENCHMARK_ANNOTATESCORE } from '../../../modules/local/benchmark/annotatescore/main'
+include { BENCHMARK_CATALOGGENES } from '../../../modules/local/benchmark/cataloggenes/main'
+include { OSMOTOOL_BUILDCATALOG as OSMOTOOL_BUILDCATALOG_BENCHMARK } from '../../../modules/local/osmotool/buildcatalog/main'
+include { BENCHMARK_CATALOGMAP   } from '../../../modules/local/benchmark/catalogmap/main'
+include { BENCHMARK_CATALOGSCORE } from '../../../modules/local/benchmark/catalogscore/main'
 
 workflow RELEASE_BUILD {
     take:
@@ -66,6 +70,22 @@ workflow RELEASE_BUILD {
     BENCHMARK_ANNOTATESCORE(refs, families,
         OSMOTOOL_ANNOTATE_BENCHMARK.out.results.map { _meta, files -> files }.flatten().collect())
 
+    // profile --catalog on the same test reads, in two bounds: A, every sequence of the release is
+    // catalogued (A_full indexes all of it, A_hits only HMM hits, as a release ships); B, only what the
+    // benchmark does not score (B_full). A_full is also run as profile --catalog in full on a few samples.
+    BENCHMARK_CATALOGGENES(refs, families, BENCHMARK_SIMULATE_TEST.out.reads)
+    catalog_sets = BENCHMARK_CATALOGGENES.out.genes_a.mix(BENCHMARK_CATALOGGENES.out.genes_b)
+        .flatMap { scen, genes ->
+            scen == 'A'
+                ? [tuple([id: 'A_full', index: 'all', verify: ['opuAC.negative', 'proX.positive', 'trkH.negative']], genes),
+                   tuple([id: 'A_hits', index: 'hits', verify: []], genes)]
+                : [tuple([id: 'B_full', index: 'all', verify: []], genes)]
+        }
+    OSMOTOOL_BUILDCATALOG_BENCHMARK(catalog_sets, db)
+    BENCHMARK_CATALOGMAP(BENCHMARK_SIMULATE_TEST.out.reads, db, OSMOTOOL_BUILDCATALOG_BENCHMARK.out.catalog)
+    BENCHMARK_CATALOGSCORE(BENCHMARK_SIMULATE_TEST.out.reads, BENCHMARK_READS_TEST.out.results, cascade, families,
+        BENCHMARK_CATALOGMAP.out.runs.map { _meta, d -> d }.collect())
+
     emit:
     db            = db                            // the release as osmotool reads it: [files..., hmms/]
     fetch_manifest = REFS_BUILD.out.manifest      // refs/manifest.tsv: the UniProt release and fetch dates
@@ -74,5 +94,5 @@ workflow RELEASE_BUILD {
     hmms          = hmms
     release_files = release_files                 // the DIAMOND database and its files
     cascade       = cascade                       // cascade config and report levels
-    done          = BENCHMARK_METRICS_TEST.out.metrics.mix(BENCHMARK_ANNOTATESCORE.out.annotate).collect()
+    done          = BENCHMARK_METRICS_TEST.out.metrics.mix(BENCHMARK_ANNOTATESCORE.out.annotate, BENCHMARK_CATALOGSCORE.out.metrics).collect()
 }

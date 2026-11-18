@@ -11,10 +11,16 @@ separate betL from betT/caiT. Five excluded units become reportable from
 catalog reads alone. The opu ATPases, opu substrate-binding proteins and the
 trk/ktr channel do not.
 
-Script: `benchmark_catalog.py`, not part of the pipeline (it is in the repository's history). Results:
-`releases/v10/results/catalog_benchmark/`. Log:
-`releases/v10_catalog_benchmark.log`. osmotool: branch `catalog-profile`
-(`df87119`), bwa-mem3 0.17.0.
+The numbers below are from the v10 run of the old `11d_benchmark_catalog.py`
+(osmotool branch `catalog-profile`, `df87119`, bwa-mem3 0.17.0). Every release
+now runs the same benchmark in `RELEASE_BUILD`: `BENCHMARK_CATALOGGENES`
+writes the two gene sets, `OSMOTOOL_BUILDCATALOG_BENCHMARK` builds A_full,
+A_hits and B_full, `BENCHMARK_CATALOGMAP` maps the test reads to each, and
+`BENCHMARK_CATALOGSCORE`
+(`modules/local/benchmark/catalogscore/templates/catalog_benchmark.py`)
+scores them into the release's `results/catalog_benchmark/`. The run stops
+if the per-read rebuild disagrees with a full `profile --catalog` run
+(`verification.tsv`).
 
 ## Design
 

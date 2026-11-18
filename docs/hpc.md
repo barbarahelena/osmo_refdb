@@ -68,9 +68,12 @@ full catalog index   (needs only the gene file: starts at once, in parallel)
    - Apptainer runs with `--no-mount hostfs` (`nextflow.config`): a site that mounts every host
      filesystem (Snellius does) would hide the osmotool image's `/opt/conda`, and every tool in it would
      be "not found". So every directory outside the repo a step reads or writes goes in `extra_binds`.
-   - osmotool 0.8.0 has no catalog mode (`build-catalog`, `index-catalog`, `profile --catalog`, bwa,
-     bwa-mem3): it is on osmotool's `catalog-profile` branch. The catalog steps need a release that has
-     it; then bump the tag in `modules/local/osmotool/*/main.nf`.
+   - osmotool 0.8.0 has no catalog mode (`build-catalog`, `index-catalog`, `profile --catalog`): it is
+     on osmotool's main branch since 0.8.0, not yet tagged. The catalog steps (`RELEASE_CATALOG`, the
+     catalog benchmark, `-entry profile_samples` with a catalog) need a release that has it, in an image
+     with both bwa-mem3 (the hits-only index a release ships) and classic bwa (the full index,
+     `--aligner bwa`): osmotool's `environment.yml` lists only bwa-mem3. Then bump the tag in every
+     module that uses the image (`grep -rl osmotool:0.8.0 modules`) and in their `environment.yml`.
    - Still to do: the `bacdive-fetch` image needs `conda-forge::gzip` and `conda-forge::findutils`
      (`BACDIVE_GENOMES` uses both); its `environment.yml` lists them.
    - A missing tool shows as `command not found` in the task's log; `-stub-run` does not check images.

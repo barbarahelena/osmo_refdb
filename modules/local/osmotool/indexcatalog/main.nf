@@ -3,7 +3,7 @@
 // for a whole gut catalog); ext.prefix: the index directory's name.
 // The tool versions are written into the index directory (versions.yml), not emitted: under storeDir
 // the index is kept outside the work directory and the step is skipped once it exists.
-// NEEDS an osmotool with catalog mode: not in 0.8.0 (it is on osmotool's catalog-profile branch).
+// NEEDS an osmotool with catalog mode (osmotool main after 0.8.0, not yet in a tagged release or image).
 process OSMOTOOL_INDEXCATALOG {
     tag "${meta.id}"
     label 'process_single'

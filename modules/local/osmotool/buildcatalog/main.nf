@@ -1,6 +1,6 @@
 // osmotool build-catalog: annotate a gene catalog with a release's HMMs and index it (bwa-mem3).
 // ext.args (conf/modules.config): --index hits|all|none; ext.prefix: the output directory's name.
-// NEEDS an osmotool with catalog mode: not in 0.8.0 (it is on osmotool's catalog-profile branch).
+// NEEDS an osmotool with catalog mode (osmotool main after 0.8.0, not yet in a tagged release or image).
 process OSMOTOOL_BUILDCATALOG {
     tag "${meta.id}"
     label 'process_high'

@@ -1,0 +1,12 @@
+---
+# yaml-language-server: $schema=https://raw.githubusercontent.com/nf-core/modules/master/modules/environment-schema.json
+# Image: Seqera insilicoseq_wgsim_python_pyyaml, the same as BENCHMARK_SIMULATE (exists; versions read from the image): the back-translation is simulate_reads.py's
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - conda-forge::python=3.11.0
+  - conda-forge::pyyaml=6.0.3
+  - bioconda::insilicoseq=2.0.1
+  - bioconda::wgsim=1.0
+  - conda-forge::procps-ng=4.0.6
