@@ -56,8 +56,7 @@ accuracy against `tests/baseline.tsv`. See `tests/README.md`. Run the real test 
 - Containers see the clone and the work directory. Every other path a step reads or writes, such as
   the gut catalog (`--catalog_genes`), goes in `--extra_binds` (comma-separated).
 - `--refs_store <dir>` keeps the UniProt fetch for later builds in the same UniProt release
-  (see Build options below). To use the same place every time, set it once in your own Nextflow config,
-  `~/.nextflow/config`: `params.refs_store = '/path/to/refs_store'`.
+  (see Build options below); pass it when calling the pipeline, e.g. in the launch script.
 - Resources per step are in `conf/base.config`; a task killed for memory or time is retried with more.
 
 ### Containers
