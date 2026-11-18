@@ -13,12 +13,11 @@ workflow OSMO_REFDB {
     families        // families.yaml
     source          // the source release's snapshot
     snapshot        // harvested BacDive batches to start from, or []
-    random_panel    // a given random-panel pool ([pool.hmm, pool_families.tsv]), or [] to build it
 
     main:
     // independent of the release: start at once, run alongside the build
     CATALOG_GENES()
-    BACDIVE_DATA(families, snapshot, random_panel)
+    BACDIVE_DATA(snapshot)
 
     // the release, then the catalog on it, then the gate
     RELEASE_CATALOG(families, source, CATALOG_GENES.out.genes)

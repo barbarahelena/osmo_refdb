@@ -130,15 +130,10 @@ workflow PIPELINE_INITIALISATION {
     source = file(under_repo(params.reuse_refs_from))
     if( !source.resolve('refs/manifest.tsv').exists() )
         error "no release snapshot at ${source} (refs/manifest.tsv missing; rsync it, see docs/hpc.md)"
-    // a random-panel pool given instead of built (RANDOM_POOL): pool.hmm and pool_families.tsv
-    random_panel = params.random_panel
-        ? ['pool.hmm', 'pool_families.tsv'].collect { f -> file("${params.random_panel}/${f}", checkIfExists: true) }
-        : []
     snapshot = params.bacdive_snapshot ? file(params.bacdive_snapshot, checkIfExists: true) : []
 
     emit:
     families      = channel.value(file(params.families_file, checkIfExists: true))
     source        = channel.value(source)
-    random_panel  = channel.value(random_panel)
     snapshot      = channel.value(snapshot)
 }

@@ -1,7 +1,7 @@
 #!/usr/bin/env nextflow
 /*
  * osmo_refdb on a SLURM cluster, as one workflow. Every step is a job in a container of its own
- * (declared in its module; containers/README.md says what each needs). Start it from a SLURM job of
+ * (declared in its module, with its packages in the module's environment.yml). Start it from a SLURM job of
  * your own (a small one, it only submits and watches the others), not on a login node.
  *
  *   downloads: GMGC human gut | BacDive strains + genomes
@@ -45,7 +45,7 @@ workflow {
     main:
     PIPELINE_INITIALISATION()
     init = PIPELINE_INITIALISATION.out
-    OSMO_REFDB(init.families, init.source, init.snapshot, init.random_panel)
+    OSMO_REFDB(init.families, init.source, init.snapshot)
 }
 
 workflow profile_samples {

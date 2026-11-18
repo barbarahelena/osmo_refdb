@@ -33,7 +33,7 @@ if you want to avoid the HMMER dependency there too.
 ## Quick start
 
 The build is a Nextflow workflow (`main.nf`; see `docs/hpc.md` for the cluster setup and
-`containers/README.md` for the container of each step):
+each module's `container` line and `environment.yml` for its image):
 
 ```bash
 nextflow run main.nf --release v1                           # build, benchmark, catalog, screen; stops at the gate

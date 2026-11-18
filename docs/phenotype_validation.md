@@ -438,7 +438,7 @@ control and the NaCl model.
 |---|---|
 | `BACDIVE_HARVEST` | `--bacdive_full` only: BacDive harvest (`harvest_bacdive.sh`, about 1,820 calls, 1.5 h; batches in `--bacdive_snapshot` are not fetched again), the phenotype table (`build_table.py`), the salt-in control's strains (`build_strategy_control.py`) |
 | `BACDIVE_GENOMES` | the genomes from NCBI (gzipped, about 9.4 GB for the full set) |
-| `RANDOM_POOL` | the random-panel pool, from fixed inputs (Pfam-A 39.0, the pilot's proteomes and feature matrix, fixed seeds), so it is the same for every release and set; or `--random_panel` |
+| `POOL_PFAM`, `POOL_EXTRACT` | the random-panel pool: the 174 families of `assets/random_panel/pool_families.tsv`, their models taken from Pfam-A 39.0, so it is the same for every release and set |
 | `BACDIVE_PROTEINS` | per genome, in chunks: genome size and GC, Prodigal proteins (`-p meta`, as osmotool annotate runs it; kept for the next step), the random-pool search (about 5.5 h at 8 jobs for the full set) |
 | `BACDIVE_ANNOTATE` | per genome, in the same chunks: osmotool annotate on those proteins, so Prodigal is not rerun |
 | `BACDIVE_MATRIX` | the feature matrix (`build_matrix.py`; drops assemblies under 1 Mb) |
@@ -448,7 +448,7 @@ control and the NaCl model.
 Genomes, proteins and the pool search do not depend on the release: a run for another release reuses
 them through `-resume`. The release's results are published to `releases/<release>/phenotype_validation/`
 (the annotation, the matrix, the test tables and their printed reports, `*.txt`); the BacDive tables,
-harvested batches and the pool to `<repo>/<data_dir>`. The scripts each step runs are in its module
+harvested batches and the pool's models to `<repo>/<data_dir>`. The scripts each step runs are in its module
 (`modules/local/bacdive/<step>/`, `modules/local/pool/`).
 
 Notes:

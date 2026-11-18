@@ -5,9 +5,7 @@ benchmarking `osmotool profile --catalog` against a full-size gut gene catalog. 
 the repo root (nf-core layout: `main.nf`, `workflows/`, `subworkflows/local/`, `modules/local/`, `conf/`).
 It has been run in `-stub-run` mode only (last: Nextflow 25.10.3, after the move to one container per
 step), so the wiring (what runs when, what waits for what, the gate, storeDir) is checked; **nothing has
-run on a cluster**, and the Seqera images of the build and analysis steps are still to be made
-(`containers/README.md`). Resources, bind paths and queues are meant to
-be adjusted on first contact.
+run on a cluster**. Resources, bind paths and queues are meant to be adjusted on first contact.
 
 ## What is measured, and what is not
 
@@ -62,16 +60,24 @@ full catalog index   (needs only the gene file: starts at once, in parallel)
 
 ## Steps
 
-1. **Containers.** One per step, declared in its module (nf-core style): the osmotool image, biocontainers
-   and Seqera images; `containers/README.md` lists which step uses which. The Seqera ones are
-   `TODO-seqera-...` placeholders until they are made. Apptainer runs with `--no-mount hostfs`
-   (`nextflow.config`): a site that mounts every host filesystem would hide the osmotool image's
-   `/opt/conda`. So every directory outside the repo a step reads or writes goes in `extra_binds`.
+1. **Containers.** One per step, in the step's module (nf-core style): its `container` line (a Docker
+   image, and a Singularity one for `-profile singularity`) and an `environment.yml` with the image's
+   packages and versions. The osmotool steps use `docker.io/barbarahelena/osmotool:0.8.0`; single tools
+   come from biocontainers; the rest are Seqera community images (made at seqera.io/containers from the
+   `environment.yml`: to change one, edit the file, build the image there, and replace both URLs).
+   - Apptainer runs with `--no-mount hostfs` (`nextflow.config`): a site that mounts every host
+     filesystem (Snellius does) would hide the osmotool image's `/opt/conda`, and every tool in it would
+     be "not found". So every directory outside the repo a step reads or writes goes in `extra_binds`.
+   - osmotool 0.8.0 has no catalog mode (`build-catalog`, `index-catalog`, `profile --catalog`, bwa,
+     bwa-mem3): it is on osmotool's `catalog-profile` branch. The catalog steps need a release that has
+     it; then bump the tag in `modules/local/osmotool/*/main.nf`.
+   - Still to do: the `bacdive-fetch` image needs `conda-forge::gzip` and `conda-forge::findutils`
+     (`BACDIVE_GENOMES` uses both); its `environment.yml` lists them.
+   - A missing tool shows as `command not found` in the task's log; `-stub-run` does not check images.
 2. **Snapshot** (not in git; about 2 GB from `releases/v10/` on the laptop): `refs/`, `alignments/`, and
    what the build reads from the source release (`osmo_refdb.train_refs.faa`, `markers/`, ...). `rsync -a`
-   it to `<clone>/releases/<snapshot>/`. Also `<repo>/data/phenotype_validation/random_panel/pool.hmm`
-   (+ `pool_families.tsv`, `Pfam.version`) and, to reproduce the published BacDive table rather than
-   today's, `bacdive_raw/`.
+   it to `<clone>/releases/<snapshot>/`. To reproduce the published BacDive table rather than today's
+   (`--bacdive_full`), also `bacdive_raw/`, given as `--bacdive_snapshot`.
 3. **Settings**: edit the `params` block in `nextflow.config` (`catalog_genes`, `full_index_dir`, the
    images, and `queue`/`slurm_extra`/`work_dir`). Paths outside the clone that jobs use go in
    `extra_binds`. The release name is given per run with `--release`.
@@ -89,12 +95,11 @@ full catalog index   (needs only the gene file: starts at once, in parallel)
    ```bash
    nextflow run main.nf --release v11 -resume --gate_passed true
    ```
-   The cached steps are skipped; BacDive annotation (an array), the analysis, the NaCl model and the
-   provenance receipt follow.
+   The cached steps are skipped; BacDive annotation, the analysis and the provenance receipt follow: on the
+   43 pilot strains by default, or with `--bacdive_full` on the full BacDive set, with the salt-in control
+   and the NaCl model.
 6. **Samples**: `-entry profile_samples --samples samples.csv` (columns `id,r1,r2`) profiles each sample
    as its own job against the release's catalog and the full index; results in `<outdir>/profile`.
-7. **Still to do on the frozen release** (not in the workflow): the catalog benchmark with the real
-   catalog as background (`11d` is not extended).
 
 **Skipping finished work: `storeDir` and `-resume`.** Nextflow has two ways to avoid redoing work.
 
@@ -134,7 +139,7 @@ it to tighten `conf/base.config`.
 | BacDive strain records | yes, no credentials | `BACDIVE_HARVEST` (`--bacdive_full` only) -> `harvest_bacdive.sh sweep`; with `--bacdive_snapshot <dir>/bacdive_raw` its batches are not fetched again, so a shipped snapshot reproduces the published table (BacDive itself is live). The batches are published to `<repo>/<data_dir>/bacdive_raw`. By default the analysis runs on the 43 pilot strains in `assets/bacdive/`, without a harvest |
 | BacDive genomes (about 9.4 GB; the pilot's 43, about 0.1 GB), salt-in control genomes (0.7 GB) | yes | `BACDIVE_GENOMES`, from NCBI FTP; a download is checked before it counts |
 | Pfam-A 39.0 | yes, added | `fetch_pfam.sh` (pinned URL); only needed to re-derive the random-panel pool |
-| random-panel pool (`pool.hmm`, `pool_families.tsv`) | yes | `RANDOM_POOL`: Pfam-A 39.0 downloaded, screened on the 43 pilot strains' proteomes, stratified on the pilot's feature matrix (`assets/bacdive/`), fixed seeds; published to `<repo>/<data_dir>/random_panel`. `--random_panel <dir>` uses a given pool instead |
+| random-panel pool (`pool.hmm`) | yes | `POOL_PFAM` + `POOL_EXTRACT`: the 174 families of `assets/random_panel/pool_families.tsv` (the pool the analysis was specified with), their models from Pfam-A 39.0, downloaded; published to `<repo>/<data_dir>/random_panel` |
 | release snapshot (`refs/`, `alignments/`, ...) | **no: rsync** | UniProt/RefSeq are live, so the snapshot is the input |
 | reference genomes for real-genome validation | in git | `test_genomes/` (3), osmotool's `test_genomes/` (9); validated by the workflow for every release |
 | UniProt / RefSeq (build step 1) | yes, but not used | only for a from-scratch fetch, which is a new database vintage |
@@ -239,7 +244,7 @@ HMM that differs is betL, which was changed on purpose. **Not measured:** the
 same build on arm64 versus x86-64, and the same build twice on the cluster.
 
 **Procedure**
-1. Fix the images once (`containers/README.md`: every module's `container` line), commit, and keep them.
+1. Fix the images once (every module's `container` line), commit, and keep them.
 2. Clean checkout of the commit; put the snapshot at `releases/<snapshot>/`.
 3. `nextflow run main.nf --release <name>` with `reuse_refs_from`
    set; from an empty `work/` (use `-resume` only for the run after the gate).
