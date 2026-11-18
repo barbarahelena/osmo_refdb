@@ -2,6 +2,8 @@
 # One step of the catalog-index study (run.sh submits them): bash steps.sh <step> [args]
 #   slice                 the seeded gene slice of the catalog
 #   build <all|hits>      build-catalog of the slice with that index
+#   neighbours            the genes without a hit close to a hit gene (find_neighbours.py)
+#   build neighbours      build-catalog of the hit genes plus those neighbours, indexed in full
 #   simulate <div>        read pairs from the slice at that divergence
 #   profile <div> <arm>   osmotool profile on those reads: arm none (--no_catalog), hits or all
 #   score                 the comparison (score.py) and the resources used
@@ -19,12 +21,33 @@ slice)
         --out "${S}/slice.fna.tmp"
     mv "${S}/slice.fna.tmp" "${S}/slice.fna"
     ;;
+neighbours)
+    # windows of every gene without a hit, mapped to the hit genes (hits = every gene build-catalog
+    # kept: annotated, homologs and decoys, the genes the hits index holds)
+    d="${S}/neighbours"
+    rm -rf "${d}"
+    mkdir -p "${d}"
+    tail -n +2 "${S}/catalogs/all/catalog.annotation.tsv" | cut -f1 > "${d}/hit_ids.txt"
+    python3 "${HERE}/find_neighbours.py" windows --genes "${S}/slice.fna" --hits "${d}/hit_ids.txt" > "${d}/windows.fa"
+    awk 'NR == FNR { keep[$1] = 1; next } /^>/ { p = (substr($1, 2) in keep) } p' \
+        "${d}/hit_ids.txt" "${S}/slice.fna" > "${d}/hits.fna"
+    bwa-mem3 index -p "${d}/hits_idx" "${d}/hits.fna" > /dev/null 2>&1
+    timed neighbours_map bash -c "bwa-mem3 mem -t ${THREADS} -a '${d}/hits_idx' '${d}/windows.fa' 2> '${d}/bwa.log' | \
+        python3 '${HERE}/find_neighbours.py' select --genes '${S}/slice.fna' --hits '${d}/hit_ids.txt' \
+            --out-tsv '${d}/neighbours.tsv' --out-fna '${d}/hits_neighbours.fna'"
+    rm "${d}/windows.fa"
+    ;;
 build)
     arm=$2
     rm -rf "${S}/catalogs/${arm}"
     mkdir -p "${S}/catalogs"
-    timed "build_${arm}" osmotool build-catalog "${RELEASE}" --genes "${S}/slice.fna" \
-        -o "${S}/catalogs/${arm}" --index "${arm}" -t "${THREADS}"
+    if [ "${arm}" = neighbours ]; then
+        genes="${S}/neighbours/hits_neighbours.fna" index=all
+    else
+        genes="${S}/slice.fna" index="${arm}"
+    fi
+    timed "build_${arm}" osmotool build-catalog "${RELEASE}" --genes "${genes}" \
+        -o "${S}/catalogs/${arm}" --index "${index}" -t "${THREADS}"
     du -sb "${S}/catalogs/${arm}" > "${S}/logs/build_${arm}.size"
     ;;
 simulate)

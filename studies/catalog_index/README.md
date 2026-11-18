@@ -30,8 +30,9 @@ study tests that case directly.
    substitution errors at 0.5% per base. At two divergences of the sample's strain from
    its catalog gene: 0 (the strain is in the catalog) and 2% (a close relative, below
    profile's 97% identity bar, where both indexes should fall back alike).
-4. **Runs.** `osmotool profile` with its default settings on the same reads, three ways:
-   `--index all`, `--index hits` (both built from the slice) and `--no_catalog`.
+4. **Runs.** `osmotool profile` with its default settings on the same reads, four ways:
+   `--index all`, `--index hits` (both built from the slice), the middle option below,
+   and `--no_catalog`.
 5. **Scores** (`score.py`). Each read's final call is rebuilt: the catalog's decision
    when it settled the read, else DIAMOND's best hit after the cascade (checked against
    the run's `gene_counts.tsv`, `verification.tsv`). Reported: false panel calls per
@@ -50,6 +51,7 @@ where reads go and what translated search makes of those that fall through.
 ```bash
 bash 00_setup.sh     # login node: the environment (osmotool at OSMOTOOL_REF, bwa-mem3) and release v9
 bash run.sh          # submits the steps to SLURM; results in ${STUDY_DIR}/results/
+bash run_neighbours.sh   # then the middle option, and the scoring of all four again
 ```
 
 Settings are in `config.sh` (catalog path, slice size, reads, divergences, seed). The
@@ -102,3 +104,44 @@ genes.
 
 Not measured: a v10 release (none is published), real reads (error profiles beyond
 substitutions), and the whole catalog rather than a slice.
+
+## The middle option: the hits index plus its neighbours (2026-11-18)
+
+The catalog false calls of the hits index come from genes it leaves out that a read can
+still align to a hit gene at >= 97%. So the middle option indexes the hit genes plus the
+genes without a hit that are close to one (`find_neighbours.py`): every gene without a
+hit, cut into 150 bp windows every 50 bp, mapped to the hit genes with bwa-mem3 (all
+placements); a gene with a window aligned at >= 90% identity over >= 45 bp is a
+neighbour (looser than profile's 97% over 45 bp, for strain divergence and sequencing
+errors). The neighbours have no hit, so a read they settle is dropped.
+
+25,170 neighbours (21,344 at >= 95%, 19,592 at >= 97%; `results/neighbours.tsv.gz`):
+with the 33,495 hit genes, 58,665 genes and 47 Mbp, 5.9% of the slice. Finding them
+took 17 s and 9.5 GB at 32 threads; the catalog is 0.18 GB on disk (hits 0.14 GB, all
+2.7 GB).
+
+| divergence | index | false per M reads | catalog / translated | recall | precision |
+|---|---|---|---|---|---|
+| 0 | hits | 57.2 | 65 / 164 | 0.985 | 0.982 |
+| 0 | **hits + neighbours** | **39.2** | **0** / 157 | 0.983 | 0.988 |
+| 0 | all | 0.0 | 0 / 0 | 0.983 | 1.000 |
+| 2% | hits | 74.8 | 51 / 248 | 0.691 | 0.967 |
+| 2% | **hits + neighbours** | **61.5** | **0** / 246 | 0.691 | 0.973 |
+| 2% | all | 44.2 | 0 / 177 | 0.691 | 0.980 |
+
+- **The neighbours remove every catalog false call** (65 and 51 to none), at 1.3x the
+  hits index's size instead of 19x.
+- **What is left is translated, and it is gor**: 149 of the 157 at 0%, 89 of 246 at 2%.
+  These reads come from genes that are not close to a gor gene in nucleotides (or they
+  would be neighbours), but whose proteins DIAMOND still places on gor. The full index
+  removes them only because it holds the very gene each read came from; for a strain
+  that is not in the catalog it cannot. That is a decoy's job: v10's
+  `fadDisulfide_decoy` targets gor's look-alikes. Without gor, the middle option leaves
+  8 false calls at 0% (2 per million), against none for the full index. With v10, not
+  measured.
+- **At 2%** the rest is spread over gor, kdpA, galE, proP, betL and nhaA, all
+  translated, so equally there with any catalog index for reads it does not settle.
+
+Scaled to the whole catalog (13.8x the slice): about 2.5 GB on disk against about 37 GB
+for the full index, and the neighbour search maps about 180 M windows, minutes at 32
+threads.

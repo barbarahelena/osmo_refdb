@@ -2,7 +2,8 @@
 """
 score.py -- false panel calls per million reads, and recall, of `osmotool
 profile` on reads from real catalog genes, with the catalog indexed in full
-(all), with only its HMM-hit genes (hits), and without a catalog (none).
+(all), with only its HMM-hit genes (hits), with those plus the genes close to
+them (neighbours, find_neighbours.py), and without a catalog (none).
 
 Truth: the source gene's full-length HMM decision from build-catalog
 (catalog.annotation.tsv of the slice): a gene "annotated" as a family is
@@ -32,7 +33,7 @@ import importlib.util
 from collections import Counter, defaultdict
 from pathlib import Path
 
-ARMS = ("none", "hits", "all")
+ARMS = ("none", "hits", "neighbours", "all")
 
 
 def load_module(path: Path):
