@@ -43,9 +43,9 @@ nextflow_pipeline {
         when {
             params {
                 repo = "${outputDir}"
-                // OSMO_REFS_STORE: keep the UniProt fetch between runs (--refs_store), so a rerun in the
-                // same UniProt release skips it
-                refs_store = System.getenv('OSMO_REFS_STORE') ?: null
+                // OSMO_REFS_STORE: where to keep the UniProt fetch between runs (--refs_store); unset, the
+                // profile's own (the snellius profile has one), or none
+                if( System.getenv('OSMO_REFS_STORE') ) refs_store = System.getenv('OSMO_REFS_STORE')
             }
         }
 
