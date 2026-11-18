@@ -43,6 +43,12 @@ nextflow run main.nf --release v1 -resume --gate_passed true   # BacDive, NaCl m
 The first run stops at the gate: check the catalog screen
 (`releases/<name>/catalogs/<catalog>/screen.tsv`) before the second run builds on the release.
 
+### Tests
+
+`nf-test test --tag stub` checks the wiring in minutes, offline; `nf-test test --tag real --profile
+test,snellius` builds a whole release on small inputs (`-profile test`, `assets/test/`) and scores its
+accuracy against `tests/baseline.tsv`. See `tests/README.md`. Run the real test before a release.
+
 ### Running on a cluster
 
 - On Snellius, `-profile snellius` (SLURM and Apptainer). Run Nextflow itself inside a small SLURM

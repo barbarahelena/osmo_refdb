@@ -19,3 +19,7 @@ bin/*/archive
 work/
 pipeline_info/
 osmo_nf_*.log
+
+# nf-test
+.nf-test/
+.nf-test.log

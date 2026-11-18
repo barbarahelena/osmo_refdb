@@ -1,0 +1,62 @@
+nextflow_pipeline {
+
+    name "osmo_refdb: a whole release on the test profile"
+    script "../main.nf"
+    tag "pipeline"
+
+    // Wiring, offline, in seconds: every step's stub, through the gate. Run with: nf-test test --tag stub
+    test("stub: the release's layout") {
+        tag "stub"
+        options "-stub"
+
+        when {
+            params {
+                repo = "${outputDir}"
+            }
+        }
+
+        then {
+            def rel = new File("${outputDir}/releases/test")
+            assertAll(
+                { assert workflow.success },
+                { assert rel.exists() },
+                { assert [
+                    "osmo_refdb.dmnd", "osmo_refdb.diamond_cutoffs.tsv", "osmo_refdb.train_refs.faa",
+                    "osmo_refdb.profile_cascade.tsv", "osmo_refdb.profile_report_levels.tsv",
+                    "osmo_refdb.profile_excluded_families.txt", "osmo_refdb.annotate_excluded_families.txt",
+                    "hmms/osmo_refdb.hmm", "refs", "alignments", "markers/osmo_markers.dmnd",
+                    "catalogs/gmgc_gut/catalog.json", "catalogs/gmgc_gut/screen.tsv",
+                    "results/metrics", "results/calib_metrics", "results/annotate", "results/catalog_benchmark",
+                    "real_genome_validation", "phenotype_validation", "PROVENANCE.json", "software_versions.yml",
+                  ].findAll { p -> !new File(rel, p).exists() } == [] },
+                { assert workflow.trace.failed().size() == 0 },
+            )
+        }
+    }
+
+    // The real thing on small inputs (downloads from UniProt, RefSeq, Pfam, BacDive and NCBI; about an hour
+    // on a cluster), scored by tests/check_performance.py against tests/baseline.tsv.
+    // Run with: nf-test test --tag real --profile test,snellius
+    test("real: build checks and accuracy against tests/baseline.tsv") {
+        tag "real"
+
+        when {
+            params {
+                repo = "${outputDir}"
+            }
+        }
+
+        then {
+            assert workflow.success
+            def cmd = ["python3", "${baseDir}/tests/check_performance.py",
+                       "--release-dir", "${outputDir}/releases/test",
+                       "--families", "${baseDir}/assets/test/families.yaml",
+                       "--markers", "${baseDir}/assets/test/markers.yaml",
+                       "--baseline", "${baseDir}/tests/baseline.tsv",
+                       "--out", "${outputDir}/performance.tsv"]
+            def proc = cmd.execute()
+            proc.waitForProcessOutput(System.out, System.err)
+            assert proc.exitValue() == 0 : "check_performance.py failed: see its report above and ${outputDir}/performance.tsv"
+        }
+    }
+}

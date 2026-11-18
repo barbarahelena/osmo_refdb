@@ -250,11 +250,12 @@ def apply_profile_cascade(diamond_calls: pd.DataFrame, diamond_dir: Path,
     return calls[keep].drop(columns="hmm_score").reset_index(drop=True)
 
 
-def verify_cascade_counts(cascade_calls: pd.DataFrame, diamond_dir: Path) -> None:
+def verify_cascade_counts(cascade_calls: pd.DataFrame, diamond_dir: Path) -> dict:
     """Compare the rebuilt per-read cascade calls with osmotool's own
     gene_counts.tsv (each paired read counts 0.5). Families osmotool drops
     from its report (profile_excluded_families, decoys) are simply absent
-    there and are skipped. Prints the number of disagreeing cells."""
+    there and are skipped. Prints and returns the cells checked and the ones
+    that disagree (verification.tsv)."""
     rebuilt = (cascade_calls.groupby(["sample", "family"]).size() * 0.5).to_dict()
     n_cells = n_bad = 0
     worst: list[tuple] = []
@@ -271,6 +272,7 @@ def verify_cascade_counts(cascade_calls: pd.DataFrame, diamond_dir: Path) -> Non
           f"{n_cells - n_bad}/{n_cells} sample x family cells agree")
     for _, sample, family, raw, mine in sorted(worst, reverse=True)[:10]:
         print(f"  MISMATCH {sample} {family}: osmotool {raw}, rebuilt {mine}")
+    return {"check": "cascade_gene_counts", "cells_checked": n_cells, "cells_disagree": n_bad}
 
 
 def best_hit_per_read(calls: pd.DataFrame) -> pd.DataFrame:
@@ -788,7 +790,7 @@ def summarize_report_units(merged: pd.DataFrame, method: str,
 
 
 def verify_unit_counts(cascade_calls: pd.DataFrame, diamond_dir: Path,
-                       units: list[dict]) -> None:
+                       units: list[dict]) -> dict | None:
     """Check osmotool's <sample>.unit_counts.tsv (osmotool versions that read
     the report-level manifest) against the rebuilt per-read calls: a
     reported unit's raw_count is its members' summed calls (0.5 per paired
@@ -796,7 +798,7 @@ def verify_unit_counts(cascade_calls: pd.DataFrame, diamond_dir: Path,
     files = list(diamond_dir.glob("*.unit_counts.tsv"))
     if not files:
         print("Unit check: no unit_counts.tsv (osmotool without report levels); skipped")
-        return
+        return None
     per_family = (cascade_calls.groupby(["sample", "family"]).size() * 0.5).to_dict()
     members = {u["unit"]: u["members"].split(",") for u in units}
     n_cells = n_bad = 0
@@ -822,6 +824,7 @@ def verify_unit_counts(cascade_calls: pd.DataFrame, diamond_dir: Path,
                 print(f"  MISMATCH {sample} {unit} ({status}): osmotool {raw}")
     print(f"Unit check: osmotool unit_counts.tsv vs rebuilt calls: "
           f"{n_cells - n_bad}/{n_cells} sample x unit cells agree")
+    return {"check": "unit_counts", "cells_checked": n_cells, "cells_disagree": n_bad}
 
 
 def summarize_by_length(merged: pd.DataFrame, method: str, families: list[str],
@@ -934,6 +937,7 @@ def main() -> None:
     summary_rows = []
     group_rows = []
     best_threshold_rows = []
+    verification_rows: list[dict] = []
     length_stratified_rows = []
     background_fpr_rows = []
     background_by_family_rows = []
@@ -959,9 +963,11 @@ def main() -> None:
         if not calibration:
             cutoffs = load_cascade_config(args.cascade_config)
             cascade_calls = apply_profile_cascade(diamond_calls, diamond_dir, cutoffs)
-            verify_cascade_counts(cascade_calls, diamond_dir)
+            verification_rows.append(verify_cascade_counts(cascade_calls, diamond_dir))
             if report_units:
-                verify_unit_counts(cascade_calls, diamond_dir, report_units)
+                unit_check = verify_unit_counts(cascade_calls, diamond_dir, report_units)
+                if unit_check is not None:
+                    verification_rows.append(unit_check)
             add_method(label_reads(cascade_calls, truth), "diamond_cascade")
     else:
         print("WARNING: no DIAMOND alignment files found in results/diamond")
@@ -1010,6 +1016,8 @@ def main() -> None:
     _write_tsv(args.out / "background_fpr.tsv", background_fpr_rows, "Background false-positive rate")
     _write_tsv(args.out / "background_fpr_by_family.tsv", background_by_family_rows,
                "Background false positives by called family")
+    _write_tsv(args.out / "verification.tsv", verification_rows,
+               "Rebuilt per-read calls against osmotool's own counts")
 
     if all_curve_stats:
         print("\nOverall ROC/PR AUC by method:")

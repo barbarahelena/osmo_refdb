@@ -27,7 +27,7 @@ process REFS_BACKGROUND {
     def T = "${moduleDir}/../templates"
     """
     cp -RL refs_in refs
-    python ${T}/build_random_background.py --refs refs --families ${families} --threads ${task.cpus}
+    python ${T}/build_random_background.py --refs refs --families ${families} --threads ${task.cpus} ${task.ext.args ?: ''}
     """
 
     stub:

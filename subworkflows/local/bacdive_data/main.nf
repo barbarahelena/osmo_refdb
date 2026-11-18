@@ -1,7 +1,7 @@
 //
 // The BacDive strains, their genomes, and per genome its Prodigal proteins and random-pool search.
 // Release-independent: runs alongside the build.
-//   default         the 43 pilot strains (assets/bacdive/pilot_strains.tsv): a quick check of the panel
+//   default         the 43 pilot strains (assets/bacdive/pilot_strains.tsv, or --bacdive_pilot): a quick check of the panel
 //   --bacdive_full  every BacDive strain with a NaCl maximum and a genome (BACDIVE_HARVEST), and the
 //                   within-domain salt-in control's strains; in --nchunks tasks
 // The random-panel pool is the same in both cases.
@@ -18,7 +18,7 @@ workflow BACDIVE_DATA {
     snapshot        // harvested BacDive batches to start from (bacdive_raw/), or []
 
     main:
-    pilot = file("${projectDir}/assets/bacdive/pilot_strains.tsv", checkIfExists: true)
+    pilot = file(params.bacdive_pilot ?: "${projectDir}/assets/bacdive/pilot_strains.tsv", checkIfExists: true)
 
     // the analysis set
     if( params.bacdive_full ) {
