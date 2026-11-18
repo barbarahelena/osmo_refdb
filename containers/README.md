@@ -29,8 +29,9 @@ the index exists, so it writes its versions into the index directory instead.
 | `biocontainers/orfm:2.1.1--h54198d6_1` | `ORFM` (same build as in the osmotool image) |
 | `biocontainers/hmmer:3.4--h7d74f8d_5` | `HMMER_HMMBUILD` (and `_DECOY`), `HMMER_HMMSEARCH`, `HMMER_HMMSCAN` (same build as in the osmotool image) |
 | `biocontainers/cd-hit:4.8.1--h5ca1c30_13` | `CDHIT_DECOY` |
+| `biocontainers/prodigal:2.6.3--h577a1d6_11` | `POOL_PROTEOMES` (the build in the osmotool image) |
 | `biocontainers/wgsim:1.0--h577a1d6_10` | `WGSIM` |
-| `biocontainers/python:3.11` | Python standard library only: `CATALOG_FETCH`, `CATALOG_PACKAGE`, `VALIDATION_CHECKSYSTEMS`, `VALIDATION_TARGETCOORDS`, `VALIDATION_READRECALL`, `ALIGNMENTS_RECORD` |
+| `biocontainers/python:3.11` | Python standard library only: `CATALOG_FETCH`, `CATALOG_PACKAGE`, `VALIDATION_CHECKSYSTEMS`, `VALIDATION_TARGETCOORDS`, `VALIDATION_READRECALL`, `ALIGNMENTS_RECORD`, `POOL_CANDIDATES`, `POOL_BUILD` |
 | Seqera `py-yaml` | `SPLIT_REFS`, `HMM_DECOYSELECT`, `DIAMOND_EXTRAREFS`, `CATALOG_SCREEN`, `BENCHMARK_ANNOTATEPREP`, `BENCHMARK_ANNOTATESCORE` |
 | Seqera `refs` | `RELEASE_REFS`, `PFAM_FETCH` |
 | Seqera `align` | `MAFFT_ALIGN`, `TRIMAL` (and their `_DECOY` aliases; mafft 7.526 is not on biocontainers) |
@@ -40,7 +41,7 @@ the index exists, so it writes its versions into the index directory instead.
 | Seqera `simulate` | `BENCHMARK_SIMULATE_CALIB`, `BENCHMARK_SIMULATE_TEST` |
 | Seqera `metrics` | `BENCHMARK_METRICS_CALIB`, `BENCHMARK_METRICS_TEST` |
 | Seqera `nacl` | `BACDIVE_MATRIX`, `BACDIVE_ANALYZE`, `NACL_MODEL` |
-| Seqera `bacdive-fetch` | `BACDIVE_FETCH` |
+| Seqera `bacdive-fetch` | `BACDIVE_HARVEST`, `BACDIVE_GENOMES`, `POOL_PFAM` |
 | Seqera `provenance` | `PROVENANCE` |
 
 ## The Seqera images
@@ -67,7 +68,7 @@ URLs in the module's `container` line.
 ### Still to do (checked against the registry on 2026-11-17)
 
 - **To rebuild.** Seqera images have no `find`, `xargs`, `gzip`, `zcat` or `cmp`. `bacdive-fetch` needs
-  `conda-forge::gzip` and `conda-forge::findutils` (the genome download in `BACDIVE_FETCH`); its `environment.yml` lists them.
+  `conda-forge::gzip` and `conda-forge::findutils` (the genome download in `BACDIVE_GENOMES`); its `environment.yml` lists them.
 - `python=3.11` resolved to 3.11.0 in every Seqera image. The osmotool image has 3.11.18. To have
   one Python everywhere, pin `python=3.11.18` and rebuild.
 

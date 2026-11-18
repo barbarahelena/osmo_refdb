@@ -1,0 +1,44 @@
+bacdive_id	species	genus	family	domain	strategy	nacl_max_pct	censored	nogrowth_at_pct	insdc	asm_name	asm_level	match_score
+14201	Sphingomonas paucimobilis	Sphingomonas	Sphingomonadaceae	Bacteria	salt_out	0.0	0	2.0	GCA_016027095	ASM1602709v1	complete	97.78
+164428	Geomonas soli	Geomonas	Geobacteraceae	Bacteria	salt_out	0.0	0		GCA_003852895	ASM385289v1	contig	70.41
+167622	Novosphingobium umbonatum	Novosphingobium	Erythrobacteraceae	Bacteria	salt_out	0.5	0		GCA_004005905	ASM400590v1	contig	56.52
+132490	Caldimicrobium thiodismutans	Caldimicrobium	Thermodesulfobacteriaceae	Bacteria	salt_out	1.0	0		GCA_001548275	ASM154827v1	complete	94.85
+134002	Mucilaginibacter gynuensis	Mucilaginibacter	Sphingobacteriaceae	Bacteria	salt_out	1.0	0		GCA_039541195	ASM3954119v1	contig	67.32
+132635	Nocardioides baekrokdamisoli	Nocardioides	Nocardioidaceae	Bacteria	salt_out	1.0	1		GCA_003945325	ASM394532v1	complete	92.17
+133086	Oharaeibacter diazotrophicus	Oharaeibacter	Pleomorphomonadaceae	Bacteria	salt_out	2.0	0		GCA_003966995	ASM396699v1	complete	59.92
+13262	Amycolatopsis jejuensis	Amycolatopsis	Pseudonocardiaceae	Bacteria	salt_out	2.0	0		GCA_000717335	ASM71733v1	contig	49.31
+5515	Flavobacterium johnsoniae subsp. johnsoniae	Flavobacterium	Flavobacteriaceae	Bacteria	salt_out	2.0	0	4.0	GCA_000016645	ASM1664v1	complete	99.47
+3869	Deinococcus marmoris	Deinococcus	Deinococcaceae	Bacteria	salt_out	2.0	0		GCA_000701405	ASM70140v1	scaffold	27.33
+13145	Pseudomonas mucidolens	Pseudomonas	Pseudomonadaceae	Bacteria	salt_out	2.0	0	4.0	GCA_900475945	48290_E02	complete	98.69
+134067	Nocardioides endophyticus	Nocardioides	Nocardioidaceae	Bacteria	salt_out	2.0	0		GCA_039543845	ASM3954384v1	scaffold	65.84
+7812	Actinoplanes regularis	Actinoplanes	Micromonosporaceae	Bacteria	salt_out	2.5	0		GCA_900188005		scaffold	58.75
+15434	Streptomyces olivaceiscleroticus	Streptomyces	Streptomycetaceae	Bacteria	salt_out	2.5	0		GCA_039521225	ASM3952122v1	contig	62.51
+23832	Cellulomonas marina	Cellulomonas	Cellulomonadaceae	Bacteria	salt_out	3.0	0		GCA_900111925		contig	70.26
+11636	Paenibacillus nanensis	Paenibacillus	Paenibacillaceae	Bacteria	salt_out	3.0	0		GCA_003583765	ASM358376v1	contig	70.61
+566	Anoxybacillus tengchongensis	Anoxybacillus	Bacillaceae	Bacteria	salt_out	4.0	0		GCA_014201585	ASM1420158v1	scaffold	70.85
+8135	Acinetobacter ursingii	Acinetobacter	Moraxellaceae	Bacteria	salt_out	4.0	0	6.0	GCA_016726205	ASM1672620v1	complete	98.58
+24196	Pseudarthrobacter siccitolerans	Pseudarthrobacter	Micrococcaceae	Bacteria	salt_out	4.64	0		GCA_001046895	ASM104689v1	contig	67.06
+132476	Streptomyces humi	Streptomyces	Streptomycetaceae	Bacteria	salt_out	5.0	0		GCA_001005085	ASM100508v2	contig	36.97
+133081	Psychromicrobium silvestre	Psychromicrobium	Micrococcaceae	Bacteria	salt_out	5.0	0		GCA_013408295	ASM1340829v1	contig	76.54
+158553	Seonamhaeicola marinus	Seonamhaeicola	Flavobacteriaceae	Bacteria	salt_out	5.0	0		GCA_008085455	ASM808545v1	scaffold	0
+16323	Streptomyces longwoodensis	Streptomyces	Streptomycetaceae	Bacteria	salt_out	5.0	0		GCA_001514125	ASM151412v1	scaffold	64.87
+1886	Brucella gallinifaecis	Brucella	Brucellaceae	Bacteria	salt_out	6.0	0	8.0	GCA_006476605	ASM647660v1	scaffold	62.09
+141152	Lactobacillus musae	Lactobacillus	Lactobacillaceae	Bacteria	salt_out	6.0	0	10.0	GCA_003573575	ASM357357v1	scaffold	68.41
+133538	Aliiglaciecola litoralis	Aliiglaciecola	Alteromonadaceae	Bacteria	salt_out	6.0	0		GCA_039523355	ASM3952335v1	scaffold	66.4
+159812	Minwuia thermotolerans	Minwuia	Minwuiaceae	Bacteria	salt_out	6.0	0		GCA_002924445	ASM292444v1	scaffold	57.76
+5343	Enterococcus canis	Enterococcus	Enterococcaceae	Bacteria	salt_out	6.5	0		GCA_001885805	ASM188580v1	scaffold	58.41
+143024	Vibrio natriegens	Vibrio	Vibrionaceae	Bacteria	salt_out	7.0	0		GCA_001680085	ASM168008v1	complete	95.34
+13469	Saccharopolyspora shandongensis	Saccharopolyspora	Pseudonocardiaceae	Bacteria	salt_out	7.0	1		GCA_900106995		scaffold	47.48
+166456	Pusillimonas thiosulfatoxidans	Pusillimonas	Alcaligenaceae	Bacteria	salt_out	8.0	0		GCA_004022565	ASM402256v1	complete	99.21
+133125	Flavobacterium arcticum	Flavobacterium	Flavobacteriaceae	Bacteria	salt_out	8.0	0		GCA_003344925	ASM334492v1	complete	99.25
+17816	Alkalitalea saponilacus	Alkalitalea	Marinilabiliaceae	Bacteria	salt_out	8.0	0		GCA_002201795	ASM220179v1	complete	99.01
+10767	Nocardia puris	Nocardia	Nocardiaceae	Bacteria	salt_out	8.0	0	10.0	GCA_003315035	ASM331503v1	scaffold	65.08
+158260	Cytobacillus ciccensis	Cytobacillus	Bacillaceae	Bacteria	salt_out	9.0	0		GCA_006704205	ASM670420v1	complete	95.36
+13317	Prauserella alba	Prauserella	Pseudonocardiaceae	Bacteria	salt_out	10.0	0	0.0	GCA_024171735	ASM2417173v1	scaffold	76.73
+444	Alteromonas macleodii	Alteromonas	Alteromonadaceae	Bacteria	salt_out	10.0	0	0.0	GCA_051058425	FeSOD_KO	complete	97.96
+7609	Paeniglutamicibacter kerguelensis	Paeniglutamicibacter	Micrococcaceae	Bacteria	salt_out	10.0	0		GCA_017876535	ASM1787653v1	contig	77.14
+3216	Corynebacterium ciconiae	Corynebacterium	Corynebacteriaceae	Bacteria	salt_out	10.0	0		GCA_030440575	ASM3044057v1	complete	99.07
+141092	Psychroflexus salis	Psychroflexus	Flavobacteriaceae	Bacteria	salt_out	14.0	0		GCA_014640175	ASM1464017v1	scaffold	63.28
+1546	Salirhabdus euzebyi	Salirhabdus	Bacillaceae	Bacteria	salt_out	16.0	0	0.0	GCA_014207435	ASM1420743v1	scaffold	71.43
+166274	Campylobacter armoricus	Campylobacter	Campylobacteraceae	Bacteria	salt_out		0	2.0	GCA_013372105	ASM1337210v1	complete	95.88
+166262	Bradyrhizobium niftali	Bradyrhizobium	Nitrobacteraceae	Bacteria	salt_out		0	1.0	GCA_004571025	ASM457102v1	contig	48.12

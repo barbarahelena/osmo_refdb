@@ -390,24 +390,17 @@ individually rather than assumed uniformly unreliable, though:
 
 ### Test-driving a new family before the full rebuild
 
-A full `build` + `benchmark` across every family takes on the order of 90
-minutes. Before committing to that, test-drive just the family/families
-you added:
+A full build and benchmark across every family takes hours. Before committing to that, test-drive
+just the families you added: write a `families.yaml` with only those families (and the `hmm_decoys`
+they need), and run the workflow on it under a throwaway release name:
 
 ```bash
-python modules/local/release_refs/templates/make_family_subset.py --families families.yaml \
-    --only galE,mazG,murB --out families_test.yaml
-
-FAMILIES_FILE=families_test.yaml bash run_pipeline.sh all v3-test
+nextflow run main.nf --families_file families_test.yaml --release v3-test
 ```
 
-This runs the entire pipeline (fetch, QC, calibrate, benchmark) but only
-for the named families, finishing in minutes instead of hours. Use a
-throwaway `release_name` (like `v3-test` above, not `v3`) so it writes to
-its own `releases/` directory and can never leave your real release in a
-partial state. Once you're happy with the result, rerun the full pipeline
-without `FAMILIES_FILE` against your real release name to rebuild
-everything together.
+It runs the whole build (fetch, QC, calibrate, benchmark) for those families only, and publishes to its
+own `releases/v3-test/`. Once you are happy with the result, run the full `families.yaml` under the real
+release name.
 
 ## Pipeline steps (`pipeline/`)
 
@@ -423,7 +416,7 @@ everything together.
 | 3 | `split_train_test.py` | Split positives three ways: train (builds the HMMs and DIAMOND db), calib (sets the HMM GA cutoffs, the DIAMOND bitscore cutoffs and, as simulated reads, the profile cascade config) and test (benchmark only). The held-out 20% (`--test-fraction`) is drawn as before, so train is unchanged from a two-way split; half of it (`--calib-fraction`) becomes calib. Up to v9 there was no calib set and the cutoffs were tuned on the benchmark's own positives. Also splits every family's negatives into train (cutoff calibration in steps 5-6 and 8b; decoy refs in step 8a) / test (benchmark negative reads), so the benchmark never scores negatives that set a cutoff. Non-decoy families hold out half their negatives (`--negative-test-fraction`, default 0.5); decoy families use `--test-fraction` |
 | 4 | `MAFFT_ALIGN`, `TRIMAL` (workflow) | MAFFT align + trimAl trim the TRAIN positives, one family per task. A family whose train set and `trim_gt` are unchanged since the source release keeps its alignment (`alignments/manifest.tsv` records which). trimAl's gap threshold defaults to 0.8 but can be overridden per family via `families.yaml`'s `trim_gt` |
 | 5 | `HMMER_HMMBUILD`, `PFAM_FETCH`, `HMMER_HMMSEARCH` (workflow) | hmmbuild per family (or, for a family marked `pfam_model`, fetch that curated Pfam-A HMM directly instead); score the positive-calib and negative-train sets. HMM decoys: `HMM_DECOYSELECT` (`build_hmm_decoys.py --select-only`), then `CDHIT`, `MAFFT_ALIGN`, `TRIMAL`, `HMMER_HMMBUILD` |
-| 6 | `calibrate_cutoffs.py` (`HMM_CALIBRATE`) | Set per-family HMM GA (gathering) cutoffs (or, for `pfam_model` families, read and keep Pfam's own GA line, only flagging it if it doesn't separate this repo's own curated sets well). Where positives and negatives overlap, the cutoff is the median over 1000 seeded bootstrap resamples of the F1-optimal cutoff (`--cutoff-method sweep` for the plain F1 sweep): it moves less between builds (see `modules/local/hmm/calibrate/templates/cutoff_stability.py`). The manifest also records the plain sweep's cutoff, the bootstrap 10th-90th percentile range and `cutoff_range_wide` (the data do not pin the cutoff down) |
+| 6 | `calibrate_cutoffs.py` (`HMM_CALIBRATE`) | Set per-family HMM GA (gathering) cutoffs (or, for `pfam_model` families, read and keep Pfam's own GA line, only flagging it if it doesn't separate this repo's own curated sets well). Where positives and negatives overlap, the cutoff is the median over 1000 seeded bootstrap resamples of the F1-optimal cutoff (`--cutoff-method sweep` for the plain F1 sweep): it moves less between builds. The manifest also records the plain sweep's cutoff, the bootstrap 10th-90th percentile range and `cutoff_range_wide` (the data do not pin the cutoff down) |
 | 6b | `qc_scorecard.py` | Consolidate negative-purity, length-outlier, and HMM-cutoff-overlap manifests into one per-family scorecard (`qc_scorecard.tsv`) flagging families that need review |
 | 7 | `HMM_CALIBRATE` | Concatenate + hmmpress into one binary HMM database |
 | 8a | `build_decoy_refs.py` | For families marked `decoy_from_negatives: true` (e.g. betL), turn their held-out negative-train split into searchable `<family>_decoy` DIAMOND references -- confusable paralogs (e.g. betT/caiT) that can win DIAMOND's best-hit contest away from a mislabeled call, since a single score threshold can't separate them (see betL's `families.yaml` entry) |

@@ -1,6 +1,7 @@
 //
-// After the gate: BacDive annotation with the frozen release (nchunks tasks, each on the proteins of the
-// same chunk), the strain x family matrix, the phenotype validation, and the NaCl model.
+// After the gate: BacDive annotation with the frozen release (each task on the proteins of the same
+// chunk), the strain x family matrix, the phenotype validation, and, with --bacdive_full, the NaCl
+// model (41 pilot strains are too few to train it on).
 //
 include { BACDIVE_ANNOTATE } from '../../../modules/local/bacdive/annotate/main'
 include { BACDIVE_MATRIX   } from '../../../modules/local/bacdive/matrix/main'
@@ -28,8 +29,12 @@ workflow BACDIVE_ANALYSIS {
     BACDIVE_MATRIX(genomes, pilot, annotate)
     matrix = BACDIVE_MATRIX.out.matrix
     BACDIVE_ANALYZE(matrix, pool_families, strains, classes, control_pilot, control_strains, control_annotate)
-    NACL_MODEL(params.release, db, matrix, annotate, strains, BACDIVE_ANALYZE.out.family_ranking)
+    done = BACDIVE_ANALYZE.out.reports
+    if( params.bacdive_full ) {
+        NACL_MODEL(params.release, db, matrix, annotate, strains, BACDIVE_ANALYZE.out.family_ranking)
+        done = done.mix(NACL_MODEL.out.model)
+    }
 
     emit:
-    done = BACDIVE_ANALYZE.out.reports.mix(NACL_MODEL.out.model).collect()
+    done = done.collect()
 }

@@ -2,7 +2,7 @@
 // Prodigal rerun), for the BacDive genomes and the salt-in control's. Task i takes the same genomes as
 // BACDIVE_PROTEINS task i. Each strain's annotation is one directory, <bid>/.
 process BACDIVE_ANNOTATE {
-    tag "chunk ${chunk}/${params.nchunks}"
+    tag "chunk ${chunk}"
     label 'process_low'
 
     // calls: osmotool annotate (hmmsearch, diamond)
@@ -10,7 +10,7 @@ process BACDIVE_ANNOTATE {
 
     input:
     tuple val(chunk), path(strains), path(control_strains)   // BACDIVE_PROTEINS, the same chunk
-    path(genomes)                                              // BACDIVE_FETCH
+    path(genomes)                                              // BACDIVE_GENOMES
     path(control_genomes, stageAs: 'control_genomes')
     path(db, stageAs: 'db/*')   // the release as osmotool reads it (DATABASE): its DIAMOND files, cascade and hmms/, staged as db/
 
@@ -77,14 +77,15 @@ process BACDIVE_ANNOTATE {
     echo "=== \${PAR}x1 (cached proteins): \${W}s wall for \$N genomes = \$(python3 -c "print(f'{\$W/\$N:.2f}')")s/genome ==="
     )
 
-    export CHUNK=${chunk}/${params.nchunks}
+    export CHUNK=${chunk}   # i/K
+    mkdir -p control_genomes   # none in pilot mode
     annotate_genomes ${genomes} ${strains} annotate db ${task.cpus}
     annotate_genomes control_genomes ${control_strains} control_annotate db ${task.cpus}
     """
 
     stub:
     """
-    mkdir -p annotate/${chunk}00 control_annotate
-    touch annotate/${chunk}00/${chunk}00.gene_counts.tsv
+    mkdir -p annotate/${chunk.tokenize('/')[0]}00 control_annotate
+    touch annotate/${chunk.tokenize('/')[0]}00/${chunk.tokenize('/')[0]}00.gene_counts.tsv
     """
 }

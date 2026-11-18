@@ -21,7 +21,7 @@ Writes <release>/PROVENANCE.json:
     writes), the DIAMOND database, cutoffs, cascade config and report levels.
 
 This is a record, not a guarantee: it says what ran so a rebuild can be
-compared (bin/verify_reproducible.py) and a difference traced.
+compared and a difference traced.
 
 Usage:
   python bin/write_provenance.py --release releases/v10 [--families families.yaml]
@@ -229,7 +229,7 @@ def main() -> None:
     record = {
         "about": ("Build record of this release: which code, tools and inputs produced it, and "
                   "checksums of what came out. It does not change anything; it lets two builds "
-                  "be compared (bin/verify_reproducible.py) and a difference be traced to its "
+                  "be compared and a difference be traced to its "
                   "cause (a different commit, tool version, snapshot or machine)."),
         "written": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "release": release_name,

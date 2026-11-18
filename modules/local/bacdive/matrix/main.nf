@@ -10,8 +10,8 @@ process BACDIVE_MATRIX {
         'community.wave.seqera.io/library/matplotlib_numpy_pandas_python_pruned:edc7132220048e3f' }"
 
     input:
-    path(genomes)                                 // BACDIVE_FETCH
-    path(pilot)                                   // BACDIVE_FETCH: pilot_strains.tsv
+    path(genomes)                                 // BACDIVE_GENOMES
+    path(pilot)                                   // the strain table (BACDIVE_HARVEST, or the pilot's)
     path(annotate, stageAs: 'annotate/*')         // BACDIVE_ANNOTATE: <bid>/ per strain
 
     output:

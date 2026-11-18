@@ -131,10 +131,10 @@ it to tighten `conf/base.config`.
 | input | scripted? | how |
 |---|---|---|
 | GMGC human gut catalog (2.99 GB) | yes | `CATALOG_FETCH` (storeDir) -> `modules/local/catalog/fetch/templates/fetch_zenodo_member.py`, resumable, CRC-checked |
-| BacDive strain records | yes, no credentials | `BACDIVE_FETCH` (its template) -> `harvest_bacdive.sh sweep`; with `--bacdive_snapshot <dir>/bacdive_raw` its batches are not fetched again, so a shipped snapshot reproduces the published table (BacDive itself is live). The batches are published to `<repo>/<data_dir>/bacdive_raw` |
-| BacDive genomes (about 9.4 GB), salt-in control genomes (0.7 GB) | yes | `BACDIVE_FETCH`, from NCBI FTP; a download is checked before it counts |
+| BacDive strain records | yes, no credentials | `BACDIVE_HARVEST` (`--bacdive_full` only) -> `harvest_bacdive.sh sweep`; with `--bacdive_snapshot <dir>/bacdive_raw` its batches are not fetched again, so a shipped snapshot reproduces the published table (BacDive itself is live). The batches are published to `<repo>/<data_dir>/bacdive_raw`. By default the analysis runs on the 43 pilot strains in `assets/bacdive/`, without a harvest |
+| BacDive genomes (about 9.4 GB; the pilot's 43, about 0.1 GB), salt-in control genomes (0.7 GB) | yes | `BACDIVE_GENOMES`, from NCBI FTP; a download is checked before it counts |
 | Pfam-A 39.0 | yes, added | `fetch_pfam.sh` (pinned URL); only needed to re-derive the random-panel pool |
-| random-panel pool (`pool.hmm`, `pool_families.tsv`, 13 MB) | **no: a snapshot** (`--random_panel`, default `<repo>/<data_dir>/random_panel`) | re-deriving it needs `screen_proteomes.faa`, which no script creates |
+| random-panel pool (`pool.hmm`, `pool_families.tsv`) | yes | `RANDOM_POOL`: Pfam-A 39.0 downloaded, screened on the 43 pilot strains' proteomes, stratified on the pilot's feature matrix (`assets/bacdive/`), fixed seeds; published to `<repo>/<data_dir>/random_panel`. `--random_panel <dir>` uses a given pool instead |
 | release snapshot (`refs/`, `alignments/`, ...) | **no: rsync** | UniProt/RefSeq are live, so the snapshot is the input |
 | reference genomes for real-genome validation | in git | `test_genomes/` (3), osmotool's `test_genomes/` (9); validated by the workflow for every release |
 | UniProt / RefSeq (build step 1) | yes, but not used | only for a from-scratch fetch, which is a new database vintage |
@@ -150,7 +150,7 @@ margin; run once and tighten them from `pipeline_info/*.trace.tsv`.
 | job | cores | memory | wall | basis |
 |---|---|---|---|---|
 | `CATALOG_FETCH` | 1 | - | about 20-35 min | download rate seen here 1.4-2.7 MB/s for 2.99 GB |
-| `BACDIVE_FETCH` | 8 | - | about 1.5 h + 50 min | **measured** (harvest 1.5 h; 9.4 GB genome fetch at 8 parallel) |
+| `BACDIVE_HARVEST` + `BACDIVE_GENOMES` | 1 + 8 | - | about 1.5 h + 50 min | **measured** (harvest 1.5 h; 9.4 GB genome fetch at 8 parallel) |
 | `BUILD_RELEASE` | 16 | 32 GB | request 8 h | **measured** 2.5 h on 10 CPUs inside 7.65 GiB |
 | `OSMOTOOL_BUILDCATALOG` + `CATALOG_PACKAGE` | 16 | 24 GB | request 6 h | **scaled**: translation 10-12 min (1 thread), hmmsearch 21-25 min at 4 threads, Python 2.4-2.8 GB |
 | `OSMOTOOL_INDEXCATALOG` (classic bwa) | 1 | 32 GB | request 6 h | **scaled**: classic bwa 92 s and 203 MB for 133 Mbp -> about 2 h and 15-17 GB |
@@ -218,8 +218,7 @@ itself; these are the things that do, and the things that stay out of reach.
   checksum, the UniProt release and fetch dates, which snapshot it was built
   from, a checksum over `refs/` and `alignments/`) and **outputs** (a checksum
   of every HMM, the DIAMOND database, the cutoff files and each catalog's
-  annotation and index). Whether two builds agree is checked separately, on the
-  files themselves, by `verify_reproducible.py`.
+  annotation and index).
 
 **Not fixed by where it runs**
 - *UniProt and RefSeq are live.* Re-running step 1 on the cluster fetches
@@ -244,17 +243,10 @@ same build on arm64 versus x86-64, and the same build twice on the cluster.
 2. Clean checkout of the commit; put the snapshot at `releases/<snapshot>/`.
 3. `nextflow run main.nf --release <name>` with `reuse_refs_from`
    set; from an empty `work/` (use `-resume` only for the run after the gate).
-4. Before releasing, rebuild once more from the first build's `refs/` and
-   `alignments/` and run
-   `python modules/local/provenance/templates/verify_reproducible.py releases/A releases/B`. It must print
-   `REPRODUCED`: HMMs (without DATE/COM lines), cutoffs, cascade config,
-   report levels and the benchmark tables identical. The alignments of
-   changed families are the one place two *independent* builds can differ,
-   which is why the second build reuses the first one's.
 
 ## Known gaps
 
-- The catalog benchmark (`modules/local/catalog/package/templates/benchmark_catalog.py`) builds its catalogs
+- The catalog benchmark (`docs/catalog_benchmark.md`) built its catalogs
   from the release's own sequences. Adding a real catalog as background (scenarios
   A and B) is the next change; the test reads are back-translated proteins and will
   not map to real genes, so the real catalog tests background competition and

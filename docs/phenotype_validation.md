@@ -429,38 +429,27 @@ within-genus partial r, which has the random-panel null, does not move.
 
 ## Running it
 
-The workflow runs it, after the gate (`--gate_passed true`, `docs/hpc.md`), on the frozen release:
+The workflow runs it, after the gate (`--gate_passed true`, `docs/hpc.md`), on the frozen release. By
+default on the 43 pilot strains (`assets/bacdive/pilot_strains.tsv`), a quick check of the panel; with
+`--bacdive_full` on every BacDive strain with a NaCl maximum and a genome, with the within-domain salt-in
+control and the NaCl model.
 
 | Step | What it does |
 |---|---|
-| `BACDIVE_FETCH` | BacDive harvest (`harvest_bacdive.sh`, about 1,820 calls, 1.5 h; batches in `--bacdive_snapshot` are not fetched again), the phenotype table (`build_table.py`), the genomes from NCBI (gzipped, about 9.4 GB), and the within-domain salt-in control's strains and genomes (`build_strategy_control.py`) |
-| `BACDIVE_PROTEINS` | per genome, in chunks: genome size and GC, Prodigal proteins (`-p meta`, as osmotool annotate runs it; kept for the next step), the random-pool search (about 5.5 h at 8 jobs) |
+| `BACDIVE_HARVEST` | `--bacdive_full` only: BacDive harvest (`harvest_bacdive.sh`, about 1,820 calls, 1.5 h; batches in `--bacdive_snapshot` are not fetched again), the phenotype table (`build_table.py`), the salt-in control's strains (`build_strategy_control.py`) |
+| `BACDIVE_GENOMES` | the genomes from NCBI (gzipped, about 9.4 GB for the full set) |
+| `RANDOM_POOL` | the random-panel pool, from fixed inputs (Pfam-A 39.0, the pilot's proteomes and feature matrix, fixed seeds), so it is the same for every release and set; or `--random_panel` |
+| `BACDIVE_PROTEINS` | per genome, in chunks: genome size and GC, Prodigal proteins (`-p meta`, as osmotool annotate runs it; kept for the next step), the random-pool search (about 5.5 h at 8 jobs for the full set) |
 | `BACDIVE_ANNOTATE` | per genome, in the same chunks: osmotool annotate on those proteins, so Prodigal is not rerun |
 | `BACDIVE_MATRIX` | the feature matrix (`build_matrix.py`; drops assemblies under 1 Mb) |
-| `BACDIVE_ANALYZE` | tests 1-6 (`analyze.py`, `analyze_extended.py`) and the salt-in control, test 6b (`analyze_strategy_control.py`) |
-| `NACL_MODEL` | the NaCl model (`docs/nacl_model.md`) |
+| `BACDIVE_ANALYZE` | tests 1-6 (`analyze.py`, `analyze_extended.py`) and, with `--bacdive_full`, the salt-in control, test 6b (`analyze_strategy_control.py`) |
+| `NACL_MODEL` | `--bacdive_full` only: the NaCl model (`docs/nacl_model.md`) |
 
 Genomes, proteins and the pool search do not depend on the release: a run for another release reuses
 them through `-resume`. The release's results are published to `releases/<release>/phenotype_validation/`
-(the annotation, the matrix, the test tables and their printed reports, `*.txt`); the BacDive tables and
-harvested batches to `<repo>/<data_dir>`. The scripts each step runs are in its module
-(`modules/local/bacdive/<step>/`); the analysis scripts can also be run by hand on those published
-files (`--help`).
-
-The random-family pool is the one part that is not in the workflow: it is built once, by hand, and
-given to it as a snapshot (`--random_panel`, `pool.hmm` and `pool_families.tsv`):
-
-```bash
-RP=data/phenotype_validation/random_panel
-# random-family pool from Pfam-A.hmm.gz, screened on the 43 pilot proteomes
-python modules/local/bacdive/proteins/templates/phenotype_validation/build_random_pool.py candidates \
-    --pfam "$RP/Pfam-A.hmm.gz" --families families.yaml --out-dir "$RP" --n 6000
-hmmsearch --cut_ga --cpu 8 --noali --tblout "$RP/screen.tbl" -o /dev/null \
-    "$RP/candidates.hmm" "$RP/screen_proteomes.faa"
-python modules/local/bacdive/proteins/templates/phenotype_validation/build_random_pool.py pool \
-    --pfam "$RP/Pfam-A.hmm.gz" --out-dir "$RP" --screen "$RP/screen.tbl" \
-    --osmo-matrix releases/v8/phenotype_validation/feature_matrix.tsv --n-genomes 43
-```
+(the annotation, the matrix, the test tables and their printed reports, `*.txt`); the BacDive tables,
+harvested batches and the pool to `<repo>/<data_dir>`. The scripts each step runs are in its module
+(`modules/local/bacdive/<step>/`, `modules/local/pool/`).
 
 Notes:
 

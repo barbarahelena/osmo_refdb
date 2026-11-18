@@ -50,7 +50,7 @@ Strategy (mirrors how Pfam sets GA cutoffs):
     is "yes" when that range exceeds a quarter of the cutoff: the data then do
     not pin the cutoff down, whatever the method.
 
-    What this buys, measured (bin/cutoff_stability.py) on the real score
+    What this buys, measured on the real score
     files of three builds: across a random-split and a genus-split build of the
     30 F1-swept families the cutoffs move 42.7 bits on average with the bagged
     method vs 45.8 with the plain sweep (median 13.4 vs 16.5), at a mean F1 cost

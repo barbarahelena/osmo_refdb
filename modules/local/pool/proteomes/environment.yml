@@ -1,0 +1,8 @@
+---
+# yaml-language-server: $schema=https://raw.githubusercontent.com/nf-core/modules/master/modules/environment-schema.json
+# Image: biocontainers/prodigal:2.6.3--h577a1d6_11 (the build in the osmotool image)
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - bioconda::prodigal=2.6.3

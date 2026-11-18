@@ -1,35 +1,26 @@
-// BacDive strains and genomes: harvest the BacDive API, the phenotype table, the genomes from NCBI,
-// and the within-domain salt-in control (its strains, and genomes for those the main set lacks).
-// snapshot: a bacdive_raw/ directory of harvested batches (--bacdive_snapshot); batches in it are not
-// fetched again, so a shipped snapshot reproduces the published table (BacDive itself is live). [] to
-// harvest everything. The tables and the batches are published to <repo>/<data_dir> (conf/modules.config).
-process BACDIVE_FETCH {
-    label 'process_high'
+// The assemblies of one strain table's strains (bacdive_id, insdc columns) from NCBI, as
+// genomes/<bid>_<accession>.fna.gz: the BacDive set, its salt-in control, or the pilot.
+process BACDIVE_GENOMES {
+    tag "${meta.id}"
+    label 'process_medium'
     errorStrategy 'retry'   // a dropped connection is not a failure
     maxRetries 3
 
-    // calls: curl, python (stdlib only), awk, gzip, xargs, sed, grep
+    // calls: curl, awk, gzip, xargs, sed, grep
     // Seqera container 'bacdive-fetch' (environment.yml next to this file: its packages)
     container "${ workflow.containerEngine == 'singularity' && !task.ext.singularity_pull_docker_container ?
         'oras://community.wave.seqera.io/library/curl_gawk_python:2d801c4a5165bf61' :
         'community.wave.seqera.io/library/curl_gawk_python:de4685943c4289cd' }"
 
     input:
-    path(snapshot, stageAs: 'snapshot')
+    tuple val(meta), path(table, stageAs: 'strains.tsv')
 
     output:
-    path('bacdive/genomes'),                              emit: genomes
-    path('bacdive/pilot_strains.tsv'),                    emit: pilot
-    path('bacdive/bacdive_classes.tsv'),                  emit: classes
-    path('bacdive/strategy_control/genomes'),             emit: control_genomes
-    path('bacdive/strategy_control/pilot_strains.tsv'),   emit: control_pilot
-    path('bacdive/bacdive_raw'),                          emit: batches
-    path('bacdive/genome_fetch.log'), optional: true,     emit: log
-    tuple val("${task.process}"), val('python'), eval("python3 --version 2>&1 | cut -d' ' -f2"), topic: versions, emit: versions_python
+    tuple val(meta), path('set/genomes'),           emit: genomes
+    tuple val(meta), path('set/genome_fetch.log'),  emit: log
     tuple val("${task.process}"), val('curl'), eval("curl --version | head -1 | cut -d' ' -f2"), topic: versions, emit: versions_curl
 
     script:
-    def S = "${moduleDir}/templates/phenotype_validation"
     """
     # Each strain's assembly from NCBI into <dir>/genomes/<bid>_<accession>.fna.gz. BacDive's INSDC
     # accessions are unversioned (GCA_013177455): the versioned FTP folder is read from the
@@ -90,24 +81,16 @@ process BACDIVE_FETCH {
              END {printf "downloaded=%d cached=%d failed=%d\\n", n["OK"], n["CACHED"], n["FAIL"]}'
     )
 
-    mkdir -p bacdive/bacdive_raw
-    if [ -d snapshot ]; then cp -RL snapshot/. bacdive/bacdive_raw/; fi
-    # 1. harvest (batches already there are skipped), 2. phenotype table, 3. genomes from NCBI
-    bash ${S}/harvest_bacdive.sh bacdive sweep
-    python3 ${S}/build_table.py --dir bacdive
-    PAR=${task.cpus} fetch_genomes bacdive
-    # 4. the within-domain salt-in control: strains, and genomes (links to the main set's where it has them)
-    python3 ${S}/build_strategy_control.py --dir bacdive
-    PAR=4 fetch_genomes bacdive/strategy_control
-    test -d bacdive/genomes
+    mkdir -p set/genomes
+    cp -L strains.tsv set/pilot_strains.tsv
+    touch set/genome_fetch.log
+    PAR=${task.cpus} fetch_genomes set
     """
 
     stub:
     """
-    mkdir -p bacdive/genomes bacdive/strategy_control/genomes bacdive/bacdive_raw
-    echo '>c' > bacdive/genomes/1_GCA_000001.fna
-    printf 'bacdive_id\\n1\\n' > bacdive/pilot_strains.tsv
-    printf 'bacdive_id\\ttax_class\\n' > bacdive/bacdive_classes.tsv
-    printf 'bacdive_id\\n' > bacdive/strategy_control/pilot_strains.tsv
+    mkdir -p set/genomes
+    echo '>c' > set/genomes/1_GCA_000001.fna
+    touch set/genome_fetch.log
     """
 }

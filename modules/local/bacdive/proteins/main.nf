@@ -3,16 +3,16 @@
 // every nchunks-th genome; each strain's results are one directory, <bid>/.
 // Prodigal and hmmsearch are osmotool's own: annotate --proteins reads these proteins in its place.
 process BACDIVE_PROTEINS {
-    tag "chunk ${chunk}/${params.nchunks}"
+    tag "chunk ${chunk}"
     label 'process_medium'
 
     // calls: prodigal, hmmsearch, awk, find, xargs, sort, gzip
     container 'docker.io/barbarahelena/osmotool:0.8.0'
 
     input:
-    val(chunk)
-    path(genomes)                                       // BACDIVE_FETCH
-    path(control_genomes, stageAs: 'control_genomes')   // BACDIVE_FETCH: the salt-in control's
+    val(chunk)                                          // i/K: every K-th genome from the i-th
+    path(genomes)                                       // BACDIVE_GENOMES
+    path(control_genomes, stageAs: 'control_genomes')   // BACDIVE_GENOMES: the salt-in control's, or []
     path(pool)                                          // the random-panel pool, pool.hmm
 
     output:
@@ -92,14 +92,15 @@ process BACDIVE_PROTEINS {
     echo "=== \${PAR}x1: \${W}s wall for \$N genomes ==="
     )
 
-    export CHUNK=${chunk}/${params.nchunks}
+    export CHUNK=${chunk}   # i/K
+    mkdir -p control_genomes   # none in pilot mode
     pool_search ${genomes} strains ${pool} ${task.cpus}
     pool_search control_genomes control_strains ${pool} ${task.cpus}
     """
 
     stub:
     """
-    mkdir -p strains/${chunk}00 control_strains
-    touch strains/${chunk}00/${chunk}00.faa.gz
+    mkdir -p strains/${chunk.tokenize('/')[0]}00 control_strains
+    touch strains/${chunk.tokenize('/')[0]}00/${chunk.tokenize('/')[0]}00.faa.gz
     """
 }

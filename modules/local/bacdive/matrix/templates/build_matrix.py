@@ -119,7 +119,7 @@ def main():
         rows.append((bid, total, counts))
 
     if not rows:
-        sys.exit(f'no gene_counts.tsv under {annot}/ -- run run_annotate.sh first')
+        sys.exit(f'no gene_counts.tsv under {annot}/ -- run BACDIVE_ANNOTATE first')
 
     families = sorted(families)
     out = args.out or os.path.join(args.dir, 'feature_matrix.tsv')

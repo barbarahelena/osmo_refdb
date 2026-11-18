@@ -13,13 +13,12 @@ workflow OSMO_REFDB {
     families        // families.yaml
     source          // the source release's snapshot
     snapshot        // harvested BacDive batches to start from, or []
-    pool            // the random-panel pool: pool.hmm
-    pool_families   //                        pool_families.tsv
+    random_panel    // a given random-panel pool ([pool.hmm, pool_families.tsv]), or [] to build it
 
     main:
     // independent of the release: start at once, run alongside the build
     CATALOG_GENES()
-    BACDIVE_DATA(snapshot, pool)
+    BACDIVE_DATA(families, snapshot, random_panel)
 
     // the release, then the catalog on it, then the gate
     RELEASE_CATALOG(families, source, CATALOG_GENES.out.genes)
@@ -31,7 +30,7 @@ workflow OSMO_REFDB {
     if( params.gate_passed ) {
         data = BACDIVE_DATA.out
         BACDIVE_ANALYSIS(db, data.chunks, data.genomes, data.control_genomes, data.pilot, data.classes,
-                         data.control_pilot, data.strains, data.control_strains, pool_families)
+                         data.control_pilot, data.strains, data.control_strains, data.pool_families)
         REAL_GENOME_VALIDATION(db, RELEASE_CATALOG.out.hmms)
         done = done.mix(BACDIVE_ANALYSIS.out.done, REAL_GENOME_VALIDATION.out.report).collect()
     }

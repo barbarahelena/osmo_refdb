@@ -14,8 +14,8 @@ process BACDIVE_ANALYZE {
     path(matrix)                                                // BACDIVE_MATRIX
     path(pool_families)                                         // the random-panel pool, pool_families.tsv
     path(strains, stageAs: 'strains/*')                         // BACDIVE_PROTEINS: <bid>/ per strain
-    path(classes)                                               // BACDIVE_FETCH: bacdive_classes.tsv
-    path(control_pilot, stageAs: 'control_pilot_strains.tsv')   // BACDIVE_FETCH: the salt-in control
+    path(classes)                                               // BACDIVE_HARVEST: bacdive_classes.tsv, or [] (pilot)
+    path(control_pilot, stageAs: 'control_pilot_strains.tsv')   // BACDIVE_HARVEST: the salt-in control, or [] (pilot)
     path(control_strains, stageAs: 'control_strains/*')         // BACDIVE_PROTEINS: the control's
     path(control_annotate, stageAs: 'control_annotate/*')       // BACDIVE_ANNOTATE: the control's
 
