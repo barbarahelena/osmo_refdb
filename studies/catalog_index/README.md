@@ -86,11 +86,11 @@ genes.
   million reads to none. With the hits index they come from two places:
   - 65 catalog calls: reads from genes not in the hits index that align at >= 97% to a
     hit gene (cspA, trkA, opuBB, murB, mscL), the competition the full index exists for;
-  - 164 translated calls, 152 of them gor: reads from gor's look-alikes (other
-    FAD-disulfide oxidoreductases) that fall through to DIAMOND. v9 has no gor decoy;
-    `fadDisulfide_decoy` (from v10 on) is built for exactly these, so with a v10 release
-    the hits index's rate should drop to about 20 per million (77 of the 229), not
-    measured here.
+  - 164 translated calls, 152 of them gor, from reads of non-panel genes that fall
+    through to DIAMOND. Which genes they come from is not broken down here; most likely
+    gor's look-alikes (other FAD-disulfide oxidoreductases), for which v9 has no decoy.
+    `fadDisulfide_decoy` (from v10 on) is built for those; if it catches them, the hits
+    index's rate would drop to about 20 per million (77 of the 229). Not measured.
 - **At 2% divergence** the gap narrows (75 against 44 per million). More reads settle
   than expected: 2% divergence plus 0.5% errors leaves many reads just above the 97% bar
   (2.56 M of 3.99 M non-panel reads settle with the full index).
