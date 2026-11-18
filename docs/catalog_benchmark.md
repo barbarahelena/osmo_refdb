@@ -14,8 +14,10 @@ trk/ktr channel do not.
 The numbers below are from the v10 run of the old `11d_benchmark_catalog.py`
 (osmotool branch `catalog-profile`, `df87119`, bwa-mem3 0.17.0). Every release
 now runs the same benchmark in `RELEASE_BUILD`: `BENCHMARK_CATALOGGENES`
-writes the two gene sets, `OSMOTOOL_BUILDCATALOG_BENCHMARK` builds A_full,
-A_hits and B_full, `BENCHMARK_CATALOGMAP` maps the test reads to each, and
+writes the two gene sets, `OSMOTOOL_BUILDCATALOG_BENCHMARK` builds A and B
+with the index a release ships (`--index neighbours`; the comparison of
+indexes on real gut genes that chose it is `studies/catalog_index`),
+`BENCHMARK_CATALOGMAP` maps the test reads to each, and
 `BENCHMARK_CATALOGSCORE`
 (`modules/local/benchmark/catalogscore/templates/catalog_benchmark.py`)
 scores them into the release's `results/catalog_benchmark/`. The run stops
@@ -32,9 +34,9 @@ bounds are scored on the same 854,484 test reads as steps 9-11:
 | A | every sequence of the release: train, calib and test positives, both negative splits, the random background | 148,721 | upper: every test read's own gene is catalogued |
 | B | only what the benchmark does not score: positive.train, positive.calib, negative.train | 105,996 | lower: no test read's own gene is catalogued |
 
-- Both are indexed in full (competitive mapping, as Cayman). A is also
-  scored with the small index a release ships (A_hits: genes with an HMM
-  hit only).
+- In the v10 run below, both were indexed in full (competitive mapping, as
+  Cayman), and A also with the hits-only index (A_hits). The pipeline now
+  builds both with the index a release ships (`--index neighbours`).
 - Catalog genes are the proteins back-translated exactly as
   `simulate_reads.py` builds its constructs, so a test read matches its
   own gene base for base (checked on 95 constructs).

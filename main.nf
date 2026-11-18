@@ -29,7 +29,7 @@
  *
  * Skipping finished work: -resume reuses results from the work directory; storeDir keeps a task's
  * output in a permanent place and skips the task whenever it is already there, even without work/.
- * storeDir is used for the gene file and the full catalog index. Everything else goes from step to step
+ * storeDir is used for the gene file and, with --refs_store, the UniProt fetch. Everything else goes from step to step
  * as outputs and inputs; no step reads a published file. The release is published into
  * releases/<release> by the steps that make its parts (conf/modules.config). See docs/hpc.md.
  *
@@ -50,12 +50,11 @@ workflow {
 
 workflow profile_samples {
     main:
-    require_params(['repo', 'release', 'catalog_name', 'full_index_dir', 'samples'])
+    require_params(['repo', 'release', 'catalog_name', 'samples'])
     samples = channel.fromPath(params.samples)
         .splitCsv(header: true)
         .map { row -> tuple([id: row.id], [file(row.r1, checkIfExists: true), file(row.r2, checkIfExists: true)]) }
     db    = files("${params.repo}/releases/${params.release}/*", checkIfExists: true)   // staged as osmotool's DATABASE
-    // the catalog's full index if it has been built (--catalog and --keep_aln: conf/modules.config)
-    index = file("${params.full_index_dir}/catalog_index.json").exists() ? file(params.full_index_dir) : []
-    OSMOTOOL_PROFILE(samples, db, index)
+    // with the release's catalog and the index it ships (--catalog and --keep_aln: conf/modules.config)
+    OSMOTOOL_PROFILE(samples, db)
 }

@@ -1,5 +1,5 @@
 // Scores profile --catalog on the test reads, per reporting unit and family, in the three benchmark
-// catalogs (A_full, A_hits, B_full), against the same reads' translated calls (the test benchmark's
+// catalogs (A and B, indexed as the release's catalog is), against the same reads' translated calls (the test benchmark's
 // DIAMOND run with the release's cascade): see templates/catalog_benchmark.py. The output is the
 // release's results/catalog_benchmark/ (docs/catalog_benchmark.md).
 process BENCHMARK_CATALOGSCORE {

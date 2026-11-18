@@ -68,10 +68,11 @@ full catalog index   (needs only the gene file: starts at once, in parallel)
    - Apptainer runs with `--no-mount hostfs` (`nextflow.config`): a site that mounts every host
      filesystem (Snellius does) would hide the osmotool image's `/opt/conda`, and every tool in it would
      be "not found". So every directory outside the repo a step reads or writes goes in `extra_binds`.
-   - osmotool 0.8.0 has no catalog mode (`build-catalog`, `index-catalog`, `profile --catalog`): it is
-     on osmotool's main branch since 0.8.0, not yet tagged. The catalog steps (`RELEASE_CATALOG`, the
-     catalog benchmark, `-entry profile_samples` with a catalog) need a release that has it, in an image
-     with bwa-mem3 (both the hits-only index a release ships and the full index). Then bump the tag in every
+   - osmotool 0.8.0 has no catalog mode (`build-catalog`, `profile --catalog`): it is on osmotool's main
+     branch since 0.8.0, and `--index neighbours`, `--no_catalog` and the catalog as profile's default are
+     on its `catalog-default` branch; none is tagged yet. The catalog steps (`RELEASE_CATALOG`, the
+     catalog benchmark, the real-genome reads with the catalog, `-entry profile_samples`) and every
+     profile step's `--no_catalog` need a release that has them, in an image with bwa-mem3. Then bump the tag in every
      module that uses the image (`grep -rl osmotool:0.8.0 modules`) and in their `environment.yml`.
    - Still to do: the `bacdive-fetch` image needs `conda-forge::gzip` and `conda-forge::findutils`
      (`BACDIVE_GENOMES` uses both); its `environment.yml` lists them.
@@ -80,7 +81,7 @@ full catalog index   (needs only the gene file: starts at once, in parallel)
    RefSeq (`REFS_BUILD`), the markers built from `markers.yaml` (`MARKERS`). To reproduce the published
    BacDive table rather than today's (`--bacdive_full`), give its harvested batches, `bacdive_raw/`, as
    `--bacdive_snapshot`.
-3. **Settings**: edit the `params` block in `nextflow.config` (`catalog_genes`, `full_index_dir`, the
+3. **Settings**: edit the `params` block in `nextflow.config` (`catalog_genes`, the
    images, and `queue`/`slurm_extra`/`work_dir`). Paths outside the clone that jobs use go in
    `extra_binds`. The release name is given per run with `--release`.
 4. **Run** (from the clone's root, inside a small SLURM job of your own that only runs Nextflow, so nothing
@@ -111,8 +112,8 @@ full catalog index   (needs only the gene file: starts at once, in parallel)
   there, the task is not run at all, with or without `-resume` and even if `work/` is gone.
 
 `storeDir` is used where a task's output is a real file that is expensive, does not depend on the
-release, and is written once: `CATALOG_FETCH` (the gene file, next to `catalog_genes`) and `OSMOTOOL_INDEXCATALOG`
-(the full catalog index, in `full_index_dir`).
+release, and is written once: `CATALOG_FETCH` (the gene file, next to `catalog_genes`), and with
+`--refs_store` the UniProt fetch (`REFS_FETCH`).
 
 Everything else goes from step to step as outputs and inputs; no step reads a published file or
 writes into the clone. Results are published (`publishDir`, `conf/modules.config`):
@@ -161,25 +162,24 @@ margin; run once and tighten them from `pipeline_info/*.trace.tsv`.
 | `BACDIVE_HARVEST` + `BACDIVE_GENOMES` | 1 + 8 | - | about 1.5 h + 50 min | **measured** (harvest 1.5 h; 9.4 GB genome fetch at 8 parallel) |
 | `BUILD_RELEASE` | 16 | 32 GB | request 8 h | **measured** 2.5 h on 10 CPUs inside 7.65 GiB |
 | `OSMOTOOL_BUILDCATALOG` + `CATALOG_PACKAGE` | 16 | 24 GB | request 6 h | **scaled**: translation 10-12 min (1 thread), hmmsearch 21-25 min at 4 threads, Python 2.4-2.8 GB |
-| `OSMOTOOL_INDEXCATALOG` (bwa-mem3) | 1 | 240 GB (`fat_genoa` on the retry) | request 6 h | **scaled**: bwa-mem3 33 s and 1.37 GB for 133 Mbp -> about 100-120 GB, possibly over 200 GB; **not measured** at full size |
 | `CATALOG_SCREEN` | 1 | 8 GB | 30 min | reads one TSV |
 | `BACDIVE_PROTEINS` | 40 x 4 | 8 GB each | 2 h each | **measured** 44 core-hours in all (19,965 s at 8 jobs) |
 | `BACDIVE_ANNOTATE` | 40 x 2 | 4 GB each | 1 h each | **measured** 3.6 core-hours in all (4,365 s at 3 jobs) |
 | `BACDIVE_ANALYZE` + `NACL_MODEL` | 8 | 16 GB | request 3 h | **measured** about 16 min analysis + about 30 min NaCl |
-| `OSMOTOOL_PROFILE`, one sample of <= 20M reads | 8 | 32 GB | request 6 h | the release's hits-only index; with the full bwa-mem3 index, which mapping loads, memory is **not measured** (about 35-40 GB of index on disk, scaled); time **not measured** at this scale |
+| `OSMOTOOL_PROFILE`, one sample of <= 20M reads | 8 | 32 GB | request 6 h | **measured** on 4 M simulated reads with a 1 M-gene catalog slice: 7.2 GB and 2 min at 32 threads (`studies/catalog_index`); the release's index scales to about 2.5 GB on disk; time **not measured** at 20 M reads |
 
-**The full index's memory.** Both catalog indexes are bwa-mem3, osmotool's only aligner. On a
-133 Mbp sample of the gut catalog bwa-mem3 built in 33 s and peaked at 1.37 GB (10.3 bytes per base;
-classic bwa, which osmotool no longer offers, took 92 s and 0.2 GB). Scaled linearly to 10-11.5 Gbp
-that is about 100-120 GB, and bwa-mem3's own documentation gives a higher per-base cost above about
-1 Gbp (72 GB for the human genome), so it may be well over 200 GB: `OSMOTOOL_INDEXCATALOG` asks for
-240 GB and on a retry 480 GB on `fat_genoa`. Mapping a sample loads the index too, so the full index
-also sets `-entry profile_samples`'s memory (32 GB in the table is for the hits-only index). Measure
-both on the first full build.
+**The catalog's index.** A release ships the index of the genes with an HMM hit plus the genes
+close to them (`build-catalog --index neighbours`), not an index of the whole catalog.
+`studies/catalog_index` measured both on a 1 M-gene, 755 Mbp slice of the gut catalog: the
+neighbours index gave no catalog false calls, as the whole-catalog index did, at 0.19 GB on disk
+against 2.7 GB. The whole-catalog index's build took 7.5 GB for 755 Mbp (about 10 bytes per base,
+so about 100 GB for the 10.4 Gbp catalog); the neighbours index's build peaks at the window
+mapping, 9.5 GB at that size.
 
-**Disk** (about 85 GB; ask for 150 GB): GMGC 3 GB, BacDive data 17.4 GB (**measured**), full catalog index
-about 35-40 GB with bwa-mem3 (scaled: 3.4 bytes per FASTA byte), one build about 8 GB (**measured**: v10 is 7.6 GB),
-temporary protein FASTA for the annotation about 4 GB (scaled), the hits-only index and annotation a few GB.
+**Disk** (about 45 GB; ask for 100 GB): GMGC 3 GB, BacDive data 17.4 GB (**measured**), one build
+about 8 GB (**measured**: v10 is 7.6 GB), temporary protein FASTA for the annotation about 4 GB
+(scaled), the catalog's windows for the neighbour search about 3-4 GB while it runs (scaled), the
+catalog's index and annotation a few GB (about 2.5 GB scaled).
 
 **Total compute**, summed over the table: roughly 44 + 4 core-hours for the BacDive arrays, about 40 for
 the release build, about 6 for the catalog annotation, 2 for the index, 5 for the analysis: on the order
@@ -192,11 +192,9 @@ plus a timeline and a report. At minimum look at:
 
 | job | threads | wall | peak RSS | notes |
 |---|---|---|---|---|
-| build: hmmsearch + hits index | | | | |
-| `index-catalog` (full index) | | | | index size on disk: |
-| profile, 20M-read sample, catalog + full index | | | | |
-| profile, same sample, no catalog | | | | |
-| profile, same sample, catalog + hits index only | | | | |
+| build-catalog: hmmsearch, neighbour search, index | | | | index size on disk: |
+| profile, 20M-read sample, with the release's catalog | | | | |
+| profile, same sample, `--no_catalog` | | | | |
 
 ## Reproducibility: what a canonical HPC build fixes, and what it does not
 

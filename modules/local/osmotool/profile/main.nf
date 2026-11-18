@@ -1,6 +1,6 @@
 // osmotool profile: paired reads against an osmo_refdb release (DIAMOND, the DIAMOND+HMM cascade,
 // copies-per-genome markers). Options go in ext.args (conf/modules.config): --keep_aln, --no_markers,
-// --catalog, filters. catalog_index: a full catalog index directory, or [] for none.
+// --catalog, --no_catalog, filters.
 process OSMOTOOL_PROFILE {
     tag "${meta.id}"
     label 'process_high'
@@ -10,7 +10,6 @@ process OSMOTOOL_PROFILE {
     input:
     tuple val(meta), path(reads)   // [R1, R2]
     path(db, stageAs: 'db/*')   // the release as osmotool reads it (DATABASE): its DIAMOND files, cascade and hmms/, staged as db/
-    path(catalog_index)
 
     output:
     tuple val(meta), path("${prefix}.gene_counts.tsv"),              emit: gene_counts
@@ -24,10 +23,9 @@ process OSMOTOOL_PROFILE {
     script:
     def args  = task.ext.args ?: ''
     prefix    = task.ext.prefix ?: "${meta.id}"
-    def index = catalog_index ? "--catalog_index ${catalog_index}" : ''
     """
     osmotool profile db -1 ${reads[0]} -2 ${reads[1]} \\
-        --out_prefix ${prefix} --threads ${task.cpus} ${index} ${args}
+        --out_prefix ${prefix} --threads ${task.cpus} ${args}
     """
 
     stub:

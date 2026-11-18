@@ -5,15 +5,13 @@ catalogs/<name>/, for `osmotool profile --catalog <name>`.
 
 The catalog's annotation is one unit with the release it is built for: it
 comes from this release's HMMs and gathering cutoffs, so rebuild it for
-every release (it changes whenever an HMM or cutoff does). To keep the
-release small, it ships with an index of only the genes that have an HMM
-hit (--index hits, the default): usable straight away, with sub-cutoff
-homologs and decoys in it so their reads are recognised and dropped. The
-full, competitive index of every catalog gene depends only on the gene file
-and the aligner, not on the release; it is built separately with `osmotool
-index-catalog`, distributed on its own, and used with `profile --catalog
-NAME --catalog_index DIR` (checked against this catalog's gene-file
-checksum).
+every release (it changes whenever an HMM or cutoff does). It ships with
+the index osmotool build-catalog --index neighbours makes: the genes with an
+HMM hit (sub-cutoff homologs and decoys included, so their reads are
+recognised and dropped) plus the genes without a hit that are close to one,
+so reads from those competitors map to their own gene and are dropped too.
+Small enough to ship, and on real gut genes as free of catalog false calls as
+an index of the whole catalog (studies/catalog_index).
 
 The work is done by `osmotool build-catalog` (translate, hmmsearch with the
 release's HMMs, assign each gene as `annotate --method hmm` does, index the
@@ -29,7 +27,7 @@ Usage:
 
 Writes releases/<release>/catalogs/<name>/:
   catalog.fna.*                    bwa-mem3 index of the genes with an HMM hit
-                                   (--index hits; none with --index none)
+                                   and their neighbours (--index neighbours)
   catalog.annotation.tsv           every gene with an HMM hit: family (or
                                    homolog / decoy), HMM envelope in nt
   catalog.json                     build parameters, counts per family,

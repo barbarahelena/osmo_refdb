@@ -438,10 +438,10 @@ release name.
 | 10 | `run_benchmark.sh` | Run `osmotool profile` with its default DIAMOND+HMM cascade (`CASCADE=off` for DIAMOND alone, `CASCADE=score` for the calibration pass; `SKIP_HMM=1` reruns only the DIAMOND side) and HMM (hmmscan; `JOBS` samples in parallel) on the simulated reads. `--keep_aln` keeps the raw DIAMOND alignments and the cascade's hmmsearch table, so one run scores both DIAMOND alone and DIAMOND+cascade |
 | 11 | `compute_metrics.py` | Precision/recall/F1, ROC/PR curves, per-family best-threshold summary, read-length-stratified summary and background false-positive rate, for three methods: `diamond`, `diamond_cascade` (what `osmotool profile` reports by default; per-read calls rebuilt from osmotool's kept files and checked against its `gene_counts.tsv`) and `hmm`. In the calibration pass (no `--cascade-config`) it instead decides and writes `osmo_refdb.profile_cascade.tsv` and `osmo_refdb.profile_report_levels.tsv` (step 9c-11c); on the test reads it scores those choices per reporting unit in `summary_by_report_unit.tsv` (the numbers for the paper) and checks osmotool's `unit_counts.tsv` against the rebuilt calls. `summary.tsv` counts false positives three ways: `fp` (the family's own hard negatives and flanks; `precision`/`f1`, comparable to releases up to v8), `fp_cross` (other panel genes' real reads called as this family, mostly close-paralog confusion; `precision_panel`/`f1_panel`), and `fp_background`/`background_fp_per_million` (random background reads). `fp_other_negatives` (other families' hard negatives called as this family) is in none of those, since sibling families share one negative pool. `fp_all` = all three, with `precision_all`/`f1_all`: the same denominator at gene and group level, used for the report-level and cascade decision. `hard_negative_fp_per_million` and `background_fp_per_million` are rates per million negative reads, independent of how many negatives were mixed in: use those to compare families or releases. Families sharing a `families.yaml` `paralog_group` are also scored as one unit in `summary_by_group.tsv`, where a read called as a sibling counts as correct (`within_group_swaps`) |
 | 11b | `modules/local/benchmark/templates/benchmark_annotate.py` | Annotate-mode benchmark at protein level: runs `osmotool annotate --proteins` (HMM with GA cutoffs, and DIAMOND with its bitscore cutoffs) on the held-out test positives, test hard negatives and random background, and scores per-protein calls from `gene_coordinates.tsv`. Output in `results/annotate/` (`summary.tsv`, `summary_by_group.tsv`, `overall.tsv`) |
-| 11d | `modules/local/benchmark/catalogscore/templates/catalog_benchmark.py` | Catalog benchmark: `osmotool profile --catalog` on the test reads with catalogs of the release's own back-translated sequences, as two bounds: A, every sequence catalogued (A_full, and A_hits with the hits-only index a release ships); B, only what the benchmark does not score. Scored per reporting unit against the translated calls, and checked against full `profile --catalog` runs. Output in `results/catalog_benchmark/`; see `docs/catalog_benchmark.md` |
+| 11d | `modules/local/benchmark/catalogscore/templates/catalog_benchmark.py` | Catalog benchmark: `osmotool profile --catalog` on the test reads with catalogs of the release's own back-translated sequences, indexed as the release's catalog is, as two bounds: A, every sequence catalogued; B, only what the benchmark does not score. Scored per reporting unit against the translated calls, and checked against full `profile --catalog` runs. Output in `results/catalog_benchmark/`; see `docs/catalog_benchmark.md` |
 
 | 12 | `MARKERS` (workflow) | Build the marker genes (`markers.yaml`, see below) apart from the osmo families: their own references, split and DIAMOND database, packaged as the release's `markers/` (`package_markers.py`): DIAMOND db, its source FASTA (for reference lengths), excluded decoy labels, a per-marker manifest |
-| 14 | `package_catalog.py` (`RELEASE_CATALOG`) | Build a gene catalog into the release as `catalogs/<name>/` with `osmotool build-catalog`: translate the catalog genes, annotate them with this release's HMMs under their gathering cutoffs (as `annotate --method hmm`), index the whole catalog with bwa-mem3. Adds provenance (source, input checksums, release) to `catalog.json`, the gzipped hmmsearch domain table, and `SHA256SUMS`. The catalog is part of the release: rebuild it for every release |
+| 14 | `package_catalog.py` (`RELEASE_CATALOG`) | Build a gene catalog into the release as `catalogs/<name>/` with `osmotool build-catalog`: translate the catalog genes, annotate them with this release's HMMs under their gathering cutoffs (as `annotate --method hmm`), index the hit genes and their neighbours with bwa-mem3. Adds provenance (source, input checksums, release) to `catalog.json`, the gzipped hmmsearch domain table, and `SHA256SUMS`. The catalog is part of the release: rebuild it for every release |
 
 ### Gene catalogs
 
@@ -461,41 +461,23 @@ users never annotate anything themselves.
 (`--catalog_name`, `--catalog_source` and `--catalog_source_url` describe it;
 their defaults are GMGC v1.0 human gut).
 
-- The release ships an index of only the genes with an HMM hit
-  (`CATALOG_INDEX=hits`, the default), so it stays small and the catalog
-  works straight away. Sub-cutoff homologs and decoys are in it, so their
-  reads are recognised and dropped; reads from genes without any hit fall
-  back to translated search.
-- The full, competitive index of every catalog gene (bwa-mem3; its memory: `docs/hpc.md`) does not
-  depend on the release, only on the gene file and the aligner. It is about
-  3.4 bytes per byte of FASTA on the catalogs measured so far (a 137 MB
-  sample of the human-gut catalog gave a 472 MB index); the size for a whole
-  gut catalog has not been measured (see `docs/hpc.md`). It is built separately
-  and distributed on its own:
-
-  ```bash
-  osmotool index-catalog --genes GMGC10.human-gut.95nr.0.5.percent.prevalence.fna.gz \
-      -o gmgc_gut_index
-  osmotool profile releases/v10 -1 R1.fq.gz -2 R2.fq.gz \
-      --catalog gmgc_gut --catalog_index gmgc_gut_index -o sample
-  ```
-
-  osmotool checks that the index was built from the same gene file the
-  release's catalog was annotated from (`genes_sha256`).
-- The catalog is not part of the simulated-read benchmark yet, and
-  `--catalog` is not osmotool's default.
+- The release ships the index `build-catalog --index neighbours` makes: the
+  genes with an HMM hit (sub-cutoff homologs and decoys included, so their
+  reads are recognised and dropped) plus the genes without a hit that are
+  close to one, so reads from those competitors map to their own gene and are
+  dropped too. On a 1 M-gene slice of the gut catalog it gave no catalog false
+  calls, as an index of the whole catalog did, at 0.19 GB against 2.7 GB
+  (`studies/catalog_index`). Reads from genes far from any hit gene fall back
+  to translated search.
+- `osmotool profile` uses the catalog a release ships by default;
+  `--no_catalog` is translated search only. Every release scores it on the
+  test reads (step 11d, `docs/catalog_benchmark.md`) and on reads from the
+  real genomes (`docs/real_genome_validation.md`).
 
 Steps 4, 5 (hmmbuild) and 8 only touch the TRAIN split. Steps 5-6 and 8b
 (cutoffs) and the calibration pass 9c-11c (cascade config) only touch the
 CALIB positives and TRAIN negatives. Steps 9-11b only touch the TEST split.
 Nothing that is tuned sees a sequence the benchmark scores.
-
-`REUSE_REFS_FROM=releases/<name>` rebuilds from another release's fetched
-and clustered sequences (skipping steps 1-2) and, unless
-`REUSE_ALIGNMENTS=0`, its alignments. `releases/v10` was built this way from
-v9: same sequences, same HMMs and DIAMOND db, new cutoffs and cascade config.
-Reusing the alignments matters because multi-threaded MAFFT is not
-reproducible from run to run.
 
 ## Marker genes for copies-per-genome normalisation
 

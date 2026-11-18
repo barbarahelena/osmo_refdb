@@ -53,9 +53,9 @@ workflow REAL_GENOME_VALIDATION {
     WGSIM(curated_proteins.map { meta, _faa, fna -> tuple(meta, fna) })
     reads = WGSIM.out.reads
 
-    OSMOTOOL_PROFILE_RECALL(reads, db, [])   // DIAMOND, alignments kept (ext.args)
+    OSMOTOOL_PROFILE_RECALL(reads, db)   // DIAMOND, alignments kept (ext.args)
     // the same with the catalog, staged in the database as db/<name>/ (ext.args: --catalog db/<name>)
-    OSMOTOOL_PROFILE_RECALL_CATALOG(reads, db.mix(catalog.map { _meta, d -> d }).collect(), [])
+    OSMOTOOL_PROFILE_RECALL_CATALOG(reads, db.mix(catalog.map { _meta, d -> d }).collect())
     catalog_calls = OSMOTOOL_PROFILE_RECALL_CATALOG.out.results
         .map { meta, files -> tuple(meta, files.find { f -> f.name.endsWith('.catalog_hits.tsv') } ?: [],
                                           files.find { f -> f.name.endsWith('.blastx.tsv') } ?: []) }

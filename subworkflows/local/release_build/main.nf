@@ -71,15 +71,14 @@ workflow RELEASE_BUILD {
         OSMOTOOL_ANNOTATE_BENCHMARK.out.results.map { _meta, files -> files }.flatten().collect())
 
     // profile --catalog on the same test reads, in two bounds: A, every sequence of the release is
-    // catalogued (A_full indexes all of it, A_hits only HMM hits, as a release ships); B, only what the
-    // benchmark does not score (B_full). A_full is also run as profile --catalog in full on a few samples.
+    // catalogued; B, only what the benchmark does not score. Both are indexed as the release's catalog
+    // is (ext.args); A is also run as profile --catalog in full on a few samples.
     BENCHMARK_CATALOGGENES(refs, families, BENCHMARK_SIMULATE_TEST.out.reads)
     catalog_sets = BENCHMARK_CATALOGGENES.out.genes_a.mix(BENCHMARK_CATALOGGENES.out.genes_b)
         .flatMap { scen, genes ->
             scen == 'A'
-                ? [tuple([id: 'A_full', index: 'all', verify: ['opuAC.negative', 'proX.positive', 'trkH.negative']], genes),
-                   tuple([id: 'A_hits', index: 'hits', verify: []], genes)]
-                : [tuple([id: 'B_full', index: 'all', verify: []], genes)]
+                ? [tuple([id: 'A', verify: ['opuAC.negative', 'proX.positive', 'trkH.negative']], genes)]
+                : [tuple([id: 'B', verify: []], genes)]
         }
     OSMOTOOL_BUILDCATALOG_BENCHMARK(catalog_sets, db_calib)
     BENCHMARK_CATALOGMAP(BENCHMARK_SIMULATE_TEST.out.reads, db, OSMOTOOL_BUILDCATALOG_BENCHMARK.out.catalog)

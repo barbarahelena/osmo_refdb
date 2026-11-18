@@ -145,3 +145,13 @@ took 17 s and 9.5 GB at 32 threads; the catalog is 0.19 GB on disk (hits 0.14 GB
 Scaled to the whole catalog (13.8x the slice): about 2.5 GB on disk against about 37 GB
 for the full index, and the neighbour search maps about 180 M windows, minutes at 32
 threads.
+
+## Outcome
+
+Releases ship the middle option: osmotool `build-catalog --index neighbours`
+(osmotool `f77ef36`, branch `catalog-default`), the same rule as
+`find_neighbours.py`. Built with it on this slice, it found the same 25,170
+neighbours, and `profile` gave gene counts identical to the study's
+neighbours run. The pipeline no longer builds an index of the whole catalog.
+To recheck with a v10 release once one is built: `RELEASE=<release> bash run.sh`,
+then `bash run_neighbours.sh`.

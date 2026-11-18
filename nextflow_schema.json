@@ -25,11 +25,6 @@
           "description": "Where the GMGC gene file goes or is: <dir>/GMGC10.human-gut.95nr.0.5.percent.prevalence.fna.gz (absolute)",
           "pattern": "GMGC10\\.human-gut\\.95nr\\.0\\.5\\.percent\\.prevalence\\.fna\\.gz$"
         },
-        "full_index_dir": {
-          "type": "string",
-          "description": "Where the full catalog index goes (absolute)",
-          "format": "directory-path"
-        },
         "data_dir": {
           "type": "string",
           "description": "Release-independent BacDive data, under repo",
@@ -54,8 +49,7 @@
       "required": [
         "repo",
         "release",
-        "catalog_genes",
-        "full_index_dir"
+        "catalog_genes"
       ]
     },
     "catalog_options": {

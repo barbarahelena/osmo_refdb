@@ -19,8 +19,8 @@ the same test reads as the read benchmark:
                      reproduce the translated-search numbers. Any test read B
                      settles anyway is reported.
 
-Both are indexed in full (index all, competitive). A is also scored with the
-small index a release ships (A_hits: genes with an HMM hit only).
+Both are indexed as the release's catalog is (build-catalog --index
+neighbours: the genes with an HMM hit and the genes close to them).
 
 The catalog genes are the release's proteins back-translated exactly as the
 read constructs are (BENCHMARK_CATALOGGENES), so a test read matches its own
@@ -44,8 +44,7 @@ read benchmark):
                            (--catalog_only): what a catalog-only profiler sees
 
 mixture.tsv: f1_all per reporting unit for samples where a fraction f of the
-reads comes from catalogued strains (counts mixed linearly between A_full and
-B_full).
+reads comes from catalogued strains (counts mixed linearly between A and B).
 
 Usage:
   python catalog_benchmark.py --metrics-module compute_metrics.py --reads reads \\
@@ -62,7 +61,7 @@ from pathlib import Path
 
 import pandas as pd
 
-SCENARIOS = ["A_full", "A_hits", "B_full"]
+SCENARIOS = ["A", "B"]
 MIXTURE_F = [0.0, 0.25, 0.5, 0.75, 1.0]
 
 
@@ -205,7 +204,7 @@ def main() -> None:
         settled = catalog_decisions(args.runs / name / "runs", names)
         settled_by[name] = settled
         score(hybrid_calls(translated, settled, fallback=True), f"catalog_{name}")
-        if name != "B_full":
+        if name != "B":
             score(hybrid_calls(translated, settled, fallback=False), f"catalog_only_{name}")
         lab = settled.join(t[["family", "label"]], on="read_id", rsuffix="_true")
         for (fam_true, label), grp in lab.groupby(["family", "label_true"]):
@@ -218,10 +217,10 @@ def main() -> None:
                 "ambiguous": int((grp["decision"] == "ambiguous").sum()),
             })
 
-    mix = mixture(m11, counts_of(by_method["catalog_A_full"]), counts_of(by_method["catalog_B_full"]), units)
+    mix = mixture(m11, counts_of(by_method["catalog_A"]), counts_of(by_method["catalog_B"]), units)
 
     print("Verifying the per-read rebuild against the full profile --catalog runs", flush=True)
-    ver = verify(args.runs / "A_full" / "verify", translated, settled_by["A_full"])
+    ver = verify(args.runs / "A" / "verify", translated, settled_by["A"])
 
     write_tsv(args.out / "summary_by_report_unit.tsv", unit_rows)
     write_tsv(args.out / "summary.tsv", family_rows)
