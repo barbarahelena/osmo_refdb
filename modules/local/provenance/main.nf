@@ -33,7 +33,7 @@ process PROVENANCE {
     script:
     """
     cp -L ${versions} software_versions.yml
-    REUSE_REFS_FROM="${params.reuse_refs_from}" SPLIT_MODE="${params.split_mode}" \\
+    SPLIT_MODE="${params.split_mode}" \\
     python ${moduleDir}/templates/write_provenance.py --release-name ${release_name} \\
         --refs refs --alignments ${alignments} --hmms ${hmms} --files files/* --catalogs ${catalog} \\
         --repo ${pipeline} --families ${families} --versions software_versions.yml --out PROVENANCE.json

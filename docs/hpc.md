@@ -74,10 +74,10 @@ full catalog index   (needs only the gene file: starts at once, in parallel)
    - Still to do: the `bacdive-fetch` image needs `conda-forge::gzip` and `conda-forge::findutils`
      (`BACDIVE_GENOMES` uses both); its `environment.yml` lists them.
    - A missing tool shows as `command not found` in the task's log; `-stub-run` does not check images.
-2. **Snapshot** (not in git; about 2 GB from `releases/v10/` on the laptop): `refs/`, `alignments/`, and
-   what the build reads from the source release (`osmo_refdb.train_refs.faa`, `markers/`, ...). `rsync -a`
-   it to `<clone>/releases/<snapshot>/`. To reproduce the published BacDive table rather than today's
-   (`--bacdive_full`), also `bacdive_raw/`, given as `--bacdive_snapshot`.
+2. **Inputs**: none to copy. A build starts from scratch: the references are fetched from UniProt and
+   RefSeq (`REFS_BUILD`), the markers built from `markers.yaml` (`MARKERS`). To reproduce the published
+   BacDive table rather than today's (`--bacdive_full`), give its harvested batches, `bacdive_raw/`, as
+   `--bacdive_snapshot`.
 3. **Settings**: edit the `params` block in `nextflow.config` (`catalog_genes`, `full_index_dir`, the
    images, and `queue`/`slurm_extra`/`work_dir`). Paths outside the clone that jobs use go in
    `extra_binds`. The release name is given per run with `--release`.
@@ -140,7 +140,8 @@ it to tighten `conf/base.config`.
 | BacDive genomes (about 9.4 GB; the pilot's 43, about 0.1 GB), salt-in control genomes (0.7 GB) | yes | `BACDIVE_GENOMES`, from NCBI FTP; a download is checked before it counts |
 | Pfam-A 39.0 | yes, added | `fetch_pfam.sh` (pinned URL); only needed to re-derive the random-panel pool |
 | random-panel pool (`pool.hmm`) | yes | `POOL_PFAM` + `POOL_EXTRACT`: the 174 families of `assets/random_panel/pool_families.tsv` (the pool the analysis was specified with), their models from Pfam-A 39.0, downloaded; published to `<repo>/<data_dir>/random_panel` |
-| release snapshot (`refs/`, `alignments/`, ...) | **no: rsync** | UniProt/RefSeq are live, so the snapshot is the input |
+| a release's references (`refs/`) | yes | `REFS_BUILD`: UniProt and RefSeq, fetched for every build (they are live: the release and fetch dates are in `refs/manifest.tsv` and `PROVENANCE.json`) |
+| the marker genes' references (`markers/`) | yes | `MARKERS`: `REFS_BUILD` on `markers.yaml`, then their own DIAMOND database |
 | reference genomes for real-genome validation | in git | `assets/test_genomes/` (3), osmotool's `test_genomes/` (9); validated by the workflow for every release |
 | UniProt / RefSeq (build step 1) | yes, but not used | only for a from-scratch fetch, which is a new database vintage |
 
@@ -173,7 +174,7 @@ against about 15-17 GB for classic bwa. Cayman builds its index with classic bwa
 hits-only index shipped in the release stays bwa-mem3.
 
 **Disk** (about 65 GB; ask for 100 GB): GMGC 3 GB, BacDive data 17.4 GB (**measured**), full catalog index
-about 18-21 GB (scaled), the release snapshot 2 GB, one build about 8 GB (**measured**: v10 is 7.6 GB),
+about 18-21 GB (scaled), one build about 8 GB (**measured**: v10 is 7.6 GB),
 temporary protein FASTA for the annotation about 4 GB (scaled), the hits-only index and annotation a few GB.
 
 **Total compute**, summed over the table: roughly 44 + 4 core-hours for the BacDive arrays, about 40 for
@@ -220,22 +221,20 @@ itself; these are the things that do, and the things that stay out of reach.
   uncommitted files, the osmotool commit and whether a working tree shadowed
   the installed one), **environment** (machine type, the version of every tool
   called, in the build image), **inputs** (families.yaml's
-  checksum, the UniProt release and fetch dates, which snapshot it was built
-  from, a checksum over `refs/` and `alignments/`) and **outputs** (a checksum
+  checksum, the UniProt release and fetch dates, a checksum over `refs/` and
+  `alignments/`) and **outputs** (a checksum
   of every HMM, the DIAMOND database, the cutoff files and each catalog's
   annotation and index).
 
 **Not fixed by where it runs**
-- *UniProt and RefSeq are live.* Re-running step 1 on the cluster fetches
-  whatever they hold that day: a different database vintage, not v10 again.
-  The input of a build is therefore the release's `refs/` snapshot
-  (`REUSE_REFS_FROM`); the snapshot is shipped with the release. A fetch from
-  scratch makes a new release, and its `refs/` is then archived.
+- *UniProt and RefSeq are live.* Every build fetches whatever they hold that
+  day, so two builds a month apart differ in their references. The release
+  records which (`refs/manifest.tsv`, `PROVENANCE.json`) and ships its `refs/`.
 - *MAFFT with several threads is not reproducible run to run* (18 of 44 v9
-  models differed when realigned from identical input). Alignments are
-  therefore inputs: reused from the snapshot, realigned only for families
-  whose training set changed (`run_pipeline.sh` does this per family), and
-  archived with the release. `hmmbuild` itself is deterministic.
+  models differed when realigned from identical input). `MAFFT_ALIGN` runs one
+  family per task on one thread; whether that makes two builds' alignments of
+  the same references identical has not been measured. `hmmbuild` itself is
+  deterministic.
 
 **Measured so far.** Same machine, same refs and reused alignments (v10 vs
 v10-betl-decoy): 45 of 46 HMMs identical apart from the `DATE` and `COM` lines
@@ -245,9 +244,9 @@ same build on arm64 versus x86-64, and the same build twice on the cluster.
 
 **Procedure**
 1. Fix the images once (every module's `container` line), commit, and keep them.
-2. Clean checkout of the commit; put the snapshot at `releases/<snapshot>/`.
-3. `nextflow run main.nf --release <name>` with `reuse_refs_from`
-   set; from an empty `work/` (use `-resume` only for the run after the gate).
+2. Clean checkout of the commit.
+3. `nextflow run main.nf --release <name>` from an empty `work/` (use `-resume` only for the run after
+   the gate).
 
 ## Known gaps
 

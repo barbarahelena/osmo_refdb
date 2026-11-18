@@ -7,25 +7,28 @@ include { BACDIVE_DATA       } from '../subworkflows/local/bacdive_data/main'
 include { RELEASE_CATALOG    } from '../subworkflows/local/release_catalog/main'
 include { BACDIVE_ANALYSIS   } from '../subworkflows/local/bacdive_analysis/main'
 include { REAL_GENOME_VALIDATION } from '../subworkflows/local/real_genome_validation/main'
+include { MARKERS            } from '../subworkflows/local/markers/main'
 
 workflow OSMO_REFDB {
     take:
     families        // families.yaml
-    source          // the source release's snapshot
+    markers         // markers.yaml
     snapshot        // harvested BacDive batches to start from, or []
 
     main:
     // independent of the release: start at once, run alongside the build
     CATALOG_GENES()
     BACDIVE_DATA(snapshot)
+    MARKERS(markers)
 
     // the release, then the catalog on it, then the gate
-    RELEASE_CATALOG(families, source, CATALOG_GENES.out.genes)
+    RELEASE_CATALOG(families, CATALOG_GENES.out.genes)
     RELEASE_CATALOG.out.report.view { f -> f.text }
-    db = RELEASE_CATALOG.out.db
+    // the release as osmotool reads it, now with its markers/
+    db = RELEASE_CATALOG.out.db.mix(MARKERS.out.markers).collect()
 
     // after the gate: BacDive and the NaCl model on the frozen release, and the real-genome checks
-    done = RELEASE_CATALOG.out.done
+    done = RELEASE_CATALOG.out.done.mix(MARKERS.out.markers).collect()
     if( params.gate_passed ) {
         data = BACDIVE_DATA.out
         BACDIVE_ANALYSIS(db, data.chunks, data.genomes, data.control_genomes, data.pilot, data.classes,

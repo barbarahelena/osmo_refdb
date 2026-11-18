@@ -87,6 +87,9 @@ def main() -> None:
     ap.add_argument("--release", required=True, type=Path,
                     help="main osmo_refdb release dir to package into, e.g. releases/v8")
     ap.add_argument("--markers", type=Path, default=Path("markers.yaml"))
+    ap.add_argument("--out", type=Path, default=None,
+                    help="write the markers/ directory here instead of into --release "
+                         "(the Nextflow pipeline publishes it into the release)")
     args = ap.parse_args()
 
     src, dst_release = args.marker_release, args.release
@@ -97,7 +100,7 @@ def main() -> None:
         if not p.is_file():
             sys.exit(f"missing {p} -- run FAMILIES_FILE={args.markers} bash run_pipeline.sh build "
                      f"{src.name} first")
-    if not (dst_release / f"{SRC_PREFIX}.dmnd").is_file():
+    if args.out is None and not (dst_release / f"{SRC_PREFIX}.dmnd").is_file():
         sys.exit(f"{dst_release} doesn't look like a main osmo_refdb release "
                  f"(no {SRC_PREFIX}.dmnd)")
 
@@ -118,8 +121,8 @@ def main() -> None:
         print(f"WARNING: no DIAMOND benchmark metrics under {src}/results/metrics/ -- "
               f"run `benchmark` on the marker release before shipping it", file=sys.stderr)
 
-    out = dst_release / "markers"
-    out.mkdir(exist_ok=True)
+    out = args.out or dst_release / "markers"
+    out.mkdir(parents=True, exist_ok=True)
     shutil.copy2(dmnd, out / f"{PREFIX}.dmnd")
     shutil.copy2(faa, out / f"{PREFIX}.train_refs.faa")
     (out / f"{PREFIX}.excluded_families.txt").write_text("".join(f"{d}\n" for d in decoys))

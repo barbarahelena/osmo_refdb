@@ -45,7 +45,7 @@ workflow {
     main:
     PIPELINE_INITIALISATION()
     init = PIPELINE_INITIALISATION.out
-    OSMO_REFDB(init.families, init.source, init.snapshot)
+    OSMO_REFDB(init.families, init.markers, init.snapshot)
 }
 
 workflow profile_samples {

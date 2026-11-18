@@ -7,7 +7,7 @@ process SPLIT_REFS {
         'community.wave.seqera.io/library/python_pyyaml:9e6e168c801c7a81' }"
     label 'process_single'
     input:
-    path(refs_in, stageAs: 'refs_in')
+    path(refs_in, stageAs: 'refs_in/*')   // REFS_BUILD: every refs/ file
     path(families)
 
     output:
@@ -20,14 +20,14 @@ process SPLIT_REFS {
 
     script:
     """
-    cp -R refs_in refs
+    cp -RL refs_in refs
     python ${moduleDir}/templates/split_train_test.py --refs refs --families ${families} \\
         --split-mode ${params.split_mode}
     """
 
     stub:
     """
-    cp -R refs_in refs
+    cp -RL refs_in refs
     printf '>a\\nMK\\n>b\\nMR\\n' > refs/ectA.positive.train.faa
     printf '>a\\nMK\\n>c\\nMW\\n' > refs/ectB.positive.train.faa
     printf '>a\\nMK\\n' > refs/ectC.positive.train.faa

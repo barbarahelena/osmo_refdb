@@ -20,11 +20,6 @@
           "type": "string",
           "description": "Name of the NEW release; releases/<release> must not exist yet"
         },
-        "reuse_refs_from": {
-          "type": "string",
-          "description": "Release snapshot to build from, relative to repo (refs/, alignments/, ...)",
-          "default": "releases/v10"
-        },
         "catalog_genes": {
           "type": "string",
           "description": "Where the GMGC gene file goes or is: <dir>/GMGC10.human-gut.95nr.0.5.percent.prevalence.fna.gz (absolute)",
@@ -49,12 +44,16 @@
           "type": "string",
           "description": "-entry profile_samples: CSV with columns id,r1,r2",
           "format": "file-path"
+        },
+        "markers_file": {
+          "type": "string",
+          "description": "The marker genes for the release's markers/ (default markers.yaml)",
+          "format": "file-path"
         }
       },
       "required": [
         "repo",
         "release",
-        "reuse_refs_from",
         "catalog_genes",
         "full_index_dir"
       ]

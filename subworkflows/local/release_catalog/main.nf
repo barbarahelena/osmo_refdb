@@ -9,11 +9,10 @@ include { CATALOG_SCREEN         } from '../../../modules/local/catalog/screen/m
 workflow RELEASE_CATALOG {
     take:
     families    // families.yaml
-    source      // the source release's snapshot
     genes       // the catalog's gene file
 
     main:
-    RELEASE_BUILD(families, source)
+    RELEASE_BUILD(families)
     db = RELEASE_BUILD.out.db
 
     // annotate and index the catalog (osmotool), package it for the release, screen it

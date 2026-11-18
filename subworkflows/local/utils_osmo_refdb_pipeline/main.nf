@@ -2,10 +2,6 @@
 // Parameter checks before anything is submitted, and the helpers they use.
 //
 
-def under_repo(p) {
-    p.toString().startsWith('/') ? p.toString() : "${params.repo}/${p}".toString()
-}
-
 def require_params(names) {
     names.each { n ->
         if( !params[n] )
@@ -26,10 +22,6 @@ def decoy_metas(families_yaml) {
     (data.hmm_decoys ?: []).collect { d ->
         [id: d.name, trim_gt: d.trim_gt ?: 0.8, competes_with: d.competes_with ?: [], decoy_aware: d.decoy_aware_ga ?: false]
     }
-}
-
-def sha256(path) {
-    java.security.MessageDigest.getInstance('SHA-256').digest(path.bytes).encodeHex().toString()
 }
 
 // The sets a family's model is scored on for its calibration, from its refs files by kind
@@ -63,56 +55,10 @@ def diamond_sets(sets) {
     [positive: pos, negative: neg].findAll { _kind, f -> f && f.size() > 0 }
 }
 
-def source_manifest_row(source, id) {
-    def manifest = source.resolve('alignments/manifest.tsv')
-    if( !manifest.exists() )
-        return null
-    manifest.readLines().drop(1).collect { line -> line.split('\t') }.find { cols -> cols[0] == id }
-}
-
-// What to do with one family's alignment: 'skip' (fewer than 2 sequences: no alignment, and so no
-// hmmbuild), 'reuse' the source release's (multi-threaded MAFFT is not reproducible run to run, so an
-// unchanged family keeps the alignment it was built with), or 'align'. Reused only when the train set
-// is byte-identical to the source's, both of the source's alignment files exist, and the source's
-// alignments/manifest.tsv, where it has one, records the same trim_gt.
-def alignment_plan(meta, train, source) {
-    if( train.readLines().count { line -> line.startsWith('>') } < 2 )
-        return 'skip'
-    def old_train = source.resolve("refs/${meta.id}.positive.train.faa")
-    def old_files = ['aln.fasta', 'trimmed.fasta'].collect { ext -> source.resolve("alignments/${meta.id}.${ext}") }
-    if( !old_train.exists() || !old_files.every { f -> f.exists() } || sha256(old_train) != sha256(train) )
-        return 'align'
-    def row = source_manifest_row(source, meta.id)
-    if( source.resolve('alignments/manifest.tsv').exists() && (!row || row[2] != meta.trim_gt.toString()) )
-        return 'align'
-    return 'reuse'
-}
-
-// The source release's files for an HMM decoy, if it has all of them: its input set, its clustering
-// and its alignment (named <decoy>.aln / .trimmed.aln before release v11, .aln.fasta / .trimmed.fasta since).
-def first_existing(source, names) {
-    names.collect { n -> source.resolve(n) }.find { f -> f.exists() }
-}
-
-def source_decoy_files(source, id) {
-    [input:     source.resolve("refs/${id}.hmm_decoy.faa"),
-     clustered: source.resolve("refs/${id}.hmm_decoy.clustered.faa"),
-     clusters:  source.resolve("refs/${id}.hmm_decoy.clustered.faa.clstr"),
-     raw:       first_existing(source, ["alignments/${id}.aln.fasta", "alignments/${id}.aln"]),
-     trimmed:   first_existing(source, ["alignments/${id}.trimmed.fasta", "alignments/${id}.trimmed.aln"])]
-}
-
-// An HMM decoy is rebuilt from scratch ('align': clustering, alignment, trimming) unless its input
-// set is byte-identical to the source's and the source has its clustering and alignment ('reuse'),
-// with the same trim_gt where the source's manifest records it.
-def decoy_plan(meta, input, source) {
-    def old = source_decoy_files(source, meta.id)
-    if( !old.input.exists() || !old.clustered.exists() || !old.raw || !old.trimmed || sha256(old.input) != sha256(input) )
-        return 'align'
-    def row = source_manifest_row(source, meta.id)
-    if( row && row[2] != meta.trim_gt.toString() )
-        return 'align'
-    return 'reuse'
+// One family's alignment: 'skip' with fewer than 2 train sequences (no alignment, and so no hmmbuild),
+// else 'align'.
+def alignment_plan(train) {
+    train.readLines().count { line -> line.startsWith('>') } < 2 ? 'skip' : 'align'
 }
 
 def check_catalog_name() {
@@ -122,18 +68,13 @@ def check_catalog_name() {
 
 workflow PIPELINE_INITIALISATION {
     main:
-    require_params(['repo', 'release', 'reuse_refs_from', 'catalog_name',
-                    'catalog_genes', 'full_index_dir', 'data_dir', 'nchunks'])
+    require_params(['repo', 'release', 'catalog_name', 'catalog_genes', 'full_index_dir', 'data_dir', 'nchunks'])
     check_catalog_name()
-
-    // the inputs that are not made by the pipeline: snapshots, made once by hand or shipped
-    source = file(under_repo(params.reuse_refs_from))
-    if( !source.resolve('refs/manifest.tsv').exists() )
-        error "no release snapshot at ${source} (refs/manifest.tsv missing; rsync it, see docs/hpc.md)"
+    // harvested BacDive batches to start from (--bacdive_full), or []
     snapshot = params.bacdive_snapshot ? file(params.bacdive_snapshot, checkIfExists: true) : []
 
     emit:
-    families      = channel.value(file(params.families_file, checkIfExists: true))
-    source        = channel.value(source)
-    snapshot      = channel.value(snapshot)
+    families = channel.value(file(params.families_file, checkIfExists: true))
+    markers  = channel.value(file(params.markers_file, checkIfExists: true))
+    snapshot = channel.value(snapshot)
 }

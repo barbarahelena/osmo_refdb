@@ -52,9 +52,8 @@ Everything for a given release name is written to `releases/<name>/`
 (git-ignored), so you can keep multiple versions around and reproduce any
 of them independently.
 
-**Not yet converted from the old `run_pipeline.sh`:** the marker-gene build and packaging
-(`modules/local/package_markers/`), the taxonomy split and read-length / background options of
-the benchmark below. The sections that follow still describe them with the old
+**Not yet converted from the old `run_pipeline.sh`:** the taxonomy split and read-length /
+background options of the benchmark below. The sections that follow still describe them with the old
 `run_pipeline.sh` commands.
 
 By default, step 3's train/test split is a random shuffle of sequences —
@@ -409,12 +408,12 @@ release name.
 | 1 | `fetch_refs.py` | Fetch positive + hard-negative sequences per family from UniProt |
 | 1b | `check_negative_purity.py` | Flag/drop hard negatives that are actually true positives under a different gene symbol (DIAMOND identity check against the positive set; see `refs/negative_purity_manifest.tsv`) |
 | 1c | `check_length_outliers.py` | Flag/drop sequences (positive or negative) whose length is way off their family's median -- likely a multi-domain fusion protein or a partial fragment, not a clean single-domain family member (see `refs/length_outlier_manifest.tsv`) |
-| 1d | *retired* | Merged local study sequences (`extra_sequences/`, gitignored, so not reproducible). Removed 2026-11-17; a rebuild from an older release's refs strips them with `modules/local/release_refs/templates/strip_ref_tag.py` (offline, re-clusters the four affected families, writes `refs/removed_tag_manifest.tsv`) |
+| 1d | *retired* | Merged local study sequences (`extra_sequences/`, gitignored, so not reproducible). Removed 2026-11-17 |
 | 1e | `add_refseq_positives.py` | For families opted in via `families.yaml`'s `refseq_gene_symbols` (only where UniProt's own gene-symbol population is already fully exhausted and a per-family novelty/contamination check confirmed it's safe), merge additional real positives from NCBI RefSeq into the fetched positive set (see `refs/refseq_positives_manifest.tsv`) |
 | 1f | `build_random_background.py` | Sample a shared random bacterial background (default 5000 proteins carrying none of the panel's Pfam domains, minus any >= 70% identical to a panel positive) into `refs/random_background.faa`. Benchmark-only: never used for calibration or in either db. Step 9 simulates reads from it and step 11 reports each family's off-target false positives per million of those reads (see `refs/random_background_manifest.tsv`) |
-| 2 | `cluster_cdhit.sh` | CD-HIT cluster positives and negatives at 90% identity (remove redundancy, avoid train/test leakage from near-duplicates) |
+| 2 | `REFS_CLUSTER` (workflow) | CD-HIT cluster each family's positives and negatives at 90% identity, one set per task (remove redundancy, avoid train/test leakage from near-duplicates); sets of fewer than 5 sequences are kept as they are |
 | 3 | `split_train_test.py` | Split positives three ways: train (builds the HMMs and DIAMOND db), calib (sets the HMM GA cutoffs, the DIAMOND bitscore cutoffs and, as simulated reads, the profile cascade config) and test (benchmark only). The held-out 20% (`--test-fraction`) is drawn as before, so train is unchanged from a two-way split; half of it (`--calib-fraction`) becomes calib. Up to v9 there was no calib set and the cutoffs were tuned on the benchmark's own positives. Also splits every family's negatives into train (cutoff calibration in steps 5-6 and 8b; decoy refs in step 8a) / test (benchmark negative reads), so the benchmark never scores negatives that set a cutoff. Non-decoy families hold out half their negatives (`--negative-test-fraction`, default 0.5); decoy families use `--test-fraction` |
-| 4 | `MAFFT_ALIGN`, `TRIMAL` (workflow) | MAFFT align + trimAl trim the TRAIN positives, one family per task. A family whose train set and `trim_gt` are unchanged since the source release keeps its alignment (`alignments/manifest.tsv` records which). trimAl's gap threshold defaults to 0.8 but can be overridden per family via `families.yaml`'s `trim_gt` |
+| 4 | `MAFFT_ALIGN`, `TRIMAL` (workflow) | MAFFT align + trimAl trim the TRAIN positives, one family per task (fewer than 2 sequences: no alignment). trimAl's gap threshold defaults to 0.8 but can be overridden per family via `families.yaml`'s `trim_gt` |
 | 5 | `HMMER_HMMBUILD`, `PFAM_FETCH`, `HMMER_HMMSEARCH` (workflow) | hmmbuild per family (or, for a family marked `pfam_model`, fetch that curated Pfam-A HMM directly instead); score the positive-calib and negative-train sets. HMM decoys: `HMM_DECOYSELECT` (`build_hmm_decoys.py --select-only`), then `CDHIT`, `MAFFT_ALIGN`, `TRIMAL`, `HMMER_HMMBUILD` |
 | 6 | `calibrate_cutoffs.py` (`HMM_CALIBRATE`) | Set per-family HMM GA (gathering) cutoffs (or, for `pfam_model` families, read and keep Pfam's own GA line, only flagging it if it doesn't separate this repo's own curated sets well). Where positives and negatives overlap, the cutoff is the median over 1000 seeded bootstrap resamples of the F1-optimal cutoff (`--cutoff-method sweep` for the plain F1 sweep): it moves less between builds. The manifest also records the plain sweep's cutoff, the bootstrap 10th-90th percentile range and `cutoff_range_wide` (the data do not pin the cutoff down) |
 | 6b | `qc_scorecard.py` | Consolidate negative-purity, length-outlier, and HMM-cutoff-overlap manifests into one per-family scorecard (`qc_scorecard.tsv`) flagging families that need review |
@@ -431,7 +430,7 @@ release name.
 | 11 | `compute_metrics.py` | Precision/recall/F1, ROC/PR curves, per-family best-threshold summary, read-length-stratified summary and background false-positive rate, for three methods: `diamond`, `diamond_cascade` (what `osmotool profile` reports by default; per-read calls rebuilt from osmotool's kept files and checked against its `gene_counts.tsv`) and `hmm`. In the calibration pass (no `--cascade-config`) it instead decides and writes `osmo_refdb.profile_cascade.tsv` and `osmo_refdb.profile_report_levels.tsv` (step 9c-11c); on the test reads it scores those choices per reporting unit in `summary_by_report_unit.tsv` (the numbers for the paper) and checks osmotool's `unit_counts.tsv` against the rebuilt calls. `summary.tsv` counts false positives three ways: `fp` (the family's own hard negatives and flanks; `precision`/`f1`, comparable to releases up to v8), `fp_cross` (other panel genes' real reads called as this family, mostly close-paralog confusion; `precision_panel`/`f1_panel`), and `fp_background`/`background_fp_per_million` (random background reads). `fp_other_negatives` (other families' hard negatives called as this family) is in none of those, since sibling families share one negative pool. `fp_all` = all three, with `precision_all`/`f1_all`: the same denominator at gene and group level, used for the report-level and cascade decision. `hard_negative_fp_per_million` and `background_fp_per_million` are rates per million negative reads, independent of how many negatives were mixed in: use those to compare families or releases. Families sharing a `families.yaml` `paralog_group` are also scored as one unit in `summary_by_group.tsv`, where a read called as a sibling counts as correct (`within_group_swaps`) |
 | 11b | `modules/local/benchmark/templates/benchmark_annotate.py` | Annotate-mode benchmark at protein level: runs `osmotool annotate --proteins` (HMM with GA cutoffs, and DIAMOND with its bitscore cutoffs) on the held-out test positives, test hard negatives and random background, and scores per-protein calls from `gene_coordinates.tsv`. Output in `results/annotate/` (`summary.tsv`, `summary_by_group.tsv`, `overall.tsv`) |
 
-| 12 | `package_markers.py` | Copy a separately-built marker release (`markers.yaml`, see below) into a main release's `markers/` subdirectory: DIAMOND db, its source FASTA (for reference lengths), decoy-label exclusion list, and a manifest with per-marker lengths and the marker build's DIAMOND benchmark precision/recall |
+| 12 | `MARKERS` (workflow) | Build the marker genes (`markers.yaml`, see below) apart from the osmo families: their own references, split and DIAMOND database, packaged as the release's `markers/` (`package_markers.py`): DIAMOND db, its source FASTA (for reference lengths), excluded decoy labels, a per-marker manifest |
 | 14 | `package_catalog.py` (`run_pipeline.sh catalog`) | Build a gene catalog into the release as `catalogs/<name>/` with `osmotool build-catalog`: translate the catalog genes, annotate them with this release's HMMs under their gathering cutoffs (as `annotate --method hmm`), index the whole catalog with bwa-mem3. Adds provenance (source, input checksums, release) to `catalog.json`, the gzipped hmmsearch domain table, and `SHA256SUMS`. The catalog is part of the release: rebuild it for every release |
 
 ### Gene catalogs
@@ -514,19 +513,11 @@ marker: it has a reported salt-tolerance association (Culligan et al.
 2012) and real paralogs in some taxa, and a normaliser must not covary
 with what it normalises.
 
-```bash
-bash run_pipeline.sh build v9          # main release first
-bash run_pipeline.sh markers v9        # builds + benchmarks releases/v9-markers/,
-                                       # then packages it into releases/v9/markers/
-```
-
-`markers` is equivalent to
-`FAMILIES_FILE=markers.yaml bash run_pipeline.sh all v9-markers` followed by
-`python modules/local/package_markers/templates/package_markers.py --marker-release releases/v9-markers --release releases/v9`;
-the packaging step can also add markers to an existing release (e.g. v8)
-without rebuilding it. Review `releases/<name>-markers/results/metrics/summary.tsv`
-before shipping: a marker with poor DIAMOND precision inflates the
-denominator for every family.
+The workflow builds them with every release (`MARKERS`): `markers.yaml`'s references, split and DIAMOND
+database, apart from the osmo families, packaged as `releases/<release>/markers/` and given to every
+osmotool step after the gate. The markers have no benchmark of their own in the workflow, so the marker
+manifest's DIAMOND precision/recall columns are empty: a marker with poor DIAMOND precision would inflate
+the denominator for every family, which the old separate marker build's benchmark used to check.
 
 Phase-1 limitation: per-family detection sensitivity isn't corrected for.
 Markers and osmo families use the same DIAMOND thresholds, so the bias

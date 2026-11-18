@@ -1,11 +1,11 @@
 //
-// Build a release from the source release's snapshot: splits, alignments, HMMs, DIAMOND database,
+// Build a release from scratch: references (UniProt, RefSeq), splits, alignments, HMMs, DIAMOND database,
 // then the benchmark (calibration decides the cascade and report levels, the test reads score them).
 // Every part is passed on as it is made; the steps that make a part of the release publish it into
 // releases/<release> (conf/modules.config).
 //
 include { HMM_BUILD          } from '../hmm_build/main'
-include { RELEASE_REFS       } from '../../../modules/local/release_refs/main'
+include { REFS_BUILD         } from '../refs_build/main'
 include { SPLIT_REFS         } from '../../../modules/local/split_refs/main'
 include { DIAMOND_BUILD      } from '../diamond_build/main'
 include { BENCHMARK_SIMULATE as BENCHMARK_SIMULATE_CALIB } from '../../../modules/local/benchmark/simulate/main'
@@ -21,16 +21,15 @@ include { BENCHMARK_ANNOTATESCORE } from '../../../modules/local/benchmark/annot
 workflow RELEASE_BUILD {
     take:
     families    // families.yaml
-    source      // the source release's snapshot (--reuse_refs_from)
 
     main:
     none = channel.value([])
 
-    RELEASE_REFS(families, source)
-    SPLIT_REFS(RELEASE_REFS.out.refs, families)
+    REFS_BUILD(families, true)
+    SPLIT_REFS(REFS_BUILD.out.refs, families)
 
     // alignments and HMMs, one family (or decoy) at a time
-    HMM_BUILD(families, source, SPLIT_REFS.out.refs, SPLIT_REFS.out.train, SPLIT_REFS.out.faa)
+    HMM_BUILD(families, SPLIT_REFS.out.refs, SPLIT_REFS.out.train, SPLIT_REFS.out.faa)
     hmms = HMM_BUILD.out.hmms
 
     // the DIAMOND database and its files
@@ -67,6 +66,7 @@ workflow RELEASE_BUILD {
 
     emit:
     db            = db                            // the release as osmotool reads it: [files..., hmms/]
+    fetch_manifest = REFS_BUILD.out.manifest      // refs/manifest.tsv: the UniProt release and fetch dates
     refs          = refs
     alignments    = HMM_BUILD.out.alignments
     hmms          = hmms
