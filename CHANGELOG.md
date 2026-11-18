@@ -2150,17 +2150,17 @@ uploaded. Open decisions:
   with the strains catalogued, median f1_all of the reported units 0.770 ->
   0.892 and background false positives 2083 -> 170 per million; without
   them the translated fallback keeps the v10 numbers. betL regresses (its
-  full-length HMM cannot separate betT/caiT). See `docs/catalog_benchmark.md`.
+  full-length HMM cannot separate betT/caiT). See `docs/validation_reports/catalog_benchmark.md`.
 - **betL HMM decoy** (branch `betl-decoy`, test release `v10-betl-decoy`): an HMM
   decoy built from betL's betT/caiT negatives, with decoy-aware GA calibration.
   betL annotate F1 0.554 -> 0.841, catalogue betL (strains catalogued) 0.459 ->
   0.857; no other unit changes. Not adopted into v10 yet (the NaCl model uses
-  betL). See `docs/catalog_benchmark.md`.
+  betL). See `docs/validation_reports/catalog_benchmark.md`.
 - **Split stringency.** Test positives are a median 81% identical to their
   nearest training reference (CD-HIT 90%; 53% of them above 80%, 8% below
   60%). Annotate HMM recall falls from 0.97 (80-90%) to 0.76 (40-60%).
   Checked with a full-panel `SPLIT_MODE=taxonomy` build
-  (`releases/v10-taxsplit`, see `docs/taxonomy_split.md`): annotate HMM F1
+  (`releases/v10-taxsplit`, see `docs/validation_reports/taxonomy_split.md`): annotate HMM F1
   0.928 -> 0.912, profile median f1_all 0.77 -> 0.75, with proX, gshF, betB
   and proP below 0.5 on unseen genera. v10 stays the primary benchmark and
   its report levels stay as decided.

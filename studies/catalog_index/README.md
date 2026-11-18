@@ -8,7 +8,7 @@ release ships (`--index hits`) is enough.
 
 ## Why the existing benchmark cannot decide it
 
-The catalog benchmark (`docs/catalog_benchmark.md`) gave the same median F1 for both
+The catalog benchmark (`docs/validation_reports/catalog_benchmark.md`) gave the same median F1 for both
 indexes (0.892), with 170 against 270 background false positives per million reads.
 But its catalog was the release's own back-translated sequences, 83% of them with an
 HMM hit. A real gut catalog is about 95% genes without a hit, and those are where the

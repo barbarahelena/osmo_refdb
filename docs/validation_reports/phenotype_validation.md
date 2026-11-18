@@ -397,7 +397,7 @@ profiles should be read separately from bacterial ones.
 
 The Results section above reports v8. The same pipeline was rerun on v9 and
 on v10 (v9's models with cutoffs calibrated on a separate split; see
-`docs/CHANGELOG.md`). Set A is the same 6,264 strains throughout.
+`CHANGELOG.md`). Set A is the same 6,264 strains throughout.
 
 | | v8 | v9 | v10 |
 |---|---|---|---|
@@ -429,7 +429,7 @@ within-genus partial r, which has the random-panel null, does not move.
 
 ## Running it
 
-The workflow runs it, after the gate (`--gate_passed true`, `docs/hpc.md`), on the frozen release. By
+The workflow runs it, after the gate (`--gate_passed true`, `README.md`), on the frozen release. By
 default on the 43 pilot strains (`assets/bacdive/pilot_strains.tsv`), a quick check of the panel; with
 `--bacdive_full` on every BacDive strain with a NaCl maximum and a genome, with the within-domain salt-in
 control and the NaCl model.

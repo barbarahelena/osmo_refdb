@@ -99,7 +99,7 @@
 #                     non-redundant, correctly-annotated sequences --
 #                     confirmed per-family via a CD-HIT-2D novelty check
 #                     plus a manual product-description spot-check before
-#                     enabling (see docs/CHANGELOG.md). NOT safe to enable
+#                     enabling (see CHANGELOG.md). NOT safe to enable
 #                     blindly: a bare gene symbol can collide with a
 #                     completely unrelated gene in a different organism --
 #                     confirmed for mrpB/mrpC/mrpF during evaluation (e.g.
@@ -1878,7 +1878,7 @@ families:
       (v6 27% flagged -> v7 29%), consistent with the pattern being real
       unlabeled orthologs, not a missing-symbol gap. decoy_from_negatives
       is not a fix either: Phase 4's proX/opuAC/opuBC/opuCC experiment
-      (see issue tracker / docs/CHANGELOG.md) showed this exact
+      (see issue tracker / CHANGELOG.md) showed this exact
       shared-Pfam-clique shape (trkH/ktrB/ktrD share PF02386 the same way
       proX/opuAC/opuBC/opuCC share PF04069) catastrophically backfires --
       close paralogs outcompete a family's own reference set once added
@@ -2037,7 +2037,7 @@ hmm_decoys:
       with DIAMOND decoy references from the same set (decoy_from_negatives),
       but annotate and catalog-based profiling decide at full length with
       the HMM, where catalogued strains brought betL from 0.87 to 0.46
-      (docs/catalog_benchmark.md). Every UniProt betT/caiT entry is already
+      (docs/validation_reports/catalog_benchmark.md). Every UniProt betT/caiT entry is already
       in betL's negatives (1190 raw, 479 after QC), so the model is built
       from betL.negative.train, the split the DIAMOND decoy uses, and betL's
       GA is calibrated decoy-aware.

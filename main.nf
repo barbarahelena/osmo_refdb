@@ -31,7 +31,7 @@
  * output in a permanent place and skips the task whenever it is already there, even without work/.
  * storeDir is used for the gene file and, with --refs_store, the UniProt fetch. Everything else goes from step to step
  * as outputs and inputs; no step reads a published file. The release is published into
- * releases/<release> by the steps that make its parts (conf/modules.config). See docs/hpc.md.
+ * releases/<release> by the steps that make its parts (conf/modules.config). See README.md.
  *
  * Nextflow starts Apptainer with --no-home and `env -`: neither the host home directory nor the host
  * environment is inside the container.
