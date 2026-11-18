@@ -68,7 +68,7 @@ def check_catalog_name() {
 
 workflow PIPELINE_INITIALISATION {
     main:
-    require_params(['repo', 'release', 'catalog_name', 'catalog_genes', 'data_dir', 'nchunks'])
+    require_params(['outdir', 'release', 'catalog_name', 'catalog_genes', 'data_dir', 'nchunks'])
     check_catalog_name()
     if( !params.background_r1 != !params.background_r2 )
         error "--background_r1 and --background_r2 go together: a real metagenome's two read files"

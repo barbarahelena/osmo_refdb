@@ -11,7 +11,7 @@ nextflow_pipeline {
 
         when {
             params {
-                repo = "${outputDir}"
+                outdir = "${outputDir}"
             }
         }
 
@@ -42,7 +42,7 @@ nextflow_pipeline {
 
         when {
             params {
-                repo = "${outputDir}"
+                outdir = "${outputDir}"
                 // OSMO_REFS_STORE: where to keep the UniProt fetch between runs (--refs_store); unset, none
                 if( System.getenv('OSMO_REFS_STORE') ) refs_store = System.getenv('OSMO_REFS_STORE')
             }

@@ -11,14 +11,14 @@
       "fa_icon": "fas fa-terminal",
       "description": "",
       "properties": {
-        "repo": {
+        "outdir": {
           "type": "string",
-          "description": "A clone of osmo_refdb at the commit to build (absolute path)",
-          "format": "directory-path"
+          "format": "directory-path",
+          "description": "Where the results go: the release to <outdir>/releases/<release>, the BacDive data to <outdir>/<data_dir>, -entry profile_samples to <outdir>/profile (absolute path, shared storage)"
         },
         "release": {
           "type": "string",
-          "description": "Name of the NEW release; releases/<release> must not exist yet"
+          "description": "Name of the NEW release; <outdir>/releases/<release> must not exist yet"
         },
         "catalog_genes": {
           "type": "string",
@@ -27,13 +27,8 @@
         },
         "data_dir": {
           "type": "string",
-          "description": "Release-independent BacDive data, under repo",
+          "description": "Release-independent BacDive data, under outdir",
           "default": "data/phenotype_validation"
-        },
-        "outdir": {
-          "type": "string",
-          "description": "-entry profile_samples writes <outdir>/profile",
-          "default": "results"
         },
         "samples": {
           "type": "string",
@@ -66,7 +61,7 @@
         }
       },
       "required": [
-        "repo",
+        "outdir",
         "release",
         "catalog_genes"
       ]
@@ -172,14 +167,9 @@
           "description": "Extra sbatch options, e.g. '--account=myproject' (default profile only)",
           "default": ""
         },
-        "extra_binds": {
-          "type": "string",
-          "description": "Comma-separated directories outside repo that jobs read or write",
-          "default": ""
-        },
         "work_dir": {
           "type": "string",
-          "description": "Nextflow's work directory; empty = ./work (use scratch if repo is in $HOME)"
+          "description": "Nextflow's work directory; empty = ./work (use scratch if launching from $HOME)"
         }
       }
     },

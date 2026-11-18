@@ -49,11 +49,11 @@ workflow {
 
 workflow profile_samples {
     main:
-    require_params(['repo', 'release', 'catalog_name', 'samples'])
+    require_params(['outdir', 'release', 'catalog_name', 'samples'])
     samples = channel.fromPath(params.samples)
         .splitCsv(header: true)
         .map { row -> tuple([id: row.id], [file(row.r1, checkIfExists: true), file(row.r2, checkIfExists: true)]) }
-    db    = files("${params.repo}/releases/${params.release}/*", checkIfExists: true)   // staged as osmotool's DATABASE
+    db    = files("${params.outdir}/releases/${params.release}/*", checkIfExists: true)   // staged as osmotool's DATABASE
     // with the release's catalog and the index it ships (--catalog and --keep_aln: conf/modules.config)
     OSMOTOOL_PROFILE(samples, db)
 }

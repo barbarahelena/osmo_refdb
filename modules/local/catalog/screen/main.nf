@@ -30,7 +30,7 @@ process CATALOG_SCREEN {
         echo
         echo "============ THE CATALOG SCREEN ============"
         grep '^Flagged:' screen.log || echo "Flagged: none"
-        echo "In ${params.repo}/releases/${params.release}/catalogs/${meta.id}/screen.tsv; read it before"
+        echo "In ${params.outdir}/releases/${params.release}/catalogs/${meta.id}/screen.tsv; read it before"
         echo "publishing the release. A flag means: look at those genes. A real confuser class means a"
         echo "decoy and a rebuild (new --release name); a false alarm, nothing to do."
         echo "============================================"
