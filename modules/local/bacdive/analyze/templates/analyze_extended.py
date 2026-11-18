@@ -54,6 +54,35 @@ META = {'bacdive_id', 'species', 'genus', 'family', 'domain', 'strategy',
 BASE = ['log_proteins', 'genome_mb', 'gc']
 
 
+def fit_mixedlm(formula, d, terms):
+    """The random-intercept model (1|genus), or None with the reason printed when the
+    data cannot estimate it: too few strains, no genus with two strains, a constant
+    term (e.g. salt_in without salt-in strains), or a fit that fails. The pilot sets
+    are small enough for any of these."""
+    if len(d) < 10:
+        print(f'  skipped: {len(d)} strains (need >= 10)')
+        return None
+    if not d['genus'].duplicated().any():
+        print('  skipped: no genus with two strains, so no genus variance to estimate')
+        return None
+    flat = [t for t in terms if t in d and d[t].nunique() < 2]
+    if flat:
+        print(f'  skipped: {", ".join(flat)} constant in these strains')
+        return None
+    try:
+        return smf.mixedlm(formula, d, groups=d['genus']).fit(reml=True, method='lbfgs')
+    except (ValueError, np.linalg.LinAlgError) as e:
+        print(f'  skipped: the model did not fit ({e})')
+        return None
+
+
+def zscore(d, cols):
+    for c in cols:
+        sd = d[c].std()
+        d[c + '_z'] = (d[c] - d[c].mean()) / sd if sd > 0 else 0.0
+    return d
+
+
 def hdr(title):
     print()
     print('=' * 76)
@@ -300,11 +329,12 @@ def main():
     # ---------------------------------------------------------------- 3
     hdr('3. SET B MIXED MODEL -- nacl_max ~ panel + baselines + (1|genus)')
     for name, d in (('Set B', B), ('Set A', A)):
-        d = d.copy()
-        for c in ['n_families_present'] + BASE:
-            d[c + '_z'] = (d[c] - d[c].mean()) / d[c].std()
-        m = smf.mixedlm('nacl_max_pct ~ n_families_present_z + log_proteins_z + genome_mb_z + gc_z',
-                        d, groups=d['genus']).fit(reml=True, method='lbfgs')
+        d = zscore(d.copy(), ['n_families_present'] + BASE)
+        print(f'  {name}:')
+        m = fit_mixedlm('nacl_max_pct ~ n_families_present_z + log_proteins_z + genome_mb_z + gc_z',
+                        d, ['n_families_present_z'])
+        if m is None:
+            continue
         b, se = m.params['n_families_present_z'], m.bse['n_families_present_z']
         print(f'  {name}: panel breadth, per SD = {b:+.3f} % NaCl  '
               f'[{b-1.96*se:+.3f}, {b+1.96*se:+.3f}]  p={m.pvalues["n_families_present_z"]:.1e}'
@@ -316,12 +346,10 @@ def main():
 
     # ---------------------------------------------------------------- 4
     hdr('4. SECONDARY -- all strains, strategy indicator + panel x strategy')
-    d = df_all.copy()
-    for c in ['n_families_present'] + BASE:
-        d[c + '_z'] = (d[c] - d[c].mean()) / d[c].std()
-    m = smf.mixedlm('nacl_max_pct ~ n_families_present_z * salt_in + log_proteins_z + genome_mb_z + gc_z',
-                    d, groups=d['genus']).fit(reml=True, method='lbfgs')
-    for term in ('n_families_present_z', 'salt_in', 'n_families_present_z:salt_in'):
+    d = zscore(df_all.copy(), ['n_families_present'] + BASE)
+    m = fit_mixedlm('nacl_max_pct ~ n_families_present_z * salt_in + log_proteins_z + genome_mb_z + gc_z',
+                    d, ['n_families_present_z', 'salt_in'])
+    for term in (('n_families_present_z', 'salt_in', 'n_families_present_z:salt_in') if m is not None else ()):
         b, se = m.params[term], m.bse[term]
         print(f'  {term:<30} {b:+.3f}  [{b-1.96*se:+.3f}, {b+1.96*se:+.3f}]  p={m.pvalues[term]:.1e}')
     n_si_gen = d.loc[d['salt_in'] == 1, 'genus'].nunique()
