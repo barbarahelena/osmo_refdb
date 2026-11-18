@@ -1,6 +1,6 @@
 # families.yaml Summary
 
-`families.yaml` is the single source of truth for osmo_refdb's gene family panel — 43 families as of 2026-07-24. Adding a family here and rerunning `bash run_pipeline.sh build` is the only change needed; no other files require edits.
+`families.yaml` is the single source of truth for osmo_refdb's gene family panel — 43 families as of 2026-07-24. Adding a family here and building a new release (`nextflow run main.nf --release <name>`) is the only change needed; no other files require edits.
 
 ## Schema
 

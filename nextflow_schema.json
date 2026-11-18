@@ -107,6 +107,30 @@
             "taxonomy"
           ]
         },
+        "read_lengths": {
+          "type": "string",
+          "description": "Also simulate the test reads at these exact lengths (wgsim), e.g. '100,150,250,300'; scored per length in results/metrics/summary_by_read_length.tsv",
+          "pattern": "^\\d+(,\\d+)*$"
+        },
+        "background_r1": {
+          "type": "string",
+          "format": "file-path",
+          "exists": true,
+          "description": "R1 of a real metagenome with no known osmoadaptation genes, scored as background in the test benchmark (results/metrics/background_fpr.tsv); with --background_r2"
+        },
+        "background_r2": {
+          "type": "string",
+          "format": "file-path",
+          "exists": true,
+          "description": "R2 of --background_r1"
+        },
+        "diamond_min_subject_cover": {
+          "type": "number",
+          "default": 0.0,
+          "minimum": 0,
+          "maximum": 1,
+          "description": "The read benchmark's osmotool profile --min_subject_cover (0: off, osmotool's default)"
+        },
         "gate_passed": {
           "type": "boolean",
           "description": "The screen has been read and accepted: also run BacDive and the NaCl model",

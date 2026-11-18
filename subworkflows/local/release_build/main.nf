@@ -44,14 +44,16 @@ workflow RELEASE_BUILD {
     // DIAMOND files, the cascade and hmms/ as one list, staged as that directory
     // calibration reads decide the cascade and report levels, on a database without either ...
     db_calib = release_files.mix(hmms).collect()
-    BENCHMARK_SIMULATE_CALIB(refs, families, 'calib')
+    BENCHMARK_SIMULATE_CALIB(refs, families, 'calib', none)
     BENCHMARK_READS_CALIB(BENCHMARK_SIMULATE_CALIB.out.reads, db_calib, 'score')
     BENCHMARK_METRICS_CALIB(BENCHMARK_SIMULATE_CALIB.out.reads, BENCHMARK_READS_CALIB.out.results, none, families, 'calib')
     cascade = BENCHMARK_METRICS_CALIB.out.cascade
 
     // ... the release's database has them, and the held-out test reads score it
     db = release_files.mix(cascade, hmms).collect()
-    BENCHMARK_SIMULATE_TEST(refs, families, 'test')
+    // a real metagenome as extra background (--background_r1/_r2), test reads only
+    background = params.background_r1 ? channel.value([file(params.background_r1, checkIfExists: true), file(params.background_r2, checkIfExists: true)]) : none
+    BENCHMARK_SIMULATE_TEST(refs, families, 'test', background)
     BENCHMARK_READS_TEST(BENCHMARK_SIMULATE_TEST.out.reads, db, 'on')
     BENCHMARK_METRICS_TEST(BENCHMARK_SIMULATE_TEST.out.reads, BENCHMARK_READS_TEST.out.results, cascade, families, 'test')
 

@@ -296,7 +296,6 @@ def main() -> None:
         writer.writerows(truth_rows)
 
     print(f"\nDone. Truth table written to {truth_path}")
-    print("Next: bash run_benchmark.sh")
 
 
 if __name__ == "__main__":

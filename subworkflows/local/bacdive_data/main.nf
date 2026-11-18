@@ -48,7 +48,7 @@ workflow BACDIVE_DATA {
     pool_families = channel.value(file("${projectDir}/assets/random_panel/pool_families.tsv", checkIfExists: true))
     POOL_PFAM('39.0')
     POOL_EXTRACT(POOL_PFAM.out.pfam, pool_families)
-    pool_hmm = POOL_EXTRACT.out.hmm.first()   // a value: every chunk searches it
+    pool_hmm = POOL_EXTRACT.out.hmm   // a value (its inputs are): every chunk searches it
 
     // per genome: Prodigal proteins, size/GC, the pool search; each task every nchunks-th genome
     chunks = channel.of(0..(nchunks - 1)).map { i -> "${i}/${nchunks}".toString() }

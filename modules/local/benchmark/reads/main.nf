@@ -19,8 +19,9 @@ process BENCHMARK_READS {
     tuple val("${task.process}"), val('orfm'), eval("orfm --version 2>&1 | grep -oE '[0-9][0-9.]*' | head -1"), topic: versions, emit: versions_orfm
 
     script:
+    def args = task.ext.args ?: ''   // run_benchmark.sh's settings, e.g. DIAMOND_MIN_SUBJECT_COVER=0.2
     """
-    CASCADE=${mode} THREADS=${task.cpus} JOBS=${task.cpus} \\
+    ${args} CASCADE=${mode} THREADS=${task.cpus} JOBS=${task.cpus} \\
         bash ${moduleDir}/templates/run_benchmark.sh ${reads} results db db/hmms/osmo_refdb.hmm
     """
 

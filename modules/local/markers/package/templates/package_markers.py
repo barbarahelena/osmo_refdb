@@ -7,9 +7,8 @@ for `osmotool profile`'s copies-per-genome normalisation.
 Why a separate build at all: the universal single-copy markers must not sit
 in the same DIAMOND db as the osmo families, or they would compete in
 select_best_hits' best-alignment contest and shift the osmo families'
-benchmarked precision/recall. So they are built and benchmarked on their own
-(FAMILIES_FILE=markers.yaml bash run_pipeline.sh all <name>-markers) and
-osmotool searches them in a second, independent DIAMOND pass over the same
+benchmarked precision/recall. So they are built on their own (the pipeline's
+MARKERS step) and osmotool searches them in a second, independent DIAMOND pass over the same
 reads. This step only packages; it never rebuilds anything.
 
 Usage:
@@ -43,7 +42,7 @@ from pathlib import Path
 import yaml
 
 PREFIX = "osmo_markers"
-SRC_PREFIX = "osmo_refdb"   # run_pipeline.sh's fixed output prefix
+SRC_PREFIX = "osmo_refdb"   # the DIAMOND build's fixed output prefix
 
 
 def fasta_lengths(path: Path) -> dict[str, list[int]]:
@@ -98,8 +97,7 @@ def main() -> None:
     excluded = src / f"{SRC_PREFIX}.profile_excluded_families.txt"
     for p in (dmnd, faa, excluded):
         if not p.is_file():
-            sys.exit(f"missing {p} -- run FAMILIES_FILE={args.markers} bash run_pipeline.sh build "
-                     f"{src.name} first")
+            sys.exit(f"missing {p} in the marker build {src}")
     if args.out is None and not (dst_release / f"{SRC_PREFIX}.dmnd").is_file():
         sys.exit(f"{dst_release} doesn't look like a main osmo_refdb release "
                  f"(no {SRC_PREFIX}.dmnd)")

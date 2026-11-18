@@ -1,7 +1,7 @@
 # families.yaml — single source of truth for osmo_refdb gene families.
 #
-# To add a new gene family, add one entry here and rerun:
-#   bash run_pipeline.sh build
+# To add a new gene family, add one entry here and build a new release:
+#   nextflow run main.nf --release <name>
 # No other files need to change.
 #
 # Fields:

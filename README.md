@@ -52,52 +52,49 @@ Everything for a given release name is written to `releases/<name>/`
 (git-ignored), so you can keep multiple versions around and reproduce any
 of them independently.
 
-**Not yet converted from the old `run_pipeline.sh`:** the taxonomy split and read-length /
-background options of the benchmark below. The sections that follow still describe them with the old
-`run_pipeline.sh` commands.
+### Build options
 
-By default, step 3's train/test split is a random shuffle of sequences —
-a held-out test sequence is still likely to have a close relative in
-train. To instead hold out whole genera (testing detection of genuinely
-divergent homologs, the scenario where HMMs classically have an edge over
-pairwise search), run with `SPLIT_MODE=taxonomy`:
+By default the train/calib/test split (`SPLIT_REFS`) is a random shuffle of
+sequences, so a held-out test sequence is still likely to have a close
+relative in train. `--split_mode taxonomy` instead holds out whole genera:
+it tests detection of genuinely divergent homologs, the case where HMMs
+classically have an edge over pairwise search (see `docs/taxonomy_split.md`):
 
 ```bash
-SPLIT_MODE=taxonomy bash run_pipeline.sh build v2-taxonomy-split
+nextflow run main.nf --release v2-taxonomy-split --split_mode taxonomy
 ```
 
-The benchmark step also accepts:
+The test benchmark also takes:
 
 ```bash
-READ_LENGTHS="100,150,250,300" \
-BACKGROUND_R1=/path/to/real_metagenome_R1.fastq.gz \
-BACKGROUND_R2=/path/to/real_metagenome_R2.fastq.gz \
-bash run_pipeline.sh benchmark v1
+nextflow run main.nf --release v1 \
+    --read_lengths 100,150,250,300 \
+    --background_r1 /path/to/real_metagenome_R1.fastq.gz \
+    --background_r2 /path/to/real_metagenome_R2.fastq.gz \
+    --diamond_min_subject_cover 0.2
 ```
 
-`READ_LENGTHS` simulates at each exact length (forces wgsim for exact
-control) and reports precision/recall/F1 broken out per length bucket in
-`results/metrics/summary_by_read_length.tsv`. `BACKGROUND_R1`/`BACKGROUND_R2`
-run a real paired-end metagenome sample with no known osmoadaptation
-content through the same DIAMOND/HMM benchmark and report its
-false-positive rate in `results/metrics/background_fpr.tsv` — a more
-realistic FPR estimate than UniProt-derived synthetic hard negatives alone.
+- `--read_lengths` simulates the test reads at each exact length (with
+  wgsim, for exact length control) and reports precision/recall/F1 per
+  length bucket in `results/metrics/summary_by_read_length.tsv`. The
+  calibration reads stay at the simulator's default length, so the cascade
+  and report levels are decided as without it.
+- `--background_r1`/`--background_r2` add a real paired-end metagenome with
+  no known osmoadaptation content to the test reads, scored as background:
+  its false-positive rate is in `results/metrics/background_fpr.tsv`, a more
+  realistic estimate than the UniProt-derived hard negatives alone.
+- `--diamond_min_subject_cover` (default `0.0`, off) tests osmotool's
+  `--min_subject_cover` filter, which discards hits that only cover a small
+  fraction of the matched reference protein: the failure mode found while
+  benchmarking proX, where reads matched only the fused-in domain of a much
+  longer multi-domain protein. Both the calibration and the test reads are
+  searched with it, so the cascade is decided under the same filter. Off by
+  default because it's a blunt instrument (a short read is always much
+  shorter than most full-length references): start low (`0.1`-`0.3`) and
+  compare `results/metrics/summary.tsv` against a run without it to see the
+  recall cost before raising it further.
 
-`DIAMOND_MIN_SUBJECT_COVER` (default `0.0`, off) tests osmotool's
-`--min_subject_cover` filter, which discards hits that only cover a small
-fraction of the matched reference protein — the failure mode found while
-benchmarking proX, where reads matched only the fused-in domain of a much
-longer multi-domain protein. Off by default because it's a blunt
-instrument (a short read is always much shorter than most full-length
-references), so start low (`0.1`-`0.3`) and compare against
-`results/metrics/summary.tsv` from a `DIAMOND_MIN_SUBJECT_COVER=0.0` run
-to see the recall cost before raising it further.
-
-**Note**: this release also changes osmotool's DIAMOND output format (adds
-a `scovhsp` column) — `compute_metrics.py` now expects that column, so
-`*.blastx.tsv` files from an older release won't parse correctly against
-the updated script. Rerun `benchmark` (not just `all`) against any release
-built before this change to regenerate them.
+Each of these is recorded in the release's `PROVENANCE.json`.
 
 ## Adding a new gene family
 
@@ -110,7 +107,7 @@ about an hour listing them and later builds reuse the cache. Pass
 
 Edit `families.yaml` — add one entry with a `name`, `positive_query`
 (UniProt REST query) and `negative_query` (a hard-negative Pfam-family
-query). Then rerun `bash run_pipeline.sh all <release_name>`. No other file
+query). Then build a new release (`nextflow run main.nf --release <name>`). No other file
 needs to change.
 
 See `families.yaml` for query syntax notes (in particular: UniProt's REST
@@ -431,7 +428,7 @@ release name.
 | 11b | `modules/local/benchmark/templates/benchmark_annotate.py` | Annotate-mode benchmark at protein level: runs `osmotool annotate --proteins` (HMM with GA cutoffs, and DIAMOND with its bitscore cutoffs) on the held-out test positives, test hard negatives and random background, and scores per-protein calls from `gene_coordinates.tsv`. Output in `results/annotate/` (`summary.tsv`, `summary_by_group.tsv`, `overall.tsv`) |
 
 | 12 | `MARKERS` (workflow) | Build the marker genes (`markers.yaml`, see below) apart from the osmo families: their own references, split and DIAMOND database, packaged as the release's `markers/` (`package_markers.py`): DIAMOND db, its source FASTA (for reference lengths), excluded decoy labels, a per-marker manifest |
-| 14 | `package_catalog.py` (`run_pipeline.sh catalog`) | Build a gene catalog into the release as `catalogs/<name>/` with `osmotool build-catalog`: translate the catalog genes, annotate them with this release's HMMs under their gathering cutoffs (as `annotate --method hmm`), index the whole catalog with bwa-mem3. Adds provenance (source, input checksums, release) to `catalog.json`, the gzipped hmmsearch domain table, and `SHA256SUMS`. The catalog is part of the release: rebuild it for every release |
+| 14 | `package_catalog.py` (`RELEASE_CATALOG`) | Build a gene catalog into the release as `catalogs/<name>/` with `osmotool build-catalog`: translate the catalog genes, annotate them with this release's HMMs under their gathering cutoffs (as `annotate --method hmm`), index the whole catalog with bwa-mem3. Adds provenance (source, input checksums, release) to `catalog.json`, the gzipped hmmsearch domain table, and `SHA256SUMS`. The catalog is part of the release: rebuild it for every release |
 
 ### Gene catalogs
 
@@ -447,13 +444,9 @@ nucleotide identity. The catalog's annotation is built into the release
 and versioned with it: it depends on this release's HMMs and cutoffs, so
 users never annotate anything themselves.
 
-```bash
-CATALOG_NAME=gmgc_gut \
-CATALOG_GENES=/data/GMGC10.human-gut.95nr.0.5.percent.prevalence.fna.gz \
-CATALOG_SOURCE="GMGC v1.0, human gut, prevalence > 0.5%" \
-CATALOG_SOURCE_URL=https://zenodo.org/records/10473258 THREADS=32 \
-bash run_pipeline.sh catalog v10
-```
+`RELEASE_CATALOG` builds it in every release, from `--catalog_genes`
+(`--catalog_name`, `--catalog_source` and `--catalog_source_url` describe it;
+their defaults are GMGC v1.0 human gut).
 
 - The release ships an index of only the genes with an HMM hit
   (`CATALOG_INDEX=hits`, the default), so it stays small and the catalog

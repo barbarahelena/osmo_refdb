@@ -70,6 +70,10 @@ workflow PIPELINE_INITIALISATION {
     main:
     require_params(['repo', 'release', 'catalog_name', 'catalog_genes', 'full_index_dir', 'data_dir', 'nchunks'])
     check_catalog_name()
+    if( !params.background_r1 != !params.background_r2 )
+        error "--background_r1 and --background_r2 go together: a real metagenome's two read files"
+    if( !(params.split_mode in ['random', 'taxonomy']) )
+        error "--split_mode is random or taxonomy, not '${params.split_mode}'"
     // harvested BacDive batches to start from (--bacdive_full), or []
     snapshot = params.bacdive_snapshot ? file(params.bacdive_snapshot, checkIfExists: true) : []
 

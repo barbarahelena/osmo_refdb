@@ -27,7 +27,8 @@ cutoffs. The current model was trained on **v10** and must be used with
 # (0.48 instead of 5.92), so every prediction is off; osmotool and predict.py refuse it.
 python3.11 -m venv .venv-nacl && .venv-nacl/bin/pip install xgboost scikit-learn pandas scipy matplotlib
 
-PYTHON=.venv-nacl/bin/python THREADS=8 bash run_pipeline.sh nacl_model v10
+# in the pipeline: NACL_MODEL, with --bacdive_full after the gate
+nextflow run main.nf --release v10 -resume --gate_passed true --bacdive_full
 # = train.py (~20 min) + explain.py (~10 min) + package_nacl_model.py
 
 # predict, on osmotool >= 0.8.0 annotate output (header has gc and n_contigs)

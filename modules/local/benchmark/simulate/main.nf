@@ -13,6 +13,7 @@ process BENCHMARK_SIMULATE {
     path(refs, stageAs: 'refs/*')
     path(families)
     val(split)
+    path(background, stageAs: 'background/*')   // a real metagenome's R1 and R2, scored as background, or []
 
     output:
     path('reads'), emit: reads
@@ -22,9 +23,11 @@ process BENCHMARK_SIMULATE {
     tuple val("${task.process}"), val('wgsim'), eval("wgsim 2>&1 | sed -n 's/^Version: *//p'"), topic: versions, emit: versions_wgsim
 
     script:
+    def args = task.ext.args ?: ''   // e.g. --read-lengths 100,150,250,300
+    def bg   = background ? "--background ${background.sort { f -> f.name }.join(' ')}" : ''
     """
     python ${moduleDir}/templates/simulate_reads.py --refs refs --families ${families} \\
-        --reads-per-sequence 20 --split ${split} --out reads
+        --reads-per-sequence 20 --split ${split} ${args} ${bg} --out reads
     python ${moduleDir}/templates/compute_read_truth.py --reads reads
     """
 

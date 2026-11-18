@@ -36,12 +36,14 @@ Only step 3, `split_train_test.py --split-mode taxonomy`:
 Everything else is the v10 recipe, run from scratch on the new split:
 
 ```bash
-SPLIT_MODE=taxonomy REUSE_REFS_FROM=releases/v9 REUSE_ALIGNMENTS=0 \
-    bash run_pipeline.sh all v10-taxsplit
+nextflow run main.nf --release v10-taxsplit --split_mode taxonomy
 ```
 
-- Same fetched, QC'd and clustered sequences as v10 (`REUSE_REFS_FROM`), so
-  the split is the only difference.
+- v10-taxsplit was built on the same fetched, QC'd and clustered sequences as
+  v10 (the old pipeline could reuse a release's references), so the split was
+  the only difference. The pipeline now fetches its references in every
+  build: to compare the two splits again, build both from the same day's
+  fetch (`--split_mode random` and `taxonomy`, one after the other).
 - New alignments, HMMs and DIAMOND database on the new training set.
 - GA cutoffs, DIAMOND cutoffs and the cascade decision recalibrated on the
   new calib split.

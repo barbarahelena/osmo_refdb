@@ -34,6 +34,8 @@ process PROVENANCE {
     """
     cp -L ${versions} software_versions.yml
     SPLIT_MODE="${params.split_mode}" \\
+    READ_LENGTHS="${params.read_lengths ?: ''}" BACKGROUND_R1="${params.background_r1 ?: ''}" BACKGROUND_R2="${params.background_r2 ?: ''}" \\
+    DIAMOND_MIN_SUBJECT_COVER="${params.diamond_min_subject_cover}" \\
     python ${moduleDir}/templates/write_provenance.py --release-name ${release_name} \\
         --refs refs --alignments ${alignments} --hmms ${hmms} --files files/* --catalogs ${catalog} \\
         --repo ${pipeline} --families ${families} --versions software_versions.yml --out PROVENANCE.json

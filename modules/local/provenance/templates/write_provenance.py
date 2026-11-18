@@ -14,9 +14,9 @@ Writes <release>/PROVENANCE.json:
     explicit conda list baked into the image, the version of every tool the
     pipeline calls;
   * inputs: families.yaml checksum, the UniProt release(s) and fetch dates in
-    refs/manifest.tsv, the release refs/ were reused from (REUSE_REFS_FROM),
-    pipeline parameters from the environment (SPLIT_MODE, REUSE_ALIGNMENTS,
-    ...), and a checksum over refs/ and alignments/;
+    refs/manifest.tsv, the pipeline parameters that shape the benchmark (from
+    the environment: SPLIT_MODE, READ_LENGTHS, BACKGROUND_R1/R2,
+    DIAMOND_MIN_SUBJECT_COVER), and a checksum over refs/ and alignments/;
   * outputs: checksums of every HMM (without the DATE and COM lines HMMER
     writes), the DIAMOND database, cutoffs, cascade config and report levels.
 
@@ -224,7 +224,6 @@ def main() -> None:
         versions = merged_tools(per_process).get("osmotool")
         osmotool = {"version": versions or "not used", "source": "versions.yml of the steps"}
     explicit = Path("/opt/osmo_refdb/conda-explicit.txt")
-    reuse_from = os.environ.get("REUSE_REFS_FROM", "")
 
     record = {
         "about": ("Build record of this release: which code, tools and inputs produced it, and "
@@ -247,9 +246,10 @@ def main() -> None:
         "inputs": {
             "families_yaml_sha256": sha256_of(args.families) if args.families.exists() else "missing",
             "uniprot_releases_and_fetch_dates": releases or "no refs/manifest.tsv",
-            "refs_reused_from": reuse_from or "none (fetched in this build)",
-            "reused_alignments": os.environ.get("REUSE_ALIGNMENTS", "1" if reuse_from else "0"),
             "split_mode": os.environ.get("SPLIT_MODE", "random"),
+            "benchmark_read_lengths": os.environ.get("READ_LENGTHS") or "simulator default",
+            "benchmark_background_reads": [x for x in (os.environ.get("BACKGROUND_R1"), os.environ.get("BACKGROUND_R2")) if x] or "none",
+            "benchmark_diamond_min_subject_cover": os.environ.get("DIAMOND_MIN_SUBJECT_COVER", "0.0"),
             "refs": tree_hash(refs_dir, "*.faa"),
             "alignments": tree_hash(aln_dir) if aln_dir else {"n_files": 0},
         },

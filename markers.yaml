@@ -1,16 +1,13 @@
 # markers.yaml -- universal single-copy marker genes for normalising
 # `osmotool profile` abundances to copies per genome.
 #
-# NOT part of the osmoadaptation panel (families.yaml). Built as its own,
-# separate release so these genes never sit in the same DIAMOND db as the
-# osmo families: if they did, they would compete with osmo families in
-# select_best_hits' best-alignment contest and shift those families'
-# benchmarked precision/recall. See README "Marker genes for copies-per-
-# genome normalisation" for the build/package workflow:
-#
-#   FAMILIES_FILE=markers.yaml bash run_pipeline.sh all <release>-markers
-#   python bin/package_markers.py \
-#       --marker-release releases/<release>-markers --release releases/<release>
+# NOT part of the osmoadaptation panel (families.yaml). Built by the pipeline's
+# MARKERS step, separately from the panel, into the release's markers/, so
+# these genes never sit in the same DIAMOND db as the osmo families: if they
+# did, they would compete with osmo families in select_best_hits'
+# best-alignment contest and shift those families' benchmarked
+# precision/recall. See README "Marker genes for copies-per-genome
+# normalisation". --markers_file points at another file.
 #
 # Same schema as families.yaml (see its header for every field).
 #
