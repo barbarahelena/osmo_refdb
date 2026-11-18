@@ -11,7 +11,8 @@ The default profile is `test,singularity`: the test inputs, containers on the ma
 on, no SLURM. Even a stub runs in each step's container, because its version outputs read the
 container's tools. On a cluster, run nf-test itself inside a SLURM job, like any Nextflow run.
 `NFT_WORKDIR` moves nf-test's work directory (default `.nf-test/`) to scratch;
-`NXF_SINGULARITY_CACHEDIR` keeps the images between runs.
+`NXF_SINGULARITY_CACHEDIR` keeps the images between runs, and `OSMO_REFS_STORE=<dir>` the real test's UniProt
+fetch (`--refs_store`), so a rerun in the same UniProt release skips it.
 
 ## check_performance.py
 

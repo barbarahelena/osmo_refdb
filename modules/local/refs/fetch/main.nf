@@ -26,7 +26,7 @@ process REFS_FETCH {
     """
     python ${T}/fetch_refs.py --families ${families} --out refs --cache-dir cache
     # the fetch is of the release it is keyed on (UniProt can release in between)
-    got=\$(awk -F'\t' 'NR == 1 { for (i = 1; i <= NF; i++) if (\$i == "uniprot_release") c = i; next } c { print \$c }' refs/manifest.tsv | sort -u)
+    got=\$(awk -F'\t' 'NR == 1 { for (i = 1; i <= NF; i++) if (\$i == "uniprot_release") c = i; next } c && \$c != "" { print \$c }' refs/manifest.tsv | sort -u)
     if [ "\$got" != "${uniprot_release}" ]; then
         echo "ERROR: fetched UniProt release '\$got', expected ${uniprot_release}: rerun" >&2
         exit 1
