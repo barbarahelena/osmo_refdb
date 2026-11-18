@@ -57,6 +57,48 @@ release is v9 from Zenodo (`osmotool download-db`), the newest one published: th
 study compares two indexes built with the same HMMs, so the release's version does not
 decide it. `RELEASE=` points it at another.
 
-## Results
+## Results (2026-11-18)
 
-To be filled in from `${STUDY_DIR}/results/` once the run is done.
+Run: release v9, osmotool `a0535b4` (branch `catalog-default`), seed 20261118. The
+tables are in `results/`. The per-read rebuild matched osmotool's `gene_counts.tsv` in
+every cell (`verification.tsv`).
+
+The slice: 1,001,768 genes, 755 Mbp, from a catalog of 13,788,251 genes (about
+10.4 Gbp). Of the slice's genes 2,266 (0.23%) are annotated as a panel family; 22,337
+are homologs below a cutoff and 8,892 decoys, so 3.3% have any HMM hit and 96.7% are
+not in the hits index. 4 M reads (2 M pairs) per divergence, 12,596 of them from panel
+genes.
+
+| divergence | index | false panel calls per M reads | of which catalog / translated | recall | precision |
+|---|---|---|---|---|---|
+| 0 | none (`--no_catalog`) | 246.2 | 0 / 985 | 0.253 | 0.764 |
+| 0 | hits | 57.2 | 65 / 164 | 0.985 | 0.982 |
+| 0 | all | **0.0** | 0 / 0 | 0.983 | 1.000 |
+| 2% | none | 151.2 | 0 / 605 | 0.194 | 0.802 |
+| 2% | hits | 74.8 | 51 / 248 | 0.691 | 0.967 |
+| 2% | all | 44.2 | 0 / 177 | 0.691 | 0.980 |
+
+- **Either index does most of the work.** Against translated search alone, the hits
+  index cuts false calls by 4x and lifts recall from 0.25 to 0.98 when the strain is
+  catalogued (profile's default DIAMOND filters, 80% identity and query cover, miss most
+  gut genes). Recall is the same with both indexes.
+- **The full index removes the rest when the strain is catalogued**: 57 false calls per
+  million reads to none. With the hits index they come from two places:
+  - 65 catalog calls: reads from genes not in the hits index that align at >= 97% to a
+    hit gene (cspA, trkA, opuBB, murB, mscL), the competition the full index exists for;
+  - 164 translated calls, 152 of them gor: reads from gor's look-alikes (other
+    FAD-disulfide oxidoreductases) that fall through to DIAMOND. v9 has no gor decoy;
+    `fadDisulfide_decoy` (from v10 on) is built for exactly these, so with a v10 release
+    the hits index's rate should drop to about 20 per million (77 of the 229), not
+    measured here.
+- **At 2% divergence** the gap narrows (75 against 44 per million). More reads settle
+  than expected: 2% divergence plus 0.5% errors leaves many reads just above the 97% bar
+  (2.56 M of 3.99 M non-panel reads settle with the full index).
+- **Cost** (`resources.tsv`): the full index took 7.5 GB to build for 755 Mbp (about
+  10 bytes per base: about 100 GB for the whole catalog) and is 2.7 GB on disk (about
+  37 GB whole); profiling with it took 10.4 GB against 7.1 GB with the hits index
+  (0.14 GB on disk). Each build took under 3 minutes and each profile under 2 at 32
+  threads.
+
+Not measured: a v10 release (none is published), real reads (error profiles beyond
+substitutions), and the whole catalog rather than a slice.
