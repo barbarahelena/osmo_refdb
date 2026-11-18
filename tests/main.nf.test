@@ -55,6 +55,7 @@ nextflow_pipeline {
                        "--families", "${baseDir}/assets/test/families.yaml",
                        "--markers", "${baseDir}/assets/test/markers.yaml",
                        "--baseline", "${baseDir}/tests/baseline.tsv",
+                       "--new-baseline", "${outputDir}/baseline.tsv",
                        "--out", "${outputDir}/performance.tsv"]
             def proc = cmd.execute()
             proc.waitForProcessOutput(System.out, System.err)

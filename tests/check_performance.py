@@ -25,8 +25,10 @@ unless the release was built from another UniProt release than the baseline
 (its references differ, so its numbers can): then they are warnings, unless
 --strict.
 
-Without a baseline, or with --write-baseline, it writes the run's metrics as a
-baseline (review it before committing it). Every run writes them to --out.
+Without a baseline it writes the run's metrics as one, to --new-baseline if
+given (the nf-test test: its output folder, so a test leaves nothing in the
+clone), else to --baseline; --write-baseline overwrites --baseline. Review it
+before committing it. Every run writes its metrics to --out.
 
 Standard library only.
 
@@ -231,6 +233,9 @@ def main() -> int:
     ap.add_argument("--tolerance", type=float, default=0.05, help="absolute, on every metric (0-1)")
     ap.add_argument("--out", type=Path, default=None, help="this run's metrics (default: <release>/performance.tsv)")
     ap.add_argument("--write-baseline", action="store_true", help="(over)write --baseline with this run's metrics")
+    ap.add_argument("--new-baseline", type=Path, default=None,
+                    help="without a baseline, write this run's metrics here instead of to --baseline "
+                         "(review it, then copy it to --baseline)")
     ap.add_argument("--strict", action="store_true", help="regressions fail even across UniProt releases")
     args = ap.parse_args()
 
@@ -255,8 +260,10 @@ def main() -> int:
 
     regressions, warnings = [], []
     if args.write_baseline or not args.baseline.exists():
-        write_metrics(args.baseline, values, release)
-        print(f"no baseline compared: wrote {args.baseline} from this run (review it before committing it)")
+        target = args.baseline if args.write_baseline or args.new_baseline is None else args.new_baseline
+        write_metrics(target, values, release)
+        print(f"no baseline compared: wrote {target} from this run "
+              f"(review it, then commit it as {args.baseline})")
     else:
         base, base_release = read_baseline(args.baseline)
         other_release = base_release != release

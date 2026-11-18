@@ -40,8 +40,10 @@ across releases a drop is reported as a warning rather than a failure (`--strict
 
 ### The baseline
 
-`baseline.tsv` is written by the first real run, or with `--write-baseline`, from that run's metrics.
-Review it before committing it: it is what later builds are held to. Rewrite it when a change is meant
+Without `baseline.tsv`, the real test writes the run's metrics as a candidate baseline into its output
+folder (`baseline.tsv` there; the test leaves nothing in the clone). Review it, then copy it to
+`tests/baseline.tsv` and commit it: it is what later builds are held to. `--write-baseline` overwrites
+`tests/baseline.tsv` directly. Rewrite it when a change is meant
 to move the numbers, and say so in `CHANGELOG.md`.
 
 The reference-system check (`real_genome_validation/reference_systems_check.txt`) is printed but not
