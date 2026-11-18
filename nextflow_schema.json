@@ -14,11 +14,11 @@
         "outdir": {
           "type": "string",
           "format": "directory-path",
-          "description": "Where the results go: the release to <outdir>/releases/<release>, the BacDive data to <outdir>/<data_dir>, -entry profile_samples to <outdir>/profile (absolute path, shared storage)"
+          "description": "The release folder (absolute path, shared storage); with -entry profile_samples, where the profiles go"
         },
         "release": {
           "type": "string",
-          "description": "Name of the NEW release; <outdir>/releases/<release> must not exist yet"
+          "description": "The release's name (e.g. v10), written into its PROVENANCE.json, catalog and NaCl model"
         },
         "catalog_genes": {
           "type": "string",
@@ -28,12 +28,17 @@
         "data_dir": {
           "type": "string",
           "description": "Release-independent BacDive data, under outdir",
-          "default": "data/phenotype_validation"
+          "default": "bacdive_data"
         },
         "samples": {
           "type": "string",
           "description": "-entry profile_samples: CSV with columns id,r1,r2",
           "format": "file-path"
+        },
+        "db": {
+          "type": "string",
+          "format": "directory-path",
+          "description": "-entry profile_samples: the release folder to profile with"
         },
         "markers_file": {
           "type": "string",

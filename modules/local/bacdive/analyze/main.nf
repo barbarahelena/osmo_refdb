@@ -1,7 +1,7 @@
 // The BacDive phenotype validation: does the osmo panel predict salt tolerance (analyze.py), better than
 // random panels of the same size, with family ranking and cross-validation (analyze_extended.py), and
 // the within-domain salt-in control (analyze_strategy_control.py). Each test's printed report is kept
-// as <script>.txt. Published to releases/<release>/phenotype_validation (conf/modules.config).
+// as <script>.txt. Published to <outdir>/phenotype_validation (conf/modules.config).
 process BACDIVE_ANALYZE {
     label 'process_medium'
 

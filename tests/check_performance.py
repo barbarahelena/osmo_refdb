@@ -33,7 +33,7 @@ before committing it. Every run writes its metrics to --out.
 Standard library only.
 
 Usage:
-  python tests/check_performance.py --release-dir releases/test \\
+  python tests/check_performance.py --release-dir <release folder> \\
       --families assets/test/families.yaml --markers assets/test/markers.yaml \\
       --baseline tests/baseline.tsv
 """

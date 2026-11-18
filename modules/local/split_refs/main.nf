@@ -28,11 +28,13 @@ process SPLIT_REFS {
     stub:
     """
     cp -RL refs_in refs
-    printf '>a\\nMK\\n>b\\nMR\\n' > refs/ectA.positive.train.faa
-    printf '>a\\nMK\\n>c\\nMW\\n' > refs/ectB.positive.train.faa
-    printf '>a\\nMK\\n' > refs/ectC.positive.train.faa
-    printf '>p\\nMK\\n' > refs/ectA.positive.calib.faa
-    printf '>n\\nMW\\n' > refs/ectA.negative.train.faa
+    # every family in the families file gets its sets, so the stub follows whichever file the run uses
+    python3 -c "import yaml; print('\\n'.join(f['name'] for f in yaml.safe_load(open('${families}'))['families']))" |
+    while read -r fam; do
+        printf '>a\\nMK\\n>b\\nMR\\n' > refs/\${fam}.positive.train.faa
+        printf '>p\\nMK\\n' > refs/\${fam}.positive.calib.faa
+        printf '>n\\nMW\\n' > refs/\${fam}.negative.train.faa
+    done
     printf 'family\\tstatus\\n' > refs/negative_purity_manifest.tsv
     """
 }

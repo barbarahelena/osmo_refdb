@@ -16,7 +16,7 @@ UniProt fetch (`--refs_store`), so a rerun in the same UniProt release skips it.
 
 ## check_performance.py
 
-It scores a release, the test one or any other (`--release-dir releases/<name>
+It scores a release, the test one or any other (`--release-dir <release folder>
 --families families.yaml --markers markers.yaml`). Standard library only.
 
 - **Must hold exactly:**

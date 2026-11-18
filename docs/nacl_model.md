@@ -28,11 +28,11 @@ cutoffs. The current model was trained on **v10** and must be used with
 python3.11 -m venv .venv-nacl && .venv-nacl/bin/pip install xgboost scikit-learn pandas scipy matplotlib
 
 # in the pipeline: NACL_MODEL, with --bacdive_full
-nextflow run main.nf --release v10 -resume --bacdive_full
+nextflow run main.nf --outdir <v10 folder> --release v10 -resume --bacdive_full
 # = train.py (~20 min) + explain.py (~10 min) + package_nacl_model.py
 
 # predict, on osmotool >= 0.8.0 annotate output (header has gc and n_contigs)
-.venv-nacl/bin/python modules/local/nacl/model/templates/nacl_model/predict.py releases/v10/nacl_model out/genomeA out/genomeB
+.venv-nacl/bin/python modules/local/nacl/model/templates/nacl_model/predict.py <v10 folder>/nacl_model out/genomeA out/genomeB
 ```
 
 On macOS, set `MPLCONFIGDIR` to a writable directory if `~/.matplotlib` is not writable.

@@ -1,6 +1,6 @@
 // Packages the catalog built by OSMOTOOL_BUILDCATALOG as the release's catalogs/<name>/: provenance in
 // catalog.json, the hmmsearch evidence gzipped, SHA256SUMS (templates/package_catalog.py).
-// Published into releases/<release>/catalogs/ (conf/modules.config).
+// Published into <outdir>/catalogs/ (conf/modules.config).
 process CATALOG_PACKAGE {
     tag "${meta.id}"
     label 'process_single'

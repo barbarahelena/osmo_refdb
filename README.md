@@ -36,11 +36,11 @@ The build is a Nextflow workflow (`main.nf`; each module's `container` line and
 `environment.yml` give its image):
 
 ```bash
-nextflow run main.nf --release v1    # build, benchmark, catalog and screen, BacDive, validation
-nextflow run main.nf --release v1 -resume --bacdive_full    # the full BacDive set and the NaCl model
+nextflow run main.nf --outdir /data/osmo_refdb/v1 --release v1    # build, benchmark, catalog and screen, BacDive, validation
+nextflow run main.nf --outdir /data/osmo_refdb/v1 --release v1 -resume --bacdive_full    # the full BacDive set and the NaCl model
 ```
 
-Read the catalog screen (`releases/<name>/catalogs/<catalog>/screen.tsv`, printed at the end of the
+Read the catalog screen (`<outdir>/catalogs/<catalog>/screen.tsv`, printed at the end of the
 build) before publishing a release: a flagged family that is a real confuser class means a decoy and a
 rebuild under a new release name.
 
@@ -54,7 +54,8 @@ accuracy against `tests/baseline.tsv`. See `tests/README.md`. Run the real test 
 
 - On Snellius, `-profile snellius` (SLURM and Apptainer). Run Nextflow itself inside a small SLURM
   job, not on a login node, and put `--work_dir` on scratch.
-- `--outdir <dir>` is where the release goes (`<outdir>/releases/<release>`); put it on shared storage.
+- `--outdir <dir>` is the release folder; put it on shared storage. `--release` is the release's name,
+  written into its `PROVENANCE.json`, catalog and NaCl model.
   Containers see the pipeline, the work directory and every path given as a parameter.
 - `--refs_store <dir>` keeps the UniProt fetch for later builds in the same UniProt release
   (see Build options below); pass it when calling the pipeline, e.g. in the launch script.
@@ -78,9 +79,8 @@ DIAMOND database, then the calibration and test benchmarks. `RELEASE_CATALOG` ad
 catalog and the screen; on the finished release run the BacDive analysis (and with
 `--bacdive_full` the NaCl model) and the real-genome validation. `families.yaml` is the input (`--families_file` to point at a subset).
 
-Everything for a given release name is written to `releases/<name>/`
-(git-ignored), so you can keep multiple versions around and reproduce any
-of them independently.
+Everything for a release is written to `--outdir`, one folder per release, so you can keep multiple
+versions around and reproduce any of them independently.
 
 ### Build options
 
@@ -91,7 +91,7 @@ it tests detection of genuinely divergent homologs, the case where HMMs
 classically have an edge over pairwise search (see `docs/validation_reports/taxonomy_split.md`):
 
 ```bash
-nextflow run main.nf --release v2-taxonomy-split --split_mode taxonomy
+nextflow run main.nf --outdir /data/osmo_refdb/v2-taxonomy-split --release v2-taxonomy-split --split_mode taxonomy
 ```
 
 `--refs_store <dir>` keeps the UniProt fetch (`REFS_FETCH`, the hour-long
@@ -104,13 +104,13 @@ script fetch again into a new directory; the later reference steps (purity,
 lengths, RefSeq, background, clustering) always run.
 
 ```bash
-nextflow run main.nf --release v11 --refs_store /project/osmo/refs_store
+nextflow run main.nf --outdir /data/osmo_refdb/v11 --release v11 --refs_store /project/osmo/refs_store
 ```
 
 The test benchmark also takes:
 
 ```bash
-nextflow run main.nf --release v1 \
+nextflow run main.nf --outdir /data/osmo_refdb/v1 --release v1 \
     --read_lengths 100,150,250,300 \
     --background_r1 /path/to/real_metagenome_R1.fastq.gz \
     --background_r2 /path/to/real_metagenome_R2.fastq.gz \
@@ -149,7 +149,7 @@ along with the fetch, and a new build lists them again.
 
 Edit `families.yaml` — add one entry with a `name`, `positive_query`
 (UniProt REST query) and `negative_query` (a hard-negative Pfam-family
-query). Then build a new release (`nextflow run main.nf --release <name>`). No other file
+query). Then build a new release (`nextflow run main.nf --outdir <dir> --release <name>`). No other file
 needs to change.
 
 See `families.yaml` for query syntax notes (in particular: UniProt's REST
@@ -433,11 +433,11 @@ just the families you added: write a `families.yaml` with only those families (a
 they need), and run the workflow on it under a throwaway release name:
 
 ```bash
-nextflow run main.nf --families_file families_test.yaml --release v3-test
+nextflow run main.nf --families_file families_test.yaml --outdir /data/osmo_refdb/v3-test --release v3-test
 ```
 
 It runs the whole build (fetch, QC, calibrate, benchmark) for those families only, and publishes to its
-own `releases/v3-test/`. Once you are happy with the result, run the full `families.yaml` under the real
+own folder. Once you are happy with the result, run the full `families.yaml` under the real
 release name.
 
 ## Pipeline steps (`pipeline/`)
@@ -531,7 +531,7 @@ marker: it has a reported salt-tolerance association (Culligan et al.
 with what it normalises.
 
 The workflow builds them with every release (`MARKERS`): `markers.yaml`'s references, split and DIAMOND
-database, apart from the osmo families, packaged as `releases/<release>/markers/` and given to every
+database, apart from the osmo families, packaged as `<outdir>/markers/` and given to every
 osmotool step that runs on the finished release. The markers have no benchmark of their own in the workflow, so the marker
 manifest's DIAMOND precision/recall columns are empty: a marker with poor DIAMOND precision would inflate
 the denominator for every family, which the old separate marker build's benchmark used to check.
@@ -554,7 +554,7 @@ against a real, independently-annotated genome instead — see
 ## Releasing a database for `osmotool` to use
 
 Once you're happy with a release's benchmark results, publish
-`releases/<name>/osmo_refdb.dmnd` and `releases/<name>/hmms/osmo_refdb.hmm`
+`<outdir>/osmo_refdb.dmnd` and `<outdir>/hmms/osmo_refdb.hmm`
 (+ its `.h3*` index files) as a versioned data release (e.g. a GitHub
 release asset or Zenodo record) that `osmotool` users download and point
 `--database` at. Cite the specific release version in any publication using

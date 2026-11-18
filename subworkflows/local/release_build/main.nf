@@ -2,7 +2,7 @@
 // Build a release from scratch: references (UniProt, RefSeq), splits, alignments, HMMs, DIAMOND database,
 // then the benchmark (calibration decides the cascade and report levels, the test reads score them).
 // Every part is passed on as it is made; the steps that make a part of the release publish it into
-// releases/<release> (conf/modules.config).
+// <outdir> (conf/modules.config).
 //
 include { HMM_BUILD          } from '../hmm_build/main'
 include { REFS_BUILD         } from '../refs_build/main'

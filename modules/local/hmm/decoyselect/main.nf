@@ -27,6 +27,10 @@ process HMM_DECOYSELECT {
     stub:
     """
     mkdir decoys
-    printf '>a\\nMK\\n>b\\nMR\\n' > decoys/pepABC_decoy.hmm_decoy.faa
+    python3 -c "import yaml; print('\\n'.join(d['name'] for d in (yaml.safe_load(open('${families}')).get('hmm_decoys') or [])))" |
+    while read -r d; do
+        [ -n "\$d" ] && printf '>a\\nMK\\n>b\\nMR\\n' > decoys/\${d}.hmm_decoy.faa
+    done
+    true
     """
 }

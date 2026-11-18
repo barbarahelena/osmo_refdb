@@ -16,7 +16,7 @@ nextflow_pipeline {
         }
 
         then {
-            def rel = new File("${outputDir}/releases/test")
+            def rel = new File("${outputDir}")
             assertAll(
                 { assert workflow.success },
                 { assert rel.exists() },
@@ -51,7 +51,7 @@ nextflow_pipeline {
         then {
             assert workflow.success
             def cmd = ["python3", "${baseDir}/tests/check_performance.py",
-                       "--release-dir", "${outputDir}/releases/test",
+                       "--release-dir", "${outputDir}",
                        "--families", "${baseDir}/assets/test/families.yaml",
                        "--markers", "${baseDir}/assets/test/markers.yaml",
                        "--baseline", "${baseDir}/tests/baseline.tsv",

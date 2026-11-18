@@ -2,7 +2,7 @@
 // BacDive analysis was specified with: 174 non-osmotic Pfam families, drawn from Pfam-A 39.0 and
 // screened on the 43 pilot proteomes), taken from Pfam-A as they are, in Pfam's order.
 // pool.hmm is what BACDIVE_PROTEINS searches (BACDIVE_ANALYZE draws its panels from pool_families.tsv);
-// published to <repo>/<data_dir>/random_panel (conf/modules.config).
+// published to <outdir>/<data_dir>/random_panel (conf/modules.config).
 process POOL_EXTRACT {
     label 'process_single'
 

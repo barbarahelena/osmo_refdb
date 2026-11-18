@@ -30,7 +30,7 @@
  * output in a permanent place and skips the task whenever it is already there, even without work/.
  * storeDir is used for the gene file and, with --refs_store, the UniProt fetch. Everything else goes from step to step
  * as outputs and inputs; no step reads a published file. The release is published into
- * releases/<release> by the steps that make its parts (conf/modules.config). See README.md.
+ * <outdir> by the steps that make its parts (conf/modules.config). See README.md.
  *
  * Nextflow starts Apptainer with --no-home and `env -`: neither the host home directory nor the host
  * environment is inside the container.
@@ -49,11 +49,11 @@ workflow {
 
 workflow profile_samples {
     main:
-    require_params(['outdir', 'release', 'catalog_name', 'samples'])
+    require_params(['outdir', 'db', 'catalog_name', 'samples'])
     samples = channel.fromPath(params.samples)
         .splitCsv(header: true)
         .map { row -> tuple([id: row.id], [file(row.r1, checkIfExists: true), file(row.r2, checkIfExists: true)]) }
-    db    = files("${params.outdir}/releases/${params.release}/*", checkIfExists: true)   // staged as osmotool's DATABASE
+    db    = files("${params.db}/*", checkIfExists: true)   // a release folder, staged as osmotool's DATABASE
     // with the release's catalog and the index it ships (--catalog and --keep_aln: conf/modules.config)
     OSMOTOOL_PROFILE(samples, db)
 }

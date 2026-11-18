@@ -6,7 +6,7 @@ independently annotated genomes, judged against annotation this project did not 
 UniProt)?
 
 It runs for every release, as part of the Nextflow workflow (`subworkflows/local/real_genome_validation`),
-on the finished release. Results go to `releases/<release>/real_genome_validation/`.
+on the finished release. Results go to `<outdir>/real_genome_validation/`.
 
 ## What runs
 

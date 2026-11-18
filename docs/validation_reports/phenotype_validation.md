@@ -446,9 +446,9 @@ control and the NaCl model.
 | `NACL_MODEL` | `--bacdive_full` only: the NaCl model (`docs/nacl_model.md`) |
 
 Genomes, proteins and the pool search do not depend on the release: a run for another release reuses
-them through `-resume`. The release's results are published to `releases/<release>/phenotype_validation/`
+them through `-resume`. The release's results are published to `<outdir>/phenotype_validation/`
 (the annotation, the matrix, the test tables and their printed reports, `*.txt`); the BacDive tables,
-harvested batches and the pool's models to `<repo>/<data_dir>`. The scripts each step runs are in its module
+harvested batches and the pool's models to `<outdir>/<data_dir>`. The scripts each step runs are in its module
 (`modules/local/bacdive/<step>/`, `modules/local/pool/`).
 
 Notes:

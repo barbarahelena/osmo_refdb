@@ -3,7 +3,7 @@
 // accession (build_table.py), and the within-domain salt-in control's strains (build_strategy_control.py).
 // snapshot: harvested batches (bacdive_raw/, --bacdive_snapshot) that are not fetched again, so a
 // shipped snapshot reproduces the published table (BacDive itself is live); [] harvests everything.
-// The tables and batches are published to <repo>/<data_dir> (conf/modules.config).
+// The tables and batches are published to <outdir>/<data_dir> (conf/modules.config).
 process BACDIVE_HARVEST {
     label 'process_single'
     errorStrategy 'retry'   // a dropped connection is not a failure
