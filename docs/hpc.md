@@ -141,7 +141,7 @@ it to tighten `conf/base.config`.
 | Pfam-A 39.0 | yes, added | `fetch_pfam.sh` (pinned URL); only needed to re-derive the random-panel pool |
 | random-panel pool (`pool.hmm`) | yes | `POOL_PFAM` + `POOL_EXTRACT`: the 174 families of `assets/random_panel/pool_families.tsv` (the pool the analysis was specified with), their models from Pfam-A 39.0, downloaded; published to `<repo>/<data_dir>/random_panel` |
 | release snapshot (`refs/`, `alignments/`, ...) | **no: rsync** | UniProt/RefSeq are live, so the snapshot is the input |
-| reference genomes for real-genome validation | in git | `test_genomes/` (3), osmotool's `test_genomes/` (9); validated by the workflow for every release |
+| reference genomes for real-genome validation | in git | `assets/test_genomes/` (3), osmotool's `test_genomes/` (9); validated by the workflow for every release |
 | UniProt / RefSeq (build step 1) | yes, but not used | only for a from-scratch fetch, which is a new database vintage |
 
 ## Resources

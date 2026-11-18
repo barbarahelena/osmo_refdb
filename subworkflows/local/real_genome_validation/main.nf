@@ -23,7 +23,7 @@ workflow REAL_GENOME_VALIDATION {
     main:
     targets  = file("${projectDir}/assets/real_genome_validation/target_orfs.tsv", checkIfExists: true)
     expected = file("${projectDir}/assets/real_genome_validation/expected_systems.tsv", checkIfExists: true)
-    test_dir = params.test_genomes_dir ?: "${projectDir}/test_genomes"
+    test_dir = params.test_genomes_dir ?: "${projectDir}/assets/test_genomes"
 
     reference = params.reference_genomes_dir
         ? channel.fromPath("${params.reference_genomes_dir}/*.fna").map { f -> tuple([id: f.baseName], f) }

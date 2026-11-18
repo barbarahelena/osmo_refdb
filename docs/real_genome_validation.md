@@ -17,7 +17,7 @@ after the gate. Results go to `releases/<release>/real_genome_validation/`.
    to `reference_systems_check.txt`; it does not stop the workflow.
 2. **Read-level recall and precision** on the genomes with curated target genes
    (`assets/real_genome_validation/target_orfs.tsv`; the genomes are `<test_genomes_dir>/<genome>.fna`,
-   default `test_genomes/` in the repo). Reads are simulated from the genome with `wgsim`, whose headers
+   default `assets/test_genomes/` in the repo). Reads are simulated from the genome with `wgsim`, whose headers
    carry the true coordinates, so the ground truth is independent of the database. DIAMOND
    (`osmotool profile`) and the HMMs (`orfm` + `hmmscan`) are scored per family against it
    (`real_read_truth.py`, `compare_real_recall.py`) in `<genome>.real_recall_comparison.tsv`.
@@ -32,9 +32,9 @@ tool. It is done once per genome, not per release:
    review status) to confirm which calls are real; leave out known false positives.
 3. Add one row per confirmed gene to `assets/real_genome_validation/target_orfs.tsv`
    (`genome`, `family`, Prodigal ORF id from the `.prodigal.faa` header) and put the genome in
-   `test_genomes/<genome>.fna`.
+   `assets/test_genomes/<genome>.fna`.
 
 Every later release is then validated against the same curated truth. Only the source genome FASTAs
-belong in `test_genomes/`; the outputs are git-ignored release files.
+belong in `assets/test_genomes/`; the outputs are git-ignored release files.
 
 The read-recall and system-check scripts can also be run by hand (`python real_read_truth.py --help`, and so on); the target coordinates are worked out in `VALIDATION_TARGETCOORDS` itself.
