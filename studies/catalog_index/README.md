@@ -117,7 +117,7 @@ errors). The neighbours have no hit, so a read they settle is dropped.
 
 25,170 neighbours (21,344 at >= 95%, 19,592 at >= 97%; `results/neighbours.tsv.gz`):
 with the 33,495 hit genes, 58,665 genes and 47 Mbp, 5.9% of the slice. Finding them
-took 17 s and 9.5 GB at 32 threads; the catalog is 0.18 GB on disk (hits 0.14 GB, all
+took 17 s and 9.5 GB at 32 threads; the catalog is 0.19 GB on disk (hits 0.14 GB, all
 2.7 GB).
 
 | divergence | index | false per M reads | catalog / translated | recall | precision |
