@@ -1,6 +1,6 @@
 // osmotool index-catalog: the full, competitive index of a gene catalog. Depends only on the genes
-// and the aligner, not on a release. ext.args: --aligner bwa (classic bwa; bwa-mem3 needs 100+ GB
-// for a whole gut catalog); ext.prefix: the index directory's name.
+// and the aligner, not on a release. bwa-mem3 (osmotool's aligner), which needs 100+ GB for a whole gut
+// catalog (base.config); ext.prefix: the index directory's name.
 // The tool versions are written into the index directory (versions.yml), not emitted: under storeDir
 // the index is kept outside the work directory and the step is skipped once it exists.
 // NEEDS an osmotool with catalog mode (osmotool main after 0.8.0, not yet in a tagged release or image).
@@ -26,7 +26,7 @@ process OSMOTOOL_INDEXCATALOG {
     cat <<-END_VERSIONS > ${prefix}/versions.yml
     "${task.process}":
         osmotool: \$(osmotool --version | sed 's/^osmotool //')
-        bwa: \$(bwa 2>&1 | sed -n 's/^Version: //p')
+        bwa-mem3: \$(bwa-mem3 version 2>&1 | head -1)
     END_VERSIONS
     """
 

@@ -15,9 +15,6 @@ dependencies:
   # gene catalogs for osmotool profile --catalog (run_pipeline.sh catalog):
   # indexing and mapping; needs AVX2 on x86-64, or ARM NEON
   - bwa-mem3
-  # classic bwa: the full catalog index (osmotool index-catalog --aligner bwa), which
-  # bwa-mem3 cannot hold in memory for a whole gut-gene catalog
-  - bwa
   # not exercised by osmo_refdb's own build/benchmark pipeline (that only
   # ever runs `osmotool profile` on reads), but needed to actually run
   # `osmotool annotate` -- e.g. to sanity-check reference-database
