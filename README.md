@@ -495,7 +495,7 @@ their defaults are GMGC v1.0 human gut).
   close to one, so reads from those competitors map to their own gene and are
   dropped too. On a 1 M-gene slice of the gut catalog it gave no catalog false
   calls, as an index of the whole catalog did, at 0.19 GB against 2.7 GB
-  (`studies/catalog_index`). Reads from genes far from any hit gene fall back
+  (`docs/validation_reports/catalog_index.md`). Reads from genes far from any hit gene fall back
   to translated search.
 - `osmotool profile` uses the catalog a release ships by default;
   `--no_catalog` is translated search only. Every release scores it on the

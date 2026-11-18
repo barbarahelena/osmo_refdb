@@ -16,7 +16,7 @@ The numbers below are from the v10 run of the old `11d_benchmark_catalog.py`
 now runs the same benchmark in `RELEASE_BUILD`: `BENCHMARK_CATALOGGENES`
 writes the two gene sets, `OSMOTOOL_BUILDCATALOG_BENCHMARK` builds A and B
 with the index a release ships (`--index neighbours`; the comparison of
-indexes on real gut genes that chose it is `studies/catalog_index`),
+indexes on real gut genes that chose it is `docs/validation_reports/catalog_index.md`),
 `BENCHMARK_CATALOGMAP` maps the test reads to each, and
 `BENCHMARK_CATALOGSCORE`
 (`modules/local/benchmark/catalogscore/templates/catalog_benchmark.py`)
