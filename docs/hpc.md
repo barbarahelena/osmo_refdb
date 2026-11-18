@@ -71,8 +71,7 @@ full catalog index   (needs only the gene file: starts at once, in parallel)
    - osmotool 0.8.0 has no catalog mode (`build-catalog`, `index-catalog`, `profile --catalog`): it is
      on osmotool's main branch since 0.8.0, not yet tagged. The catalog steps (`RELEASE_CATALOG`, the
      catalog benchmark, `-entry profile_samples` with a catalog) need a release that has it, in an image
-     with both bwa-mem3 (the hits-only index a release ships) and classic bwa (the full index,
-     `--aligner bwa`): osmotool's `environment.yml` lists only bwa-mem3. Then bump the tag in every
+     with bwa-mem3 (both the hits-only index a release ships and the full index). Then bump the tag in every
      module that uses the image (`grep -rl osmotool:0.8.0 modules`) and in their `environment.yml`.
    - Still to do: the `bacdive-fetch` image needs `conda-forge::gzip` and `conda-forge::findutils`
      (`BACDIVE_GENOMES` uses both); its `environment.yml` lists them.
@@ -162,22 +161,24 @@ margin; run once and tighten them from `pipeline_info/*.trace.tsv`.
 | `BACDIVE_HARVEST` + `BACDIVE_GENOMES` | 1 + 8 | - | about 1.5 h + 50 min | **measured** (harvest 1.5 h; 9.4 GB genome fetch at 8 parallel) |
 | `BUILD_RELEASE` | 16 | 32 GB | request 8 h | **measured** 2.5 h on 10 CPUs inside 7.65 GiB |
 | `OSMOTOOL_BUILDCATALOG` + `CATALOG_PACKAGE` | 16 | 24 GB | request 6 h | **scaled**: translation 10-12 min (1 thread), hmmsearch 21-25 min at 4 threads, Python 2.4-2.8 GB |
-| `OSMOTOOL_INDEXCATALOG` (classic bwa) | 1 | 32 GB | request 6 h | **scaled**: classic bwa 92 s and 203 MB for 133 Mbp -> about 2 h and 15-17 GB |
+| `OSMOTOOL_INDEXCATALOG` (bwa-mem3) | 1 | 240 GB (`fat_genoa` on the retry) | request 6 h | **scaled**: bwa-mem3 33 s and 1.37 GB for 133 Mbp -> about 100-120 GB, possibly over 200 GB; **not measured** at full size |
 | `CATALOG_SCREEN` | 1 | 8 GB | 30 min | reads one TSV |
 | `BACDIVE_PROTEINS` | 40 x 4 | 8 GB each | 2 h each | **measured** 44 core-hours in all (19,965 s at 8 jobs) |
 | `BACDIVE_ANNOTATE` | 40 x 2 | 4 GB each | 1 h each | **measured** 3.6 core-hours in all (4,365 s at 3 jobs) |
 | `BACDIVE_ANALYZE` + `NACL_MODEL` | 8 | 16 GB | request 3 h | **measured** about 16 min analysis + about 30 min NaCl |
-| `OSMOTOOL_PROFILE`, one sample of <= 20M reads | 8 | 32 GB | request 6 h | memory **scaled** (mapping loads the index, about 18-21 GB); time **not measured** at this scale |
+| `OSMOTOOL_PROFILE`, one sample of <= 20M reads | 8 | 32 GB | request 6 h | the release's hits-only index; with the full bwa-mem3 index, which mapping loads, memory is **not measured** (about 35-40 GB of index on disk, scaled); time **not measured** at this scale |
 
-**Why classic bwa for the full index.** On the same 133 Mbp: bwa-mem3 builds in 33 s but peaks at
-1.37 GB (10.3 bytes per base), classic bwa takes 92 s and peaks at 0.2 GB (1.5 bytes per base).
-Scaled linearly to 10-11.5 Gbp that is about 100-120 GB for bwa-mem3 (and its own documentation
-gives a higher per-base cost above about 1 Gbp: 72 GB for the human genome, so well over 200 GB)
-against about 15-17 GB for classic bwa. Cayman builds its index with classic bwa too. The small
-hits-only index shipped in the release stays bwa-mem3.
+**The full index's memory.** Both catalog indexes are bwa-mem3, osmotool's only aligner. On a
+133 Mbp sample of the gut catalog bwa-mem3 built in 33 s and peaked at 1.37 GB (10.3 bytes per base;
+classic bwa, which osmotool no longer offers, took 92 s and 0.2 GB). Scaled linearly to 10-11.5 Gbp
+that is about 100-120 GB, and bwa-mem3's own documentation gives a higher per-base cost above about
+1 Gbp (72 GB for the human genome), so it may be well over 200 GB: `OSMOTOOL_INDEXCATALOG` asks for
+240 GB and on a retry 480 GB on `fat_genoa`. Mapping a sample loads the index too, so the full index
+also sets `-entry profile_samples`'s memory (32 GB in the table is for the hits-only index). Measure
+both on the first full build.
 
-**Disk** (about 65 GB; ask for 100 GB): GMGC 3 GB, BacDive data 17.4 GB (**measured**), full catalog index
-about 18-21 GB (scaled), one build about 8 GB (**measured**: v10 is 7.6 GB),
+**Disk** (about 85 GB; ask for 150 GB): GMGC 3 GB, BacDive data 17.4 GB (**measured**), full catalog index
+about 35-40 GB with bwa-mem3 (scaled: 3.4 bytes per FASTA byte), one build about 8 GB (**measured**: v10 is 7.6 GB),
 temporary protein FASTA for the annotation about 4 GB (scaled), the hits-only index and annotation a few GB.
 
 **Total compute**, summed over the table: roughly 44 + 4 core-hours for the BacDive arrays, about 40 for

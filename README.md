@@ -64,6 +64,19 @@ classically have an edge over pairwise search (see `docs/taxonomy_split.md`):
 nextflow run main.nf --release v2-taxonomy-split --split_mode taxonomy
 ```
 
+`--refs_store <dir>` keeps the UniProt fetch (`REFS_FETCH`, the hour-long
+step) in `<dir>/<UniProt release>/<families file>_<key>/`, `key` a hash of the
+families file and `fetch_refs.py`, and a later build reuses it while UniProt
+is on the same release. Within a release a query's population is fixed and
+the sampling is seeded, so the reused fetch is the one this build would have
+made. A new UniProt release, an edited families file or a changed fetch
+script fetch again into a new directory; the later reference steps (purity,
+lengths, RefSeq, background, clustering) always run.
+
+```bash
+nextflow run main.nf --release v11 --refs_store /project/osmo/refs_store
+```
+
 The test benchmark also takes:
 
 ```bash
@@ -453,7 +466,7 @@ their defaults are GMGC v1.0 human gut).
   works straight away. Sub-cutoff homologs and decoys are in it, so their
   reads are recognised and dropped; reads from genes without any hit fall
   back to translated search.
-- The full, competitive index of every catalog gene (classic bwa, see `docs/hpc.md`) does not
+- The full, competitive index of every catalog gene (bwa-mem3; its memory: `docs/hpc.md`) does not
   depend on the release, only on the gene file and the aligner. It is about
   3.4 bytes per byte of FASTA on the catalogs measured so far (a 137 MB
   sample of the human-gut catalog gave a 472 MB index); the size for a whole

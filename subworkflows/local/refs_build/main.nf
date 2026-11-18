@@ -5,6 +5,7 @@
 //   -> REFS_CLUSTER, per family's positives and negatives
 // Each step works on a copy of the previous one's refs/. For families.yaml and for markers.yaml.
 //
+include { UNIPROT_RELEASE } from '../../../modules/local/uniprot/release/main'
 include { REFS_FETCH      } from '../../../modules/local/refs/fetch/main'
 include { REFS_PURITY     } from '../../../modules/local/refs/purity/main'
 include { REFS_LENGTH     } from '../../../modules/local/refs/length/main'
@@ -18,7 +19,11 @@ workflow REFS_BUILD {
     background      // true: also the benchmark's random background (the markers have no benchmark)
 
     main:
-    REFS_FETCH(families)
+    // keyed for --refs_store on the UniProt release, the families file and the fetch script
+    UNIPROT_RELEASE()
+    fetch_script = file("${projectDir}/modules/local/refs/templates/fetch_refs.py")
+    REFS_FETCH(UNIPROT_RELEASE.out.release.map { r -> r.trim() }.combine(families)
+        .map { r, f -> tuple(r, (f.text + fetch_script.text).md5().take(16), f) })
     REFS_PURITY(REFS_FETCH.out.refs, families)
     REFS_LENGTH(REFS_PURITY.out.refs, families)
     REFS_REFSEQ(REFS_LENGTH.out.refs, families)
