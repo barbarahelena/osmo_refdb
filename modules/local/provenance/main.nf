@@ -16,7 +16,7 @@ process PROVENANCE {
     input:
     val(release_name)
     path(refs, stageAs: 'refs/*')                       // the release's refs/
-    path(alignments)                                    // ALIGNMENTS_RECORD
+    path(alignments, stageAs: 'alignments/*')           // HMM_BUILD: every alignment, raw and trimmed
     path(hmms)                                          // HMM_CALIBRATE
     path(release_files, stageAs: 'files/*')             // DIAMOND_BUILD: the DIAMOND database and its files
     path(cascade, stageAs: 'files/*')                   // the calibrated cascade config and report levels
@@ -37,7 +37,7 @@ process PROVENANCE {
     READ_LENGTHS="${params.read_lengths ?: ''}" BACKGROUND_R1="${params.background_r1 ?: ''}" BACKGROUND_R2="${params.background_r2 ?: ''}" \\
     DIAMOND_MIN_SUBJECT_COVER="${params.diamond_min_subject_cover}" \\
     python ${moduleDir}/templates/write_provenance.py --release-name ${release_name} \\
-        --refs refs --alignments ${alignments} --hmms ${hmms} --files files/* --catalogs ${catalog} \\
+        --refs refs --alignments alignments --hmms ${hmms} --files files/* --catalogs ${catalog} \\
         --repo ${pipeline} --families ${families} --versions software_versions.yml --out PROVENANCE.json
     """
 
