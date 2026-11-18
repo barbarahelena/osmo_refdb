@@ -18,7 +18,10 @@ process ORFM {
     def args = task.ext.args ?: ''
     prefix   = task.ext.prefix ?: "${meta.id}"
     """
-    zcat -f ${reads} > merged.fastq
+    # the image's zcat (busybox) has no -f, so plain files are read as they are
+    for f in ${reads}; do
+        case "\$f" in *.gz) gzip -dc "\$f" ;; *) cat "\$f" ;; esac
+    done > merged.fastq
     orfm ${args} merged.fastq > ${prefix}.orfs.faa
     rm merged.fastq
     """
