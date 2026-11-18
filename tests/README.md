@@ -12,8 +12,8 @@ on, no SLURM. Even a stub runs in each step's container, because its version out
 container's tools. On a cluster, run nf-test itself inside a SLURM job, like any Nextflow run.
 `NFT_WORKDIR` moves nf-test's work directory (default `.nf-test/`) to scratch;
 `NXF_SINGULARITY_CACHEDIR` keeps the images between runs. The real test keeps its UniProt fetch where
-`--refs_store` says (the `snellius` profile's default, or `OSMO_REFS_STORE=<dir>`), so a rerun in the same
-UniProt release skips it.
+`--refs_store` says (`OSMO_REFS_STORE=<dir>`, or `params.refs_store` in your own `~/.nextflow/config`),
+so a rerun in the same UniProt release skips it.
 
 ## check_performance.py
 

@@ -44,7 +44,7 @@ nextflow_pipeline {
             params {
                 repo = "${outputDir}"
                 // OSMO_REFS_STORE: where to keep the UniProt fetch between runs (--refs_store); unset, the
-                // profile's own (the snellius profile has one), or none
+                // user's own config decides (params.refs_store in ~/.nextflow/config), or none
                 if( System.getenv('OSMO_REFS_STORE') ) refs_store = System.getenv('OSMO_REFS_STORE')
             }
         }
