@@ -4,8 +4,8 @@ process DIAMOND_MAKEDB {
     label 'process_medium'
 
     container "${ workflow.containerEngine == 'singularity' && !task.ext.singularity_pull_docker_container ?
-        'https://depot.galaxyproject.org/singularity/diamond:2.2.8--he361c42_0' :
-        'biocontainers/diamond:2.2.8--he361c42_0' }"
+        'https://depot.galaxyproject.org/singularity/diamond:2.2.9--he361c42_0' :
+        'biocontainers/diamond:2.2.9--he361c42_0' }"
 
     input:
     tuple val(meta), path(fasta)

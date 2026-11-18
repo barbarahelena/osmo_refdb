@@ -1,18 +1,19 @@
 ---
 # yaml-language-server: $schema=https://raw.githubusercontent.com/nf-core/modules/master/modules/environment-schema.json
-# Image: docker.io/barbarahelena/osmotool:0.8.0. osmotool is not on conda: it is pip-installed from its git tag into this environment (versions read from the image). Catalog mode needs an osmotool release with build-catalog / index-catalog (not 0.8.0), and bwa-mem3 next to it
+# Image: docker.io/barbarahelena/osmotool:0.9.0. osmotool is not on conda: it is pip-installed from its git tag into this environment (versions read from the image)
 channels:
   - conda-forge
   - bioconda
 dependencies:
   - conda-forge::python=3.11.18
-  - bioconda::diamond=2.2.8
+  - bioconda::diamond=2.2.9
   - bioconda::hmmer=3.4
   - bioconda::prodigal=2.6.3
   - bioconda::orfm=2.1.1
+  - bioconda::bwa-mem3=0.17.0   # profile --catalog, build-catalog
   - conda-forge::numpy=2.4.6
   - conda-forge::pandas=3.1.1
+  - conda-forge::xgboost=3.4.2   # annotate --predict_nacl
   - conda-forge::pip
-  - bioconda::bwa-mem3
   - pip:
-      - git+https://github.com/barbarahelena/osmotool.git@v0.8.0
+      - git+https://github.com/barbarahelena/osmotool.git@v0.9.0

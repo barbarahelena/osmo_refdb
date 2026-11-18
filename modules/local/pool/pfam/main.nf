@@ -7,8 +7,8 @@ process POOL_PFAM {
 
     // Seqera container 'bacdive-fetch' (environment.yml next to this file): curl
     container "${ workflow.containerEngine == 'singularity' && !task.ext.singularity_pull_docker_container ?
-        'oras://community.wave.seqera.io/library/curl_gawk_python:2d801c4a5165bf61' :
-        'community.wave.seqera.io/library/curl_gawk_python:de4685943c4289cd' }"
+        'oras://community.wave.seqera.io/library/curl_findutils_gawk_gzip_pruned:dfd51b437477d4e7' :
+        'community.wave.seqera.io/library/curl_findutils_gawk_gzip_pruned:47915284675a72c3' }"
 
     input:
     val(release)    // the Pfam release, e.g. 39.0

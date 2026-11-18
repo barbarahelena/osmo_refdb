@@ -5,8 +5,8 @@ process DIAMOND_TRAINREFS {
     label 'process_single'
 
     container "${ workflow.containerEngine == 'singularity' && !task.ext.singularity_pull_docker_container ?
-        'https://depot.galaxyproject.org/singularity/diamond:2.2.8--he361c42_0' :
-        'biocontainers/diamond:2.2.8--he361c42_0' }"
+        'https://depot.galaxyproject.org/singularity/diamond:2.2.9--he361c42_0' :
+        'biocontainers/diamond:2.2.9--he361c42_0' }"
 
     input:
     val(name)

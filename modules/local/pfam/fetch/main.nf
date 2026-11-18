@@ -8,8 +8,8 @@ process PFAM_FETCH {
 
     // Seqera container 'refs' (environment.yml next to this file): python + requests
     container "${ workflow.containerEngine == 'singularity' && !task.ext.singularity_pull_docker_container ?
-        'oras://community.wave.seqera.io/library/cd-hit_python_pyyaml_requests:ddb8dc66d39a1fc1' :
-        'community.wave.seqera.io/library/cd-hit_python_pyyaml_requests:73160cfec41e18d3' }"
+        'oras://community.wave.seqera.io/library/cd-hit_diamond_procps-ng_python_pruned:bb86db01ccb6fea3' :
+        'community.wave.seqera.io/library/cd-hit_diamond_procps-ng_python_pruned:8b81aff3d2d73d3c' }"
 
     input:
     val(meta)

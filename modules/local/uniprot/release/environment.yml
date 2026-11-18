@@ -1,6 +1,6 @@
 ---
 # yaml-language-server: $schema=https://raw.githubusercontent.com/nf-core/modules/master/modules/environment-schema.json
-# Image: Seqera cd-hit_python_pyyaml_requests. TO REBUILD with diamond (REFS_BACKGROUND's purity check); the image without it exists
+# Image: Seqera cd-hit_diamond_procps-ng_python_pruned ('refs', exists; diamond for REFS_BACKGROUND's purity check)
 channels:
   - conda-forge
   - bioconda

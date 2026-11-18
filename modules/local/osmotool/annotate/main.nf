@@ -4,7 +4,7 @@ process OSMOTOOL_ANNOTATE {
     tag "${meta.id}"
     label 'process_low'
 
-    container 'docker.io/barbarahelena/osmotool:0.8.0'
+    container 'docker.io/barbarahelena/osmotool:0.9.0'
 
     input:
     tuple val(meta), path(fasta), path(proteins)   // proteins: [] to let osmotool run Prodigal

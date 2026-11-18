@@ -15,11 +15,11 @@ and a Myxococcus CRP/FNR transcription factor, and "PhaF" (mrpF's own
 documented alias) is also a common polyhydroxyalkanoate-granule protein name.
 Each enabled family was checked individually first (CD-HIT-2D novelty check
 against the existing pool + a manual product-description spot-check) -- see
-docs/CHANGELOG.md and each family's own families.yaml comment.
+CHANGELOG.md and each family's own families.yaml comment.
 
 Sampling: NCBI's esearch default result order is not randomized (the same
 kind of order bias fetch_refs.py already had to fix for UniProt -- see
-issue #4 in docs/CHANGELOG.md), so this fetches the FULL matching UID list
+issue #4 in CHANGELOG.md), so this fetches the FULL matching UID list
 first (lightweight -- UIDs only, no sequence data) and draws a reproducible
 random sample from it, the same oversample-free approach fetch_refs.py
 uses once the full population is already in hand.

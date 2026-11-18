@@ -1,6 +1,6 @@
 ---
 # yaml-language-server: $schema=https://raw.githubusercontent.com/nf-core/modules/master/modules/environment-schema.json
-# Image: Seqera curl_gawk_python. TO REBUILD with gzip and findutils (xargs; fetch_genomes.sh): the image without them exists
+# Image: Seqera curl_findutils_gawk_gzip_pruned ('bacdive-fetch', exists; gzip and findutils for fetch_genomes.sh)
 channels:
   - conda-forge
   - bioconda

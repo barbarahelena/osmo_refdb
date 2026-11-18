@@ -1,6 +1,6 @@
 ---
 # yaml-language-server: $schema=https://raw.githubusercontent.com/nf-core/modules/master/modules/environment-schema.json
-# Image: Seqera cd-hit_python_pyyaml_requests (exists; versions read from the image)
+# Image: Seqera cd-hit_diamond_procps-ng_python_pruned ('refs', exists; diamond for REFS_BACKGROUND's purity check)
 channels:
   - conda-forge
   - bioconda
@@ -9,4 +9,5 @@ dependencies:
   - conda-forge::pyyaml=6.0.3
   - conda-forge::requests=2.34.2
   - bioconda::cd-hit=4.8.1
+  - bioconda::diamond=2.2.8
   - conda-forge::procps-ng=4.0.6

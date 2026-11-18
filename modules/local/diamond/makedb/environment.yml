@@ -1,8 +1,8 @@
 ---
 # yaml-language-server: $schema=https://raw.githubusercontent.com/nf-core/modules/master/modules/environment-schema.json
-# Image: biocontainers/diamond:2.2.8--he361c42_0 (the build in the osmotool image)
+# Image: biocontainers/diamond:2.2.9--he361c42_0 (the DIAMOND in the osmotool image, so the cutoffs are calibrated with the version that applies them)
 channels:
   - conda-forge
   - bioconda
 dependencies:
-  - bioconda::diamond=2.2.8
+  - bioconda::diamond=2.2.9
