@@ -4,7 +4,7 @@ Two pipeline tests (`main.nf.test`, nf-test) on the `test` profile's inputs (`as
 
 | test | what it checks | how long | run with |
 |---|---|---|---|
-| `stub` | the wiring: every step's stub runs, through the gate, and the release has its layout | about 3 min, offline | `NXF_OFFLINE=true nf-test test --tag stub` |
+| `stub` | the wiring: every step's stub runs and the release has its layout | about 3 min, offline | `NXF_OFFLINE=true nf-test test --tag stub` |
 | `real` | a whole release built for real on small inputs, then `check_performance.py` | about an hour, needs the network | `nf-test test --tag real --profile test,snellius` |
 
 The default profile is `test,singularity`: the test inputs, containers on the machine nf-test runs

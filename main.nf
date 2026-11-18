@@ -4,18 +4,17 @@
  * (declared in its module, with its packages in the module's environment.yml). Start it from a SLURM job of
  * your own (a small one, it only submits and watches the others), not on a login node.
  *
- *   downloads: GMGC human gut | BacDive strains + genomes
+ *   downloads: GMGC human gut | BacDive strains + genomes | UniProt and RefSeq references
  *   then, in parallel:
- *     full catalog index                       (needs only the gene file)
  *     BacDive proteins x nchunks               (needs only the genomes)
- *     release build -> catalog annotation -> screen            <- THE GATE
- *   after the gate (--gate_passed true):
- *     BacDive annotation x nchunks -> analysis + NaCl model
+ *     markers                                  (markers.yaml)
+ *     release build -> catalog annotation -> catalog screen
+ *   on the release: BacDive annotation x nchunks -> analysis (+ NaCl model with --bacdive_full),
+ *     the real-genome checks
  *   last: PROVENANCE.json
  *
- * The gate is a person reading the screen, so the workflow stops there on the first run. Run the
- * same command again with `-resume --gate_passed true`: the cached steps are skipped and the
- * BacDive part runs on the frozen release.
+ * The catalog screen is printed and kept in the release (catalogs/<name>/screen.tsv): read it before
+ * publishing. A flagged family that is a real confuser class means a decoy and a rebuild.
  *
  * Other entry:  -entry profile_samples --samples s.csv    osmotool profile, one job per sample
  *               (CSV columns id,r1,r2; results in <outdir>/profile)
@@ -25,7 +24,7 @@
  * validation/, catalog/),
  * conf/base.config (resources), conf/modules.config (per-step settings). What it does not use: the
  * nf-schema plugin (nextflow_schema.json documents the parameters but is not enforced), conda
- * (osmotool is only distributed as a container), nf-core utility subworkflows, nf-test.
+ * (osmotool is only distributed as a container), nf-core utility subworkflows. Tests: tests/ (nf-test).
  *
  * Skipping finished work: -resume reuses results from the work directory; storeDir keeps a task's
  * output in a permanent place and skips the task whenever it is already there, even without work/.

@@ -1,4 +1,4 @@
-// THE GATE. Which families claim catalog genes that look like something else. The report is printed
+// The catalog screen: which families claim catalog genes that look like something else. The report is printed
 // at the end of the run; a flag means "go and look". screen.tsv is published next to the catalog in
 // the release (conf/modules.config).
 process CATALOG_SCREEN {
@@ -18,7 +18,7 @@ process CATALOG_SCREEN {
 
     output:
     tuple val(meta), path('screen.tsv'), emit: screen
-    path('gate.txt'),                    emit: report
+    path('screen_report.txt'),           emit: report
     tuple val("${task.process}"), val('python'), eval("python3 --version 2>&1 | cut -d' ' -f2"), topic: versions, emit: versions_python
     tuple val("${task.process}"), val('pyyaml'), eval("python3 -c 'import yaml; print(yaml.__version__)'"), topic: versions, emit: versions_pyyaml
 
@@ -28,19 +28,18 @@ process CATALOG_SCREEN {
         --annotation ${catalog}/catalog.annotation.tsv --families ${families} --out screen.tsv | tee screen.log
     {
         echo
-        echo "================ THE GATE ================"
-        grep '^Flagged:' screen.log
-        echo "Read ${params.repo}/releases/${params.release}/catalogs/${meta.id}/screen.tsv"
-        echo "A flag means: look at those genes. A real confuser class means a decoy and a rebuild"
-        echo "(new --release name). A false alarm means carry on: run the same command again with"
-        echo "    -resume --gate_passed true"
-        echo "=========================================="
-    } > gate.txt
+        echo "============ THE CATALOG SCREEN ============"
+        grep '^Flagged:' screen.log || echo "Flagged: none"
+        echo "In ${params.repo}/releases/${params.release}/catalogs/${meta.id}/screen.tsv; read it before"
+        echo "publishing the release. A flag means: look at those genes. A real confuser class means a"
+        echo "decoy and a rebuild (new --release name); a false alarm, nothing to do."
+        echo "============================================"
+    } > screen_report.txt
     """
 
     stub:
     """
     touch screen.tsv
-    echo "stub gate" > gate.txt
+    echo "stub screen" > screen_report.txt
     """
 }

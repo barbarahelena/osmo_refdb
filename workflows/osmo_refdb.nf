@@ -21,21 +21,20 @@ workflow OSMO_REFDB {
     BACDIVE_DATA(snapshot)
     MARKERS(markers)
 
-    // the release, then the catalog on it, then the gate
+    // the release, then the catalog on it and its screen (printed; screen.tsv is in the release)
     RELEASE_CATALOG(families, CATALOG_GENES.out.genes)
     RELEASE_CATALOG.out.report.view { f -> f.text }
     // the release as osmotool reads it, now with its markers/
     db = RELEASE_CATALOG.out.db.mix(MARKERS.out.markers).collect()
 
-    // after the gate: BacDive and the NaCl model on the frozen release, and the real-genome checks
-    done = RELEASE_CATALOG.out.done.mix(MARKERS.out.markers).collect()
-    if( params.gate_passed ) {
-        data = BACDIVE_DATA.out
-        BACDIVE_ANALYSIS(db, data.chunks, data.genomes, data.control_genomes, data.pilot, data.classes,
-                         data.control_pilot, data.strains, data.control_strains, data.pool_families)
-        REAL_GENOME_VALIDATION(db, RELEASE_CATALOG.out.hmms, RELEASE_CATALOG.out.catalog)
-        done = done.mix(BACDIVE_ANALYSIS.out.done, REAL_GENOME_VALIDATION.out.report).collect()
-    }
+    // on the finished release: BacDive (and with --bacdive_full the NaCl model), the real-genome checks
+    data = BACDIVE_DATA.out
+    BACDIVE_ANALYSIS(db, data.chunks, data.genomes, data.control_genomes, data.pilot, data.classes,
+                     data.control_pilot, data.strains, data.control_strains, data.pool_families)
+    REAL_GENOME_VALIDATION(db, RELEASE_CATALOG.out.hmms, RELEASE_CATALOG.out.catalog)
+    done = RELEASE_CATALOG.out.done
+        .mix(MARKERS.out.markers, BACDIVE_ANALYSIS.out.done, REAL_GENOME_VALIDATION.out.report)
+        .collect()
 
     // every step's tool versions, from the `versions` topic (modules: `eval(...), topic: versions`),
     // as one YAML file, {step: {tool: version}}; the chunked steps report identical ones, kept once

@@ -1,5 +1,5 @@
-// The provenance receipt, written last, so it covers the catalog (and the BacDive and NaCl results,
-// when the gate has been passed) as well as the build. Every step runs in a container of its own, so
+// The provenance receipt, written last, so it covers the catalog and the BacDive and NaCl results as
+// well as the build. Every step runs in a container of its own, so
 // the tool versions come from the steps themselves (the `versions` topic), not from this step's image.
 // It reports none to the topic itself: it waits for the topic to close.
 // PROVENANCE.json and software_versions.yml are published into the release (conf/modules.config).

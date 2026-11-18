@@ -36,12 +36,13 @@ The build is a Nextflow workflow (`main.nf`; each module's `container` line and
 `environment.yml` give its image):
 
 ```bash
-nextflow run main.nf --release v1                           # build, benchmark, catalog, screen; stops at the gate
-nextflow run main.nf --release v1 -resume --gate_passed true   # BacDive, NaCl model, validation
+nextflow run main.nf --release v1    # build, benchmark, catalog and screen, BacDive, validation
+nextflow run main.nf --release v1 -resume --bacdive_full    # the full BacDive set and the NaCl model
 ```
 
-The first run stops at the gate: check the catalog screen
-(`releases/<name>/catalogs/<catalog>/screen.tsv`) before the second run builds on the release.
+Read the catalog screen (`releases/<name>/catalogs/<catalog>/screen.tsv`, printed at the end of the
+build) before publishing a release: a flagged family that is a real confuser class means a decoy and a
+rebuild under a new release name.
 
 ### Tests
 
@@ -74,8 +75,8 @@ the osmotool image, so the cutoffs are set with the version that applies them.
 `RELEASE_BUILD` (`subworkflows/local/release_build`), one process per step, each with its
 scripts in `modules/local/<step>/templates/`: fetch refs, split, align, hmmbuild + calibrate,
 DIAMOND database, then the calibration and test benchmarks. `RELEASE_CATALOG` adds the gene
-catalog and the screen; after the gate come the BacDive analysis, the NaCl model and the
-real-genome validation. `families.yaml` is the input (`--families_file` to point at a subset).
+catalog and the screen; on the finished release run the BacDive analysis (and with
+`--bacdive_full` the NaCl model) and the real-genome validation. `families.yaml` is the input (`--families_file` to point at a subset).
 
 Everything for a given release name is written to `releases/<name>/`
 (git-ignored), so you can keep multiple versions around and reproduce any
@@ -531,7 +532,7 @@ with what it normalises.
 
 The workflow builds them with every release (`MARKERS`): `markers.yaml`'s references, split and DIAMOND
 database, apart from the osmo families, packaged as `releases/<release>/markers/` and given to every
-osmotool step after the gate. The markers have no benchmark of their own in the workflow, so the marker
+osmotool step that runs on the finished release. The markers have no benchmark of their own in the workflow, so the marker
 manifest's DIAMOND precision/recall columns are empty: a marker with poor DIAMOND precision would inflate
 the denominator for every family, which the old separate marker build's benchmark used to check.
 

@@ -429,7 +429,7 @@ within-genus partial r, which has the random-panel null, does not move.
 
 ## Running it
 
-The workflow runs it, after the gate (`--gate_passed true`, `README.md`), on the frozen release. By
+The workflow runs it on the finished release. By
 default on the 43 pilot strains (`assets/bacdive/pilot_strains.tsv`), a quick check of the panel; with
 `--bacdive_full` on every BacDive strain with a NaCl maximum and a genome, with the within-domain salt-in
 control and the NaCl model.

@@ -1,5 +1,5 @@
 //
-// The release, the catalog annotated with its HMMs, and the screen that is the gate.
+// The release, the catalog annotated with its HMMs, and the catalog screen.
 //
 include { RELEASE_BUILD          } from '../release_build/main'
 include { OSMOTOOL_BUILDCATALOG  } from '../../../modules/local/osmotool/buildcatalog/main'
@@ -30,6 +30,6 @@ workflow RELEASE_CATALOG {
     release_files = RELEASE_BUILD.out.release_files
     cascade       = RELEASE_BUILD.out.cascade
     catalog       = CATALOG_PACKAGE.out.catalog        // [meta, catalogs/<name>/]
-    report        = CATALOG_SCREEN.out.report          // the gate report
+    report        = CATALOG_SCREEN.out.report          // the screen's summary, printed by the workflow
     done          = RELEASE_BUILD.out.done.mix(CATALOG_SCREEN.out.screen).collect()
 }

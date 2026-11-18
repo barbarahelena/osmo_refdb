@@ -4,7 +4,7 @@ nextflow_pipeline {
     script "../main.nf"
     tag "pipeline"
 
-    // Wiring, offline, in seconds: every step's stub, through the gate. Run with: nf-test test --tag stub
+    // Wiring, offline, in seconds: every step's stub. Run with: nf-test test --tag stub
     test("stub: the release's layout") {
         tag "stub"
         options "-stub"

@@ -144,11 +144,6 @@
           "maximum": 1,
           "description": "The read benchmark's osmotool profile --min_subject_cover (0: off, osmotool's default)"
         },
-        "gate_passed": {
-          "type": "boolean",
-          "description": "The screen has been read and accepted: also run BacDive and the NaCl model",
-          "default": false
-        },
         "refs_store": {
           "type": "string",
           "format": "directory-path",
@@ -209,7 +204,7 @@
     "bacdive_options": {
       "title": "BacDive",
       "type": "object",
-      "description": "The BacDive phenotype analysis, after the gate",
+      "description": "The BacDive phenotype analysis, on the finished release",
       "properties": {
         "bacdive_full": {
           "type": "boolean",
@@ -233,7 +228,7 @@
     "validation_options": {
       "title": "Real-genome validation",
       "type": "object",
-      "description": "The real-genome checks, after the gate",
+      "description": "The real-genome checks, on the finished release",
       "properties": {
         "reference_genomes_dir": {
           "type": "string",

@@ -1,5 +1,5 @@
 //
-// After the gate: BacDive annotation with the frozen release (each task on the proteins of the same
+// On the finished release: BacDive annotation with the frozen release (each task on the proteins of the same
 // chunk), the strain x family matrix, the phenotype validation, and, with --bacdive_full, the NaCl
 // model (41 pilot strains are too few to train it on).
 //

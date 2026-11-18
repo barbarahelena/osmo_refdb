@@ -24,7 +24,6 @@ Small inputs for a whole release, built for real in about an hour (`tests/README
 The profile also sets:
 - a random background of 500 proteins instead of 5,000;
 - one BacDive chunk;
-- `gate_passed true`, so one run goes through the gate.
 
 Regenerate the YAML files from the main files when those entries change. Then rerun the real test and
 review the baseline (`tests/README.md`).
