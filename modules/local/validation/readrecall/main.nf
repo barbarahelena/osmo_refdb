@@ -10,7 +10,7 @@ process VALIDATION_READRECALL {
         'biocontainers/python:3.11' }"
 
     input:
-    tuple val(meta), path(reads), path(regions), path(blastx), path(tblout)
+    tuple val(meta), path(reads), path(regions), path(blastx), path(tblout), path(catalog_hits), path(catalog_blastx)   // the last two: the run with the catalog, or []
 
     output:
     tuple val(meta), path("${meta.id}.read_truth.tsv"), path("${meta.id}.real_recall_comparison.tsv"), emit: results
@@ -23,7 +23,8 @@ process VALIDATION_READRECALL {
         --r1 ${reads[0]} --r2 ${reads[1]} --regions ${regions} --read-length 150 --out ${meta.id}.read_truth.tsv
     python ${T}/compare_real_recall.py \\
         --truth ${meta.id}.read_truth.tsv --diamond-blastx ${blastx} \\
-        --hmm-tblout ${tblout} --out ${meta.id}.real_recall_comparison.tsv
+        --hmm-tblout ${tblout} ${catalog_hits ? "--catalog-hits ${catalog_hits}" : ''} \\
+        ${catalog_blastx ? "--catalog-blastx ${catalog_blastx}" : ''} --out ${meta.id}.real_recall_comparison.tsv
     """
 
     stub:

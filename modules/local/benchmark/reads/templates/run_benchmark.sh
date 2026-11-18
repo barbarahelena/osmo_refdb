@@ -99,6 +99,12 @@ fi
 if osmotool profile --help 2>/dev/null | grep -q -- "--no_markers"; then
     CASCADE_ARGS+=(--no_markers)
 fi
+# Translated search only: these reads score DIAMOND and the cascade, which a profile with a catalog
+# uses for the reads the catalog does not settle (the catalog benchmark scores the catalog). osmotool
+# uses a release's catalog by default; the benchmark's database ships none, and this says so.
+if osmotool profile --help 2>/dev/null | grep -q -- "--no_catalog"; then
+    CASCADE_ARGS+=(--no_catalog)
+fi
 
 # One sample's HMM pass: R1 and R2 together, OrfM's 6-frame ORFs, hmmscan against the HMM db.
 # No --cut_ga: the GA cutoffs were calibrated on full-length proteins, which a short read's ORF

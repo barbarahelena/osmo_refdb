@@ -5,6 +5,13 @@ simulated directly from a real genome, against coordinate-based ground
 truth (real_read_truth.py), instead of osmo_refdb's synthetic
 UniProt-derived benchmark reads.
 
+With --catalog-hits (and --catalog-blastx), also the catalog method: the
+same reads profiled with the release's gene catalog, as osmotool profile
+does by default. A read the catalog settles takes its decision (a call
+counts for its family; a drop or an ambiguous read is no call); every other
+read takes its DIAMOND best hit from the catalog run's own blastx (the
+fallback reads only).
+
 Usage:
   python compare_real_recall.py --truth real_read_truth.tsv \\
       --diamond-blastx ecoli_reads.blastx.tsv \\
@@ -60,6 +67,23 @@ def load_hmm_best_hits(path: Path) -> dict[str, tuple[str, float]]:
     return best
 
 
+def load_catalog_calls(hits: Path, blastx: Path | None) -> tuple[dict[str, tuple[str, float]], int]:
+    """{read_id: (family, score)} of the run with the catalog, and the
+    number of reads the catalog settled. read_id is <read>/<mate>, as in the
+    truth table (wgsim names end in /1, /2; bwa drops that suffix)."""
+    settled: dict[str, str | None] = {}
+    with open(hits) as fh:
+        for row in csv.DictReader(fh, delimiter="\t"):
+            rid = f"{row['read']}/{row['mate']}" if row["mate"] in ("1", "2") else row["read"]
+            settled[rid] = row["label"] if row["decision"] == "call" else None
+    calls = {rid: (fam, float("inf")) for rid, fam in settled.items() if fam}
+    if blastx is not None:
+        for rid, hit in load_diamond_best_hits(blastx).items():
+            if rid not in settled:
+                calls[rid] = hit
+    return calls, len(settled)
+
+
 def summarize(truth: dict[str, str], calls: dict[str, tuple[str, float]],
               families: list[str]) -> list[dict]:
     rows = []
@@ -89,6 +113,10 @@ def main() -> None:
     ap.add_argument("--truth", required=True, type=Path)
     ap.add_argument("--diamond-blastx", required=True, type=Path)
     ap.add_argument("--hmm-tblout", required=True, type=Path)
+    ap.add_argument("--catalog-hits", type=Path, default=None,
+                    help="<prefix>.catalog_hits.tsv of the run with the catalog (--keep_aln)")
+    ap.add_argument("--catalog-blastx", type=Path, default=None,
+                    help="<prefix>.blastx.tsv of the run with the catalog: the fallback reads")
     ap.add_argument("--out", required=True, type=Path)
     args = ap.parse_args()
 
@@ -106,6 +134,12 @@ def main() -> None:
 
     all_rows = [{"method": "diamond", **r} for r in diamond_rows] + \
                [{"method": "hmm", **r} for r in hmm_rows]
+    if args.catalog_hits is not None:
+        catalog_hits, n_settled = load_catalog_calls(args.catalog_hits, args.catalog_blastx)
+        print(f"catalog: {n_settled} reads settled by the catalog, "
+              f"{len(catalog_hits)} reads called in all")
+        catalog_rows = summarize(truth, catalog_hits, families)
+        all_rows += [{"method": "catalog", **r} for r in catalog_rows]
 
     with open(args.out, "w", newline="") as fh:
         writer = csv.DictWriter(fh, fieldnames=list(all_rows[0].keys()), delimiter="\t")

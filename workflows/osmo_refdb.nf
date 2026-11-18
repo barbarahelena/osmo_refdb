@@ -33,7 +33,7 @@ workflow OSMO_REFDB {
         data = BACDIVE_DATA.out
         BACDIVE_ANALYSIS(db, data.chunks, data.genomes, data.control_genomes, data.pilot, data.classes,
                          data.control_pilot, data.strains, data.control_strains, data.pool_families)
-        REAL_GENOME_VALIDATION(db, RELEASE_CATALOG.out.hmms)
+        REAL_GENOME_VALIDATION(db, RELEASE_CATALOG.out.hmms, RELEASE_CATALOG.out.catalog)
         done = done.mix(BACDIVE_ANALYSIS.out.done, REAL_GENOME_VALIDATION.out.report).collect()
     }
 

@@ -19,8 +19,12 @@ after the gate. Results go to `releases/<release>/real_genome_validation/`.
    (`assets/real_genome_validation/target_orfs.tsv`; the genomes are `<test_genomes_dir>/<genome>.fna`,
    default `assets/test_genomes/` in the repo). Reads are simulated from the genome with `wgsim`, whose headers
    carry the true coordinates, so the ground truth is independent of the database. DIAMOND
-   (`osmotool profile`) and the HMMs (`orfm` + `hmmscan`) are scored per family against it
-   (`real_read_truth.py`, `compare_real_recall.py`) in `<genome>.real_recall_comparison.tsv`.
+   (`osmotool profile --no_catalog`) and the HMMs (`orfm` + `hmmscan`) are scored per family against it
+   (`real_read_truth.py`, `compare_real_recall.py`) in `<genome>.real_recall_comparison.tsv`. So is the
+   `catalog` method: `osmotool profile` with the release's gene catalog and the index it ships, as
+   profile runs by default. A read the catalog settles takes its decision, every other read its
+   DIAMOND call. These are the only real-genome reads the catalog is tested on; a genome whose strain is
+   not in the catalog (likely for the halophiles in a gut catalog) shows what the fallback gives.
 
 ## The manual part, done once
 

@@ -81,13 +81,15 @@ workflow RELEASE_BUILD {
                    tuple([id: 'A_hits', index: 'hits', verify: []], genes)]
                 : [tuple([id: 'B_full', index: 'all', verify: []], genes)]
         }
-    OSMOTOOL_BUILDCATALOG_BENCHMARK(catalog_sets, db)
+    OSMOTOOL_BUILDCATALOG_BENCHMARK(catalog_sets, db_calib)
     BENCHMARK_CATALOGMAP(BENCHMARK_SIMULATE_TEST.out.reads, db, OSMOTOOL_BUILDCATALOG_BENCHMARK.out.catalog)
     BENCHMARK_CATALOGSCORE(BENCHMARK_SIMULATE_TEST.out.reads, BENCHMARK_READS_TEST.out.results, cascade, families,
         BENCHMARK_CATALOGMAP.out.runs.map { _meta, d -> d }.collect())
 
     emit:
     db            = db                            // the release as osmotool reads it: [files..., hmms/]
+    db_annotate   = db_calib                      // the same without the cascade: what annotation and build-catalog need,
+                                                  // ready before the read benchmark
     fetch_manifest = REFS_BUILD.out.manifest      // refs/manifest.tsv: the UniProt release and fetch dates
     refs          = refs
     alignments    = HMM_BUILD.out.alignments
