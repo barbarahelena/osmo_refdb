@@ -668,7 +668,8 @@ def _parse_fasta_lengths(path: Path) -> list[tuple[str, int]]:
     return records
 
 
-def fetch_fusion_pair_candidates(families: list[dict], out_dir: Path) -> None:
+def fetch_fusion_pair_candidates(families: list[dict], out_dir: Path,
+                                 evidence_dir: Path | None = None) -> None:
     """For each declared fusion_partner pair, fetch a comprehensive
     (uncapped) population of genuine fused-ORF candidates directly, via a
     combined-domain query -- rather than relying only on incidentally
@@ -736,8 +737,8 @@ def fetch_fusion_pair_candidates(families: list[dict], out_dir: Path) -> None:
                 reason += f" (removed stale {out_path.name} from a previous run)"
             print(f"[{fam_a}/{fam_b}] SKIP dedicated fusion fetch: {reason}")
 
-        frac_a = load_positive_domain_fractions(out_dir, fam_a)
-        frac_b = load_positive_domain_fractions(out_dir, fam_b)
+        frac_a = load_positive_domain_fractions(evidence_dir or out_dir, fam_a)
+        frac_b = load_positive_domain_fractions(evidence_dir or out_dir, fam_b)
         if not frac_a or not frac_b:
             skip(f"no positive domain evidence for one or both families "
                  f"(need {fam_a}.positive.domains.tsv / {fam_b}.positive.domains.tsv, "
@@ -818,7 +819,21 @@ def main() -> None:
                     help="Fetch only the HMM decoys (families.yaml hmm_decoys) whose raw "
                          "file is not in --out yet, and nothing else: for a rebuild from "
                          "another release's refs that gained a decoy.")
+    # The pipeline fetches each family in a task of its own (--skip-shared, one family per
+    # --families file), then what needs every family once (--shared-only): the dedicated
+    # fusion-pair fetch, which reads the families' positive.faa and domains.tsv from
+    # --evidence-dir, and the HMM decoys. Without either flag, all of it in one run.
+    ap.add_argument("--skip-shared", action="store_true",
+                    help="Fetch the families only: no fusion-pair candidates, no HMM decoys.")
+    ap.add_argument("--shared-only", action="store_true",
+                    help="Fetch only the fusion-pair candidates and the HMM decoys, from the "
+                         "families' fetches in --evidence-dir.")
+    ap.add_argument("--evidence-dir", type=Path, default=None,
+                    help="With --shared-only: the families' fetched files (positive.faa, "
+                         "positive.domains.tsv), for the fusion-pair check.")
     args = ap.parse_args()
+    if args.skip_shared and args.shared_only:
+        ap.error("--skip-shared and --shared-only exclude each other")
 
     families = load_families(args.families)
     check_no_duplicate_pfam_models(families)
@@ -835,6 +850,12 @@ def main() -> None:
         print("WARNING: UniProt release unknown -- sampling caches disabled for this run")
     if args.only_hmm_decoys:
         fetch_hmm_decoys(args.families, args.out, only_missing=True)
+        return
+    if args.shared_only:
+        print("Fetching dedicated fusion-pair candidates (comprehensive, uncapped)...")
+        fetch_fusion_pair_candidates(families, args.out, args.evidence_dir)
+        print()
+        fetch_hmm_decoys(args.families, args.out)
         return
     print(f"Fetch date:      {fetch_date}\n")
 
@@ -987,11 +1008,11 @@ def main() -> None:
         })
         print()
 
-    print("Fetching dedicated fusion-pair candidates (comprehensive, uncapped)...")
-    fetch_fusion_pair_candidates(families, args.out)
-    print()
-
-    fetch_hmm_decoys(args.families, args.out)
+    if not args.skip_shared:
+        print("Fetching dedicated fusion-pair candidates (comprehensive, uncapped)...")
+        fetch_fusion_pair_candidates(families, args.out)
+        print()
+        fetch_hmm_decoys(args.families, args.out)
 
     manifest_path = args.out / "manifest.tsv"
     with open(manifest_path, "w", newline="") as fh:

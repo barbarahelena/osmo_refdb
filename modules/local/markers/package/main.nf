@@ -12,7 +12,7 @@ process MARKERS_PACKAGE {
 
     input:
     path(db_files, stageAs: 'marker_release/*')                  // the markers' DIAMOND_BUILD: dmnd, train refs, excluded lists
-    path(fetch_manifest, stageAs: 'marker_release/refs/*')       // their REFS_FETCH manifest.tsv: UniProt release, fetch date
+    path(fetch_manifest, stageAs: 'marker_release/refs/*')       // their REFS_COMBINE manifest.tsv: UniProt release, fetch date
     path(markers)                                                 // markers.yaml
 
     output:

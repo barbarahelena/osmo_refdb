@@ -14,7 +14,7 @@ process UNIPROT_RELEASE {
 
     output:
     stdout emit: release
-    // the 'refs' image's versions for REFS_FETCH too, which cannot emit them (storeDir)
+    // the 'refs' image's versions for REFS_FETCHFAMILY and REFS_FETCHSHARED too, which cannot emit them (storeDir)
     tuple val("${task.process}"), val('python'), eval("python3 --version 2>&1 | cut -d' ' -f2"), topic: versions, emit: versions_python
     tuple val("${task.process}"), val('requests'), eval("python3 -c 'import requests; print(requests.__version__)'"), topic: versions, emit: versions_requests
 

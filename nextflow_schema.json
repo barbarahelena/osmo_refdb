@@ -147,7 +147,7 @@
         "refs_store": {
           "type": "string",
           "format": "directory-path",
-          "description": "Keep the UniProt fetch (REFS_FETCH) here, under <UniProt release>/<families file>_<key>, and reuse it in later builds in the same UniProt release with the same families file and fetch script. Unset: every build fetches."
+          "description": "Keep the UniProt fetch here, per family (<UniProt release>/families/<family>_<key>) and for the fusion pairs and HMM decoys (<UniProt release>/shared/<families file>_<key>), and reuse it in later builds in the same UniProt release: an edited family refetches only itself. Unset: every build fetches."
         },
         "random_background_n": {
           "type": "integer",

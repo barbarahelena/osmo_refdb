@@ -94,14 +94,20 @@ classically have an edge over pairwise search (see `docs/validation_reports/taxo
 nextflow run main.nf --outdir /data/osmo_refdb/v2-taxonomy-split --release v2-taxonomy-split --split_mode taxonomy
 ```
 
-`--refs_store <dir>` keeps the UniProt fetch (`REFS_FETCH`, the hour-long
-step) in `<dir>/<UniProt release>/<families file>_<key>/`, `key` a hash of the
-families file and `fetch_refs.py`, and a later build reuses it while UniProt
-is on the same release. Within a release a query's population is fixed and
-the sampling is seeded, so the reused fetch is the one this build would have
-made. A new UniProt release, an edited families file or a changed fetch
-script fetch again into a new directory; the later reference steps (purity,
-lengths, RefSeq, background, clustering) always run.
+The UniProt fetch runs per family (`REFS_FETCHFAMILY`, four at a time), then
+once for what needs every family (`REFS_FETCHSHARED`: the fusion-pair
+candidates and the HMM decoys), and `REFS_COMBINE` puts them in one `refs/`.
+`--refs_store <dir>` keeps each family's fetch in
+`<dir>/<UniProt release>/families/<family>_<key>/`, `key` a hash of that
+family's entry and `fetch_refs.py`, and the shared fetch in
+`<dir>/<UniProt release>/shared/<families file>_<key>/`; a later build reuses
+them while UniProt is on the same release. Within a release a query's
+population is fixed and the sampling is seeded per family, so a reused fetch is
+the one this build would have made. A new UniProt release or a changed fetch
+script fetches everything again; an edited family fetches only that family
+(and the shared fetch, if it changed a decoy or a fusion_partner family). The
+later reference steps (purity, lengths, RefSeq, background, clustering) always
+run.
 
 ```bash
 nextflow run main.nf --outdir /data/osmo_refdb/v11 --release v11 --refs_store /project/osmo/refs_store
@@ -143,7 +149,7 @@ Each of these is recorded in the release's `PROVENANCE.json`.
 
 Capped fetches (every family's negatives, and positives with
 `max_positive_override`) are sampled from the whole matching UniProt
-population. Listing the accessions takes about an hour; `REFS_FETCH` caches
+population. Listing the accessions takes most of the fetch; each fetch task caches
 the lists per UniProt release inside its own task, so `-resume` reuses them
 along with the fetch, and a new build lists them again.
 
