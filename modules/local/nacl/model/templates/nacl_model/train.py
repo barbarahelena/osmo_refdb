@@ -234,6 +234,8 @@ def main():
     ap.add_argument('--strains', default=None, help='default: <pv-dir>/random_panel/strains')
     ap.add_argument('--release', required=True, help='release dir the annotate output was made with')
     ap.add_argument('--release-name', default=None, help="default: the --release directory's name")
+    ap.add_argument('--osmotool-version', required=True,
+                    help='osmotool version the training genomes were annotated with (recorded in the schema)')
     ap.add_argument('--out', required=True)
     ap.add_argument('--n-search', type=int, default=40, help='random-search configs (step 2)')
     ap.add_argument('--n-search-inner', type=int, default=20, help='configs per outer fold (step 3)')
@@ -477,7 +479,7 @@ def main():
         'model_file': 'nacl_max.xgb.json',
         'created': time.strftime('%Y-%m-%d'),
         'refdb_release': rel_name,
-        'annotate': {'method': 'hmm', 'prodigal': '-p meta', 'osmotool_version_training': '0.7.0',
+        'annotate': {'method': 'hmm', 'prodigal': '-p meta', 'osmotool_version_training': args.osmotool_version,
                      'min_osmotool_version_inference': '0.8.0'},
         'features': names,
         'families': families, 'systems': systems,

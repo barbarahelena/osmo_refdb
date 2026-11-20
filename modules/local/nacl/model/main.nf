@@ -13,6 +13,7 @@ process NACL_MODEL {
 
     input:
     val(release_name)
+    val(osmotool_version)                      // BACDIVE_ANNOTATE: the osmotool the training genomes were annotated with
     path(db, stageAs: 'db/*')   // the release as osmotool reads it (DATABASE): its DIAMOND files, cascade and hmms/, staged as db/
     path(matrix)                               // BACDIVE_MATRIX
     path(annotate, stageAs: 'annotate/*')      // BACDIVE_ANNOTATE: <bid>/ per strain
@@ -33,7 +34,8 @@ process NACL_MODEL {
     def T = "${moduleDir}/templates"
     """
     python ${T}/nacl_model/train.py --matrix ${matrix} --annotate annotate --strains strains \\
-        --release db --release-name ${release_name} --out nacl_model_build --threads ${task.cpus}
+        --release db --release-name ${release_name} --osmotool-version ${osmotool_version} \\
+        --out nacl_model_build --threads ${task.cpus}
     python ${T}/nacl_model/explain.py --build nacl_model_build --family-ranking ${family_ranking}
     python ${T}/package_nacl_model.py --build nacl_model_build --release db --release-name ${release_name} --out nacl_model
     """

@@ -31,7 +31,10 @@ workflow BACDIVE_ANALYSIS {
     BACDIVE_ANALYZE(matrix, pool_families, strains, classes, control_pilot, control_strains, control_annotate)
     done = BACDIVE_ANALYZE.out.reports
     if( params.bacdive_full ) {
-        NACL_MODEL(params.release, db, matrix, annotate, strains, BACDIVE_ANALYZE.out.family_ranking)
+        // the osmotool version the training genomes were annotated with, recorded in the model's schema
+        osmotool_version = BACDIVE_ANNOTATE.out.versions_osmotool.map { _proc, _tool, v -> v }.unique().toList()
+            .map { vs -> vs.size() == 1 ? vs[0] : error("BACDIVE_ANNOTATE ran more than one osmotool version: ${vs}") }
+        NACL_MODEL(params.release, osmotool_version, db, matrix, annotate, strains, BACDIVE_ANALYZE.out.family_ranking)
         done = done.mix(NACL_MODEL.out.model)
     }
 
