@@ -1,0 +1,34 @@
+# The test profile's marker genes: three of markers.yaml, copied unchanged (assets/test/README.md).
+families:
+- name: ychF
+  description: 'COG0012, redox-responsive ATPase YchF/EngD (Obg-family GTPase fold, binds ATP). Negative
+    pool: other PF01926 (MMR_HSR1) GTPases (Era, EngA, ObgE, HflX, ...), for calibration only -- too broad
+    a pool for a useful decoy.
+
+    '
+  positive_query: (gene:ychF OR gene:engD OR gene:ychF1 OR gene:ychF2) AND taxonomy_id:2
+  negative_query: xref:pfam-PF01926 NOT (gene:ychF OR gene:engD OR gene:ychF1 OR gene:ychF2) AND taxonomy_id:2
+  negative_pfam: PF01926
+  max_positive_override: 4000
+- name: pheS
+  description: 'COG0016, phenylalanyl-tRNA synthetase alpha subunit (class II aaRS). Negative pool: class
+    II aaRS catalytic core of Asp/Asn/LysRS (PF00152). Not PF01409 NOT pheS: only 676 entries, and 9/12
+    sampled were unlabeled PheS orthologs (bare locus tag, "phenylalanine--tRNA ligase") -- a contaminated
+    pool, not real negatives.
+
+    '
+  positive_query: (gene:pheS OR gene:pheS1 OR gene:pheS2) AND taxonomy_id:2
+  negative_query: xref:pfam-PF00152 AND taxonomy_id:2
+  negative_pfam: PF00152
+  max_positive_override: 4000
+- name: ffh
+  description: 'COG0541, signal recognition particle protein Ffh (SRP54). Shares the SRP54 GTPase domain
+    (PF00448) with ftsY -- that pair is told apart by best-hit between the two markers themselves, since
+    both are in this db. Negative/decoy: the third bacterial SRP-type GTPase, flagellar biosynthesis regulator
+    FlhF.
+
+    '
+  positive_query: (gene:ffh OR gene:ffh1 OR gene:ffh2) AND taxonomy_id:2
+  negative_query: gene:flhF AND taxonomy_id:2
+  decoy_from_negatives: true
+  max_positive_override: 4000

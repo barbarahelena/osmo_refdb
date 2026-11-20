@@ -1,0 +1,302 @@
+#!/usr/bin/env python3
+"""
+simulate_reads.py — simulate short reads from held-out test positives +
+hard negatives, for benchmarking DIAMOND vs HMM.
+
+Steps:
+  1. Load each family's held-out positive test set (refs/<family>.positive.test.faa,
+     produced upstream by split_train_test.py so it was never used to
+     build the HMM or DIAMOND db) and held-out hard-negative set
+     (refs/<family>.negative.test.faa, never used for cutoff calibration).
+  2. Optionally mix in real background metagenome reads (--background) that
+     contain no known osmoadaptation genes, to estimate a realistic
+     false-positive rate in community context.
+  3. Simulate paired-end Illumina-like reads from the held-out protein
+     sequences (embedded in random flanking nucleotide context so ORFs sit
+     mid-read, mimicking real gene fragments in metagenomic reads) using
+     InSilicoSeq if available, else wgsim.
+  4. Write reads + a truth table (read_id -> family/negative/background,
+     source UniProt ID) for later scoring by compute_metrics.py.
+
+Reproducibility: wgsim (-S) and InSilicoSeq (--seed) both need an explicit
+seed passed at the CLI to be deterministic -- neither seeds itself by
+default, so two runs against identical held-out input sequences previously
+produced slightly different actual reads (different read counts, sequencing
+errors, sampled positions) purely from the simulator's own unseeded
+internal RNG. Each family/label's simulator invocation now gets a
+deterministic seed, and so does everything else random here (shuffle order,
+flanking DNA).
+
+Every (family, label) draws from its own rng, seeded from RANDOM_SEED plus the
+family's name and label. Earlier versions drew from one rng shared by all
+families in turn, so adding or removing one sequence in one family changed the
+reads of every family after it in families.yaml. A rebuild with a single
+changed family then differed in the benchmark everywhere, and the differences
+could not be told apart from real effects. Now a family's reads change only
+when that family's own sequences do. (Reads are not byte-identical to builds
+made before this change.)
+
+Usage:
+  python simulate_reads.py --refs refs --families families.yaml \\
+      --reads-per-sequence 20 --out results/reads
+"""
+
+from __future__ import annotations
+
+import argparse
+import csv
+import random
+import shutil
+import zlib
+import subprocess
+import sys
+from pathlib import Path
+
+import yaml
+
+RANDOM_SEED = 42
+RANDOM_BG_FAMILY = "random_bg"          # must match 01f / 11
+RANDOM_BG_FASTA = "random_background.faa"
+FLANK_LEN = 300  # bp of random flanking DNA on each side of the CDS
+
+
+def load_family_names(path: Path) -> list[str]:
+    with open(path) as fh:
+        data = yaml.safe_load(fh)
+    return [fam["name"] for fam in data["families"]]
+
+
+def parse_fasta(path: Path) -> list[tuple[str, str]]:
+    """Return list of (header, sequence) tuples."""
+    records = []
+    header, seq = None, []
+    if not path.exists():
+        return records
+    for line in path.read_text().splitlines():
+        if line.startswith(">"):
+            if header is not None:
+                records.append((header, "".join(seq)))
+            header, seq = line[1:], []
+        elif line.strip():
+            seq.append(line.strip())
+    if header is not None:
+        records.append((header, "".join(seq)))
+    return records
+
+
+def protein_to_dna(protein: str) -> str:
+    """Reverse-translate a protein to a DNA sequence using a simple codon table
+    (most-frequent codon per amino acid; sufficient for simulated reads, not
+    intended to be biologically representative of real codon usage)."""
+    codon_table = {
+        "A": "GCC", "R": "CGC", "N": "AAC", "D": "GAC", "C": "TGC",
+        "Q": "CAG", "E": "GAG", "G": "GGC", "H": "CAC", "I": "ATC",
+        "L": "CTG", "K": "AAG", "M": "ATG", "F": "TTC", "P": "CCG",
+        "S": "AGC", "T": "ACC", "W": "TGG", "Y": "TAC", "V": "GTG",
+        "X": "NNN", "*": "",
+    }
+    return "".join(codon_table.get(aa, "NNN") for aa in protein.upper())
+
+
+def random_dna(n: int, rng: random.Random) -> str:
+    return "".join(rng.choice("ACGT") for _ in range(n))
+
+
+def build_genomic_context(protein: str, rng: random.Random) -> str:
+    cds = protein_to_dna(protein)
+    return random_dna(FLANK_LEN, rng) + cds + random_dna(FLANK_LEN, rng)
+
+
+def which_simulator() -> str:
+    if shutil.which("iss"):
+        return "iss"
+    if shutil.which("wgsim"):
+        return "wgsim"
+    print("ERROR: neither InSilicoSeq ('iss') nor 'wgsim' found on PATH.",
+          file=sys.stderr)
+    sys.exit(1)
+
+
+def simulate_with_iss(genome_fasta: Path, out_prefix: Path, n_reads: int, seed: int) -> None:
+    subprocess.run(
+        ["iss", "generate", "--genomes", str(genome_fasta),
+         "--n_reads", str(n_reads), "--model", "hiseq",
+         "--seed", str(seed),
+         "--output", str(out_prefix)],
+        check=True,
+    )
+
+
+def simulate_with_wgsim(genome_fasta: Path, out_prefix: Path, n_reads: int,
+                         seed: int, read_length: int = 150) -> None:
+    # wgsim needs per-sequence coverage; simplest robust approach is to
+    # concatenate all contigs and let wgsim sample reads genome-wide.
+    r1 = f"{out_prefix}_R1.fastq"
+    r2 = f"{out_prefix}_R2.fastq"
+    n_pairs = max(1, n_reads // 2)
+    subprocess.run(
+        ["wgsim", "-N", str(n_pairs), "-1", str(read_length), "-2", str(read_length),
+         "-S", str(seed),
+         str(genome_fasta), r1, r2],
+        check=True,
+    )
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--refs", required=True, type=Path, help="Path to osmo_refdb/refs")
+    ap.add_argument("--families", type=Path, default=Path("families.yaml"))
+    ap.add_argument("--reads-per-sequence", type=int, default=20,
+                     help="Simulated read pairs per held-out sequence")
+    ap.add_argument("--read-lengths", type=str, default=None,
+                     help="Comma-separated read lengths in bp (e.g. "
+                          "'100,150,250,300') to simulate at, for "
+                          "read-length-stratified metrics. Forces wgsim "
+                          "(exact length control) regardless of whether "
+                          "InSilicoSeq is available. Default: single run at "
+                          "whichever simulator's normal default length.")
+    ap.add_argument("--background", nargs=2, metavar=("R1", "R2"), default=None,
+                     help="Optional real paired-end background FASTQ files "
+                          "with no known osmoadaptation content -- run "
+                          "through the same DIAMOND/HMM benchmark as every "
+                          "other sample, scored as pure false-positive risk "
+                          "in background_fpr.tsv (compute_metrics.py), "
+                          "since they don't belong to any gene family")
+    ap.add_argument("--split", choices=["test", "calib"], default="test",
+                     help="test (default): benchmark reads from positive.test "
+                          "+ negative.test + the random background. calib: "
+                          "calibration reads from positive.calib + "
+                          "negative.train, which compute_metrics.py turns "
+                          "into the profile cascade config, so that config is "
+                          "never tuned on benchmark reads. No random "
+                          "background in calib (it feeds no cascade decision).")
+    ap.add_argument("--out", required=True, type=Path)
+    args = ap.parse_args()
+
+    families = load_family_names(args.families)
+    args.out.mkdir(parents=True, exist_ok=True)
+    read_lengths = ([int(x) for x in args.read_lengths.split(",")]
+                     if args.read_lengths else None)
+    genome_dir = args.out / "genomic_context"
+    genome_dir.mkdir(exist_ok=True)
+
+    simulator = which_simulator()
+
+    truth_rows = []
+    jobs: list[tuple[str, str, str]] = []
+
+    for family in families:
+        # Benchmark negatives come from the held-out negative.test split
+        # (split_train_test.py), for every family: negative.train sets the
+        # HMM/DIAMOND cutoffs (05/06, 08b) and, for decoy families, becomes
+        # the decoy refs in the DIAMOND db (08a). Simulating from it would
+        # score reads against thresholds -- or literal db entries -- built
+        # from their own source sequences. A family too small to split falls
+        # back to the full negative.faa.
+        neg_fname = f"{family}.negative.test.faa"
+        pos_fname = f"{family}.positive.test.faa"
+        if args.split == "calib":
+            # Calibration reads: the sequences the cutoffs were set on.
+            # Caveat for decoy_from_negatives families (betL): their
+            # negative.train is also in the DIAMOND db as decoy refs, so
+            # these reads find themselves and DIAMOND's calibration
+            # precision for such a family is optimistic.
+            pos_fname = f"{family}.positive.calib.faa"
+            neg_fname = f"{family}.negative.train.faa"
+            if not (args.refs / pos_fname).exists():
+                print(f"[{family}] WARNING: no positive.calib split, family "
+                      f"has no positive calibration reads")
+        if not (args.refs / neg_fname).exists():
+            neg_fname = f"{family}.negative.faa"
+            if (args.refs / neg_fname).exists():
+                print(f"[{family}] WARNING: no negative split, simulating "
+                      f"negatives from the full negative.faa")
+        jobs += [(family, "positive", pos_fname),
+                 (family, "negative", neg_fname)]
+
+    # Shared random bacterial background (build_random_background.py):
+    # unrelated proteins, scored in compute_metrics.py as off-target
+    # false positives per family. Appended last; it has its own rng, so it
+    # changes nothing for the families.
+    if args.split == "calib":
+        pass
+    elif (args.refs / RANDOM_BG_FASTA).exists():
+        jobs.append((RANDOM_BG_FAMILY, "negative", RANDOM_BG_FASTA))
+    else:
+        print(f"NOTE: no {RANDOM_BG_FASTA} in {args.refs} -- benchmark has no "
+              f"random background (run build_random_background.py)")
+
+    for family, label, fname in jobs:
+        records = parse_fasta(args.refs / fname)
+        if not records:
+            continue
+
+        # Per-(family, label) rng: independent of every other family's data.
+        rng = random.Random(zlib.crc32(f"{RANDOM_SEED}|{family}|{label}".encode()))
+        rng.shuffle(records)
+        held_out = records  # both files are already held-out splits
+
+        genome_fasta = genome_dir / f"{family}.{label}.fasta"
+        with open(genome_fasta, "w") as fh:
+            for header, protein in held_out:
+                context = build_genomic_context(protein, rng)
+                fh.write(f">{header}\n{context}\n")
+                truth_rows.append({
+                    "source_header": header,
+                    "family": family,
+                    "label": label,
+                })
+
+        n_reads = len(held_out) * args.reads_per_sequence
+
+        if read_lengths:
+            # Exact length control needed for stratification -- wgsim
+            # respects -1/-2 exactly, iss's named models don't let you
+            # dial in an arbitrary bp length. Fresh seed per length (not
+            # just per family/label) so multiple lengths of the same
+            # sample don't draw identical read starting positions.
+            for length in read_lengths:
+                out_prefix = args.out / f"{family}.{label}.rl{length}"
+                sim_seed = rng.randint(0, 2**31 - 1)
+                print(f"[{family}/{label}] {len(held_out)} sequences -> "
+                      f"~{n_reads} simulated read pairs (wgsim, {length}bp, seed={sim_seed})")
+                simulate_with_wgsim(genome_fasta, out_prefix, n_reads, sim_seed, read_length=length)
+        else:
+            out_prefix = args.out / f"{family}.{label}"
+            # Deterministic per-(family, label) seed, drawn from that
+            # pair's own rng -- reproducible given the same RANDOM_SEED
+            # and the same input sequences, without wgsim/iss's own
+            # internal RNGs (which neither tool seeds by default)
+            # silently making every run's actual simulated reads
+            # different even when the held-out input sequences are
+            # identical.
+            sim_seed = rng.randint(0, 2**31 - 1)
+            print(f"[{family}/{label}] {len(held_out)} sequences -> "
+                  f"~{n_reads} simulated read pairs ({simulator}, seed={sim_seed})")
+            if simulator == "iss":
+                simulate_with_iss(genome_fasta, out_prefix, n_reads, sim_seed)
+            else:
+                simulate_with_wgsim(genome_fasta, out_prefix, n_reads, sim_seed)
+
+    if args.background:
+        bg_r1, bg_r2 = args.background
+        # Named/laid out exactly like every other sample ("background_R1/R2")
+        # so run_benchmark.sh's existing glob picks it up automatically --
+        # no separate wiring needed to actually run DIAMOND/HMM against it.
+        ext = ".fastq.gz" if str(bg_r1).endswith(".gz") else ".fastq"
+        shutil.copy(bg_r1, args.out / f"background_R1{ext}")
+        shutil.copy(bg_r2, args.out / f"background_R2{ext}")
+        print(f"Copied background read pair into {args.out} as sample 'background' "
+              f"(scored in background_fpr.tsv, not per-family metrics)")
+
+    truth_path = args.out / "truth.tsv"
+    with open(truth_path, "w", newline="") as fh:
+        writer = csv.DictWriter(fh, fieldnames=["source_header", "family", "label"], delimiter="\t")
+        writer.writeheader()
+        writer.writerows(truth_rows)
+
+    print(f"\nDone. Truth table written to {truth_path}")
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,173 @@
+# The test profile's families (-profile test): five of families.yaml, copied unchanged, with the
+# HMM decoys that compete with them. nhaA: a plain family, and a target gene of the real-genome
+# check (E. coli); betL: decoy_from_negatives and betTcaiT_decoy; gor: fadDisulfide_decoy; trkA and
+# ktrA: the trk_ktr_regulatory paralog group. Regenerate from families.yaml when those entries
+# change (assets/test/README.md).
+families:
+- name: betL
+  report_level: gene
+  description: 'Glycine betaine transporter (BCCT family; compatible solute import). betL/betP/opuD/betS
+    are independently-named orthologs discovered in different organisms (Listeria/Corynebacterium/Bacillus/Sinorhizobium)
+    that all specifically import glycine betaine -- treated as one positive class here rather than by
+    literal gene symbol, since "NOT gene:betL" alone leaves the other three symbols'' worth of true orthologs
+    sitting in the "negative" set (see cutoff_manifest.tsv: betL was the only family whose calibration
+    negatives outscored its own positives, and both DIAMOND and HMM collapsed to ~3% precision on it in
+    the v1 benchmark). betT/caiT are genuine hard negatives: same Pfam fold, but choline- and carnitine-specific
+    respectively, not glycine betaine. ectP/lcoP are deliberately excluded from both sets: they''re broad-specificity
+    BCCT transporters that also carry some glycine betaine, so labeling them as clean negatives would
+    repeat the same mistake. Also includes numbered-paralog variants of all four alias symbols (betL1/betL2/betP1/betP2/betS1/betS2/opuD1/opuD2
+    -- 289 UniProt members combined), same class of gap as murB1/murB2 -- see issue #8.
+
+    Also covers Lactobacillus plantarum QacT (Glaasker et al. 1996-1998), a single secondary, osmotically-activated
+    glycine betaine/carnitine transporter characterized only as a transport activity -- never assigned
+    to a gene. lp_3324 (F9UTK3) is the putative locus: the only BCCT (PF02028) secondary betaine/carnitine
+    transporter in WCFS1, all other betaine/carnitine hits there being OpuA/Cho ABC subunits. The assignment
+    is inferred, not experimental. The v8 build missed it on both methods (HMM 345.7 vs. GA 564.8; DIAMOND
+    top hit betL_decoy at 99.3% identity), because its L. paraplantarum ortholog A0ABQ0NBH6 sat in this
+    family''s negatives under an automated "betT" label. In Lactobacillales, "betT" (5 entries, all unreviewed,
+    all Secundi-/ Lactiplantibacillus, all named "glycine betaine/carnitine/choline transport protein")
+    is a generic BCCT label, not E. coli''s choline-specific BetT. So Lactobacillales (taxonomy 186826)
+    is excluded from the negative pool, like ectP/lcoP. F9UTK3 + A0ABQ0NBH6 are added as positives by
+    accession. The ~55%-identity Secundilactobacillus homologs are left out of both sets: they''re too
+    divergent to claim as QacT without evidence.
+
+    '
+  positive_query: (gene:betL OR gene:betL1 OR gene:betL2 OR gene:betP OR gene:betP1 OR gene:betP2 OR gene:opuD
+    OR gene:opuD1 OR gene:opuD2 OR gene:betS OR gene:betS1 OR gene:betS2 OR accession:F9UTK3 OR accession:A0ABQ0NBH6)
+    AND taxonomy_id:2
+  negative_query: xref:pfam-PF02028 AND (gene:betT OR gene:caiT) NOT (gene:betL OR gene:betL1 OR gene:betL2
+    OR gene:betP OR gene:betP1 OR gene:betP2 OR gene:opuD OR gene:opuD1 OR gene:opuD2 OR gene:betS OR
+    gene:betS1 OR gene:betS2 OR gene:ectP OR gene:lcoP OR taxonomy_id:186826) AND taxonomy_id:2
+  negative_pfam: PF02028
+  decoy_from_negatives: true
+- name: nhaA
+  report_level: gene
+  description: 'Na+/H+ antiporter A (Na+ extrusion under osmotic stress). Also includes nhaA1/nhaA2 --
+    the largest numbered-paralog population found in this panel''s systematic sweep (304/389 UniProt members
+    respectively, e.g. Campylobacter jejuni, Mycobacterium spp., Salinispora arenicola), same class of
+    gap as murB1/murB2 -- see issue #8. Worth extra attention given nhaA is one of the two original Task-1
+    gap-closing genes.
+
+    '
+  positive_query: (gene:nhaA OR gene:nhaA1 OR gene:nhaA2) AND taxonomy_id:2
+  negative_query: xref:pfam-PF06450 NOT (gene:nhaA OR gene:nhaA1 OR gene:nhaA2) AND taxonomy_id:2
+  negative_pfam: PF06450
+- name: gor
+  report_level: gene
+  description: 'Glutathione reductase (closes the gamma-glutamyl/glutathione redox cycle with gshA/gshB;
+    Task 1c). PF07992 (Pyr_redox_2) is broad -- shared with thioredoxin reductase (trxB) and other FAD-dependent
+    pyridine-nucleotide disulfide oxidoreductases -- rejected for pfam_model. Negative set anchored on
+    trxB specifically (a real, functionally close, same-fold paralog gene symbol) rather than the raw
+    broad Pfam pool, the same "named confusable paralog" approach betL uses. If calibration shows the
+    same near-total score overlap betL had (see cutoff_manifest.tsv), revisit decoy_from_negatives here
+    too -- not set yet, no calibration data to justify it until the first build runs. Also includes gor1/gor2
+    (real, reviewed numbered-paralog gene symbols, same class of gap as murB1/murB2 -- see issue #8).
+
+    '
+  positive_query: (gene:gor OR gene:gor1 OR gene:gor2) AND taxonomy_id:2
+  negative_query: xref:pfam-PF07992 AND gene:trxB NOT (gene:gor OR gene:gor1 OR gene:gor2) AND taxonomy_id:2
+  negative_pfam: PF07992
+- name: trkA
+  paralog_group: trk_ktr_regulatory
+  report_level: gene
+  description: 'Regulatory/NAD-binding subunit of constitutive K+ uptake (Trk system; Task 1d, "Kdp backup/disambiguation"
+    -- an alternative K+ uptake route to the inducible Kdp system already in this panel via kdpA, useful
+    for telling "no Kdp signal" apart from "no K+ uptake capability at all"). Proteobacteria-type naming
+    (E. coli TrkA).
+
+    Kept as its own family, separate from ktrA below, the same way nhaA and mrpA-mrpG are two separate
+    families for the same Na+/H+ antiporter function rather than one merged entry -- trkA/trkH (this entry
+    + trkH below, Proteobacteria naming) and ktrA/ktrB/ktrD (Firmicutes naming, new entries below) are
+    the same split pattern. IMPORTANT naming trap that motivated adding ktrA/ktrB/ktrD at all: the literal
+    gene symbol "trkA" in Bacillota mostly does NOT refer to this system -- B. subtilis''s own "trkA"
+    (UniProt O07085) is an unrelated CBS-domain protein (PF13738); the real Firmicutes-lineage ortholog
+    of E. coli TrkA (matching PF02080+PF02254) is consistently named ktrA instead (confirmed via B. subtilis,
+    B. licheniformis, and several Clostridium/Staphylococcus/Enterococcus UniProt entries) -- the same
+    Proteobacteria-named-gene-assumed-universal pattern as nhaA. (The same bare-symbol trap showed up
+    while researching opuB/opuC: neither resolves to the intended Bacillus-type transporter operon in
+    UniProt, which is why this panel uses the real per-subunit symbols opuAB/opuBB/opuCB etc. instead
+    -- see those entries above.) PF02080 (TrkA_N) rejected for pfam_model: a broad RCK-domain family,
+    shared across many unrelated K+/Ca2+ channel regulatory subunits. Negative pool excludes both trkA
+    and ktrA gene symbols even though they''re separate families, for the same reason proX/opuAC/opuBC/opuCC
+    cross-exclude each other: ktrA is a real, distinct true positive elsewhere in this panel, not a clean
+    negative for trkA. Also includes trkA1/trkA2 (some organisms, e.g. Azoarcus sp. BH72, Streptococcus
+    thermophilus, carry two real, distinctly-named paralogs) -- confirmed via UniProt, the same numbered-paralog
+    gap found for murB1/murB2 and trkH1/ktrB1/ktrD1 below while investigating the class of bug mrpF/mrpG''s
+    PhaF/yufB gap belongs to. Adding trkA1/trkA2 has a measured cost: of 372 UniProt trkA1/trkA2 entries,
+    82% (median 223aa) are short single-RCK-domain proteins already excluded by the length-outlier filter
+    (canonical trkA median 457aa), but the 68 that pass the filter are real, taxonomically scattered full-length
+    orthologs (e.g. Halomonas, Cupriavidus, Roseobacter, Fusobacterium, Ruminococcus) whose diversity
+    widens the DIAMOND reference cloud and measurably increases false positives on a held-out benchmark
+    (6-family subset-test F1 0.920->0.879; confirmed in the full 43-family v7 rebuild at 0.920->0.887,
+    same regression, close to but not identical to the subset-test number -- see the "full 43-family v7
+    rebuild" notes on ectA/ktrA/mrpB/etc. for why full-panel and subset-test numbers for the same family
+    don''t always match exactly). Kept anyway: these are real trkA genes a genuine read could come from,
+    not an artifact, so this is a recall-vs-specificity trade-off structurally like the negative-pool
+    findings below, not a bug to chase further.
+
+    '
+  positive_query: (gene:trkA OR gene:trkA1 OR gene:trkA2) AND taxonomy_id:2
+  negative_query: xref:pfam-PF02080 NOT (gene:trkA OR gene:trkA1 OR gene:trkA2 OR gene:ktrA OR gene:ktrA1
+    OR gene:ktrA2) AND taxonomy_id:2
+  refseq_gene_symbols:
+  - trkA
+  - trkA1
+  - trkA2
+  negative_pfam: PF02080
+- name: ktrA
+  paralog_group: trk_ktr_regulatory
+  report_level: gene
+  description: 'Regulatory/NAD-binding subunit of constitutive K+ uptake (Ktr system -- the Firmicutes-named
+    counterpart to trkA above; Task 1d, and the actual Bacillota-relevant half of this gap-fill -- see
+    trkA''s entry above for the full naming-trap explanation and why this is its own family rather than
+    a trkA synonym, matching nhaA/mrp''s treatment). Same domain pair (PF02080+PF02254) as trkA; PF02080
+    rejected for pfam_model for the same broad-RCK-domain reason as trkA. Also includes ktrA1/ktrA2 (some
+    organisms, e.g. Halobacillus karajensis, Clostridium scindens, carry two real, distinctly-named paralogs)
+    -- confirmed via UniProt, same numbered-paralog gap as trkA1/trkA2.
+
+    Full 43-family v7 rebuild shows a real DIAMOND regression here (F1 0.838->0.785) not predicted by
+    the earlier 6-family subset test (which showed this family roughly flat) -- a full-panel build changes
+    the combined DIAMOND db''s composition beyond what a small subset test can capture. Not investigated
+    further; documented rather than chased.
+
+    '
+  positive_query: (gene:ktrA OR gene:ktrA1 OR gene:ktrA2) AND taxonomy_id:2
+  negative_query: xref:pfam-PF02080 NOT (gene:trkA OR gene:trkA1 OR gene:trkA2 OR gene:ktrA OR gene:ktrA1
+    OR gene:ktrA2) AND taxonomy_id:2
+  negative_pfam: PF02080
+hmm_decoys:
+- name: betTcaiT_decoy
+  description: 'Choline (BetT) and carnitine (CaiT) BCCT transporters, betL''s named hard negatives. A
+    single score threshold cannot separate them from betL (v4: min positive 87 vs max negative 642 bits),
+    so betL''s F1-calibrated GA sat at 570.8 bits and annotate HMM betL reached F1 0.55 (v10, precision
+    0.55, recall 0.56). Translated search avoids it with DIAMOND decoy references from the same set (decoy_from_negatives),
+    but annotate and catalog-based profiling decide at full length with the HMM, where catalogued strains
+    brought betL from 0.87 to 0.46 (docs/validation_reports/catalog_benchmark.md). Every UniProt betT/caiT
+    entry is already in betL''s negatives (1190 raw, 479 after QC), so the model is built from betL.negative.train,
+    the split the DIAMOND decoy uses, and betL''s GA is calibrated decoy-aware.
+
+    '
+  from_negatives_of: betL
+  ga: 100
+  competes_with:
+  - betL
+  decoy_aware_ga: true
+- name: fadDisulfide_decoy
+  description: 'FAD-dependent disulfide oxidoreductases that are not glutathione reductase: lipoamide
+    dehydrogenases (LpdA/PdhD/Lpd/GcvL), mercuric reductase (MerA), alkyl hydroperoxide reductase F (AhpF)
+    and the pyridine nucleotide transhydrogenases (SthA/UdhA). They share gor''s PF07992 + PF02852 architecture,
+    and gor''s GA (245.6 bits, a clean separation against its only negatives, trxB) lets them through.
+    In the 6,634-genome BacDive set gor was called in 98% of genomes with 3.6 copies on average (up to
+    14). A closest-relative check of 457 gor calls from 120 genomes (2026-11-17) found 17% closest to
+    glutathione reductase, 64% to lipoamide dehydrogenase, 14% to MerA and 6% to the others, while held-out
+    true gor proteins were 100% closest to gor. The benchmark never showed it because gor''s hard negatives
+    are trxB only.
+
+    '
+  query: xref:pfam-PF07992 AND (gene:lpdA OR gene:pdhD OR gene:lpd OR gene:gcvL OR gene:merA OR gene:sthA
+    OR gene:udhA OR gene:ahpF) NOT (gene:gor OR gene:gor1 OR gene:gor2) AND taxonomy_id:2
+  max_seqs: 1500
+  ga: 100
+  competes_with:
+  - gor
+  decoy_aware_ga: true

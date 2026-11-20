@@ -1,0 +1,13 @@
+---
+# yaml-language-server: $schema=https://raw.githubusercontent.com/nf-core/modules/master/modules/environment-schema.json
+# Image: Seqera curl_findutils_gawk_gzip_pruned ('bacdive-fetch', exists; gzip and findutils for fetch_genomes.sh)
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - conda-forge::python=3.11.0
+  - conda-forge::curl=8.23.0
+  - conda-forge::gawk=5.4.1
+  - conda-forge::gzip
+  - conda-forge::findutils
+  - conda-forge::procps-ng=4.0.6

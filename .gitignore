@@ -5,7 +5,7 @@ __pycache__/
 osmotool_src/
 cache/
 .venv-nacl/
-pipeline/*/archive
+bin/*/archive
 
 # local archive of retired inputs and old data (e.g. the study sequences of the retired
 # step 1d): never committed
@@ -14,8 +14,12 @@ pipeline/*/archive
 # release-independent input data (BacDive genomes etc.)
 /data/
 
-# Nextflow (hpc/nextflow)
+# Nextflow
 .nextflow*
 work/
 pipeline_info/
 osmo_nf_*.log
+
+# nf-test
+.nf-test/
+.nf-test.log

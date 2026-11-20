@@ -1,0 +1,12 @@
+---
+# yaml-language-server: $schema=https://raw.githubusercontent.com/nf-core/modules/master/modules/environment-schema.json
+# Image: Seqera trimal_mafft_python_pyyaml (exists; versions read from the image): mafft 7.526 is not on biocontainers
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - bioconda::mafft=7.526
+  - bioconda::trimal=1.5.1
+  - conda-forge::python=3.11.0
+  - conda-forge::pyyaml=6.0.3
+  - conda-forge::procps-ng=4.0.6

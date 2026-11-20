@@ -1,0 +1,11 @@
+---
+# yaml-language-server: $schema=https://raw.githubusercontent.com/nf-core/modules/master/modules/environment-schema.json
+# Image: Seqera git_python_pyyaml (exists; versions read from the image)
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - conda-forge::python=3.11.0
+  - conda-forge::pyyaml=6.0.3
+  - conda-forge::git=2.56.1
+  - conda-forge::procps-ng=4.0.6
