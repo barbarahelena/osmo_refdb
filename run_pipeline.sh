@@ -160,6 +160,14 @@ do_build() {
         rm -f "${REFS_DIR}"/*.positive.train.faa "${REFS_DIR}"/*.positive.calib.faa \
               "${REFS_DIR}"/*.positive.test.faa "${REFS_DIR}"/*.negative.train.faa \
               "${REFS_DIR}"/*.negative.test.faa "${REFS_DIR}"/*.decoy.faa
+        # Study sequences (retired step 1d) in an older release's refs: removed
+        # here, offline, with a manifest of what was removed/recovered/lost.
+        rm -f "${REFS_DIR}/extra_positives_manifest.tsv"
+        python pipeline/strip_ref_tag.py --refs "${REFS_DIR}" --tag _study --threads "${THREADS}"
+        # HMM decoys added to families.yaml since the source release: fetch
+        # only those (the ones it already holds keep their sequences).
+        python pipeline/01_fetch_refs.py --families "${FAMILIES_FILE}" --out "${REFS_DIR}" \
+            --only-hmm-decoys
     else
     echo ""
     echo "--- 1. Fetch reference sequences from UniProt ---"
@@ -175,10 +183,9 @@ do_build() {
     python pipeline/01c_check_length_outliers.py \
         --refs "${REFS_DIR}" --families "${FAMILIES_FILE}"
 
-    echo ""
-    echo "--- 1d. Merge extra positives from local studies (if any) ---"
-    python pipeline/01d_add_extra_positives.py \
-        --refs "${REFS_DIR}" --families "${FAMILIES_FILE}"
+    # (Step 1d, which merged local study sequences from extra_sequences/, was
+    # retired: those files were not in git, so a rebuild could not reproduce
+    # them. Refs from older releases are cleaned in the REUSE_REFS_FROM block.)
 
     echo ""
     echo "--- 1e. Merge extra positives from NCBI RefSeq (opt-in per family) ---"
@@ -209,11 +216,20 @@ do_build() {
         # different when realigned from identical input), hmmbuild is.
         echo ""
         echo "--- 4. Reusing alignments from ${REUSE_REFS_FROM} (REUSE_ALIGNMENTS=0 to realign) ---"
+        # A family whose train set differs from the source release's (e.g. its
+        # study sequences were stripped, which also changes the split) cannot
+        # reuse its alignment: only those families are realigned.
+        CHANGED=""
         for f in "${REFS_DIR}"/*.positive.train.faa; do
-            cmp -s "${f}" "${REUSE_REFS_FROM}/refs/$(basename "${f}")" || {
-                echo "ERROR: $(basename "${f}") differs from ${REUSE_REFS_FROM}; cannot reuse alignments" >&2; exit 1; }
+            cmp -s "${f}" "${REUSE_REFS_FROM}/refs/$(basename "${f}")" || \
+                CHANGED="${CHANGED} $(basename "${f}" .positive.train.faa)"
         done
         cp "${REUSE_REFS_FROM}"/alignments/* "${ALN_DIR}/"
+        if [ -n "${CHANGED}" ]; then
+            echo "Train set changed, realigning:${CHANGED}"
+            ALIGN_ONLY="${CHANGED# }" THREADS="${THREADS}" \
+                bash pipeline/04_align_trim.sh "${REFS_DIR}" "${ALN_DIR}" "${FAMILIES_FILE}"
+        fi
     else
     echo ""
     echo "--- 4. Align + trim (TRAIN positives only) ---"

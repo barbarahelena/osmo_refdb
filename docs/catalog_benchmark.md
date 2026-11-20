@@ -202,6 +202,41 @@ were in osmotool's catalog assignment, not in the approach:
   against UniProt-derived labels, which are known to be imperfect for some
   families.
 
+## Update: betL decoy (HMM decoy built from betL's negatives)
+
+Open decision 1 below, tried: `betTcaiT_decoy`, an HMM built from
+`betL.negative.train` (every UniProt betT/caiT entry is in it), with betL's GA
+calibrated decoy-aware (`families.yaml` `hmm_decoys`, `05b`, `06`). Test
+release `releases/v10-betl-decoy`: the same refs, splits and alignments as v10,
+rebuilt and benchmarked; a catalogue benchmark rerun.
+
+| betL, f1_all (precision_all / recall) | v10 | with decoy |
+|---|---|---|
+| profile, no catalog (DIAMOND + cascade) | 0.868 (0.929 / 0.815) | unchanged |
+| profile, HMM only | 0.584 (0.458 / 0.805) | 0.740 (0.925 / 0.617) |
+| annotate, HMM (protein level, F1) | 0.554 (0.547 / 0.562) | 0.841 (1.000 / 0.726) |
+| catalog A (strains in the catalog) | 0.459 (0.465 / 0.454) | **0.857** (1.000 / 0.750) |
+| catalog B (not in the catalog) | 0.776 (0.802 / 0.752) | 0.852 (0.932 / 0.785) |
+
+- betL's GA drops from 570.8 to 369.1 bits. The decoy takes 17 of 73 calibration
+  positives (betL proteins that score higher against betT/caiT than against
+  betL's own model) and 377 of 384 negatives. The calibration F1 of 0.82 is
+  optimistic, since the decoy was trained on those negatives; the held-out test
+  numbers above are the real ones.
+- Nothing else moves: annotate HMM F1 is unchanged for the other 43 families
+  (overall micro F1 0.928 -> 0.931), the cascade config and the report levels
+  are identical to v10, and every other unit's f1_all is unchanged in both the
+  profile and the catalogue benchmark. Median f1_all over the 27 reported units:
+  0.770 / 0.892 / 0.800 (no catalog / A / B) in v10 and 0.770 / 0.892 / 0.804
+  with the decoy.
+- Caveats: betL has only 95 held-out hard-negative sequences, so a precision of
+  1.000 rests on a small sample. Recall is capped at about 0.73-0.75 (annotate
+  and catalogue A), because the decoy takes some real betL proteins; with HMM
+  alone in profile mode recall even falls (0.805 -> 0.617), though precision
+  rises more. betL is one of the NaCl model's 46 features: adopting the decoy
+  changes betL counts for every annotated genome, so the BacDive annotation and
+  the NaCl model would have to be redone.
+
 ## Open decisions
 
 1. **betL in the catalog.** Options:

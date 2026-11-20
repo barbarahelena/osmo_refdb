@@ -38,8 +38,16 @@ one() {
 }
 export -f one
 
+
+# CHUNK="i/K" (SLURM arrays): process only the genomes with (position - 1) % K == i,
+# so K array tasks split the sorted genome list between them without overlap.
+chunk_filter() {
+  if [ -n "${CHUNK:-}" ]; then awk -v i="${CHUNK%/*}" -v k="${CHUNK#*/}" '(NR - 1) % k == i'; else cat; fi
+}
+
 T0=$SECONDS
-find "$PV/genomes/" -maxdepth 1 \( -name '*.fna' -o -name '*.fna.gz' \) | sort > "$PV/annotate/.inputs"
-xargs -P "$PAR" -I{} bash -c 'one "$@"' _ {} "$PV" "$REL" < "$PV/annotate/.inputs"
-N=$(wc -l < "$PV/annotate/.inputs" | tr -d ' '); W=$((SECONDS-T0))
+INPUTS="$PV/annotate/.inputs${CHUNK:+.${CHUNK%/*}}"
+find "$PV/genomes/" -maxdepth 1 \( -name '*.fna' -o -name '*.fna.gz' \) | sort | chunk_filter > "$INPUTS"
+xargs -P "$PAR" -I{} bash -c 'one "$@"' _ {} "$PV" "$REL" < "$INPUTS"
+N=$(wc -l < "$INPUTS" | tr -d ' '); W=$((SECONDS-T0))
 echo "=== ${PAR}x1 (cached proteins): ${W}s wall for $N genomes = $(python3 -c "print(f'{$W/$N:.2f}')")s/genome ==="

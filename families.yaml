@@ -107,7 +107,7 @@
 #                     Myxococcus CRP/FNR transcription factor) -- so this is
 #                     opt-in per family, not a general mechanism. Note:
 #                     08_build_diamond_db.sh excludes these merged sequences
-#                     (and 01d's _study ones) from the DIAMOND reference
+#                     from the DIAMOND reference
 #                     specifically, even though HMM's alignment keeps them --
 #                     see that script's header comment.
 #
@@ -117,7 +117,11 @@
 # osmotool annotate's best-hit contest and are excluded from output (08c),
 # and a benchmark read best-hitting one counts as no call (11). `ga` only
 # has to sit below the competing families' own cutoffs. Names must end in
-# "_decoy". `competes_with` is documentation only.
+# "_decoy". `from_negatives_of: <family>` builds the decoy from that
+# family's negative.train instead of a `query` (05b). `decoy_aware_ga: true`
+# makes the GA calibration of the `competes_with` families decoy-aware (06):
+# a calibration sequence the decoy outscores is not called as the family.
+# Without it, `competes_with` is documentation only.
 
 families:
   - name: ectA
@@ -2023,3 +2027,40 @@ hmm_decoys:
     max_seqs: 1500
     ga: 100
     competes_with: [opuAA, opuBA, opuCA]
+  - name: betTcaiT_decoy
+    description: >
+      Choline (BetT) and carnitine (CaiT) BCCT transporters, betL's named
+      hard negatives. A single score threshold cannot separate them from
+      betL (v4: min positive 87 vs max negative 642 bits), so betL's
+      F1-calibrated GA sat at 570.8 bits and annotate HMM betL reached F1
+      0.55 (v10, precision 0.55, recall 0.56). Translated search avoids it
+      with DIAMOND decoy references from the same set (decoy_from_negatives),
+      but annotate and catalog-based profiling decide at full length with
+      the HMM, where catalogued strains brought betL from 0.87 to 0.46
+      (docs/catalog_benchmark.md). Every UniProt betT/caiT entry is already
+      in betL's negatives (1190 raw, 479 after QC), so the model is built
+      from betL.negative.train, the split the DIAMOND decoy uses, and betL's
+      GA is calibrated decoy-aware.
+    from_negatives_of: betL
+    ga: 100
+    competes_with: [betL]
+    decoy_aware_ga: true
+  - name: fadDisulfide_decoy
+    description: >
+      FAD-dependent disulfide oxidoreductases that are not glutathione
+      reductase: lipoamide dehydrogenases (LpdA/PdhD/Lpd/GcvL), mercuric
+      reductase (MerA), alkyl hydroperoxide reductase F (AhpF) and the
+      pyridine nucleotide transhydrogenases (SthA/UdhA). They share gor's
+      PF07992 + PF02852 architecture, and gor's GA (245.6 bits, a clean
+      separation against its only negatives, trxB) lets them through. In the
+      6,634-genome BacDive set gor was called in 98% of genomes with 3.6
+      copies on average (up to 14). A closest-relative check of 457 gor calls
+      from 120 genomes (2026-11-17) found 17% closest to glutathione
+      reductase, 64% to lipoamide dehydrogenase, 14% to MerA and 6% to the
+      others, while held-out true gor proteins were 100% closest to gor. The
+      benchmark never showed it because gor's hard negatives are trxB only.
+    query: "xref:pfam-PF07992 AND (gene:lpdA OR gene:pdhD OR gene:lpd OR gene:gcvL OR gene:merA OR gene:sthA OR gene:udhA OR gene:ahpF) NOT (gene:gor OR gene:gor1 OR gene:gor2) AND taxonomy_id:2"
+    max_seqs: 1500
+    ga: 100
+    competes_with: [gor]
+    decoy_aware_ga: true
