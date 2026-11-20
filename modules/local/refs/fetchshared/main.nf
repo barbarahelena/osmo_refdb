@@ -24,7 +24,10 @@ process REFS_FETCHSHARED {
     def T = "${moduleDir}/../templates"
     """
     mkdir -p evidence shared
-    for d in fetched/*/; do ln -s "\$(cd "\$d" && pwd)"/* evidence/; done
+    # the families' sequences and domain tables side by side (each family's manifest.tsv left out)
+    for f in fetched/*/*; do
+        [ "\$(basename "\$f")" = manifest.tsv ] || ln -s "\$(readlink -f "\$f")" evidence/
+    done
     python ${T}/fetch_refs.py --families ${families} --out shared --cache-dir cache \\
         --shared-only --evidence-dir evidence
     """
