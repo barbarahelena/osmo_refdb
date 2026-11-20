@@ -86,8 +86,12 @@ UNIPROT_RELEASE: str | None = None
 
 def get_with_retry(url: str, **kwargs) -> requests.Response:
     """requests.get with retry + exponential backoff on transient failures
-    (connection errors, timeouts, HTTP 429/5xx). Anything else -- or a
-    transient failure that outlasts every retry -- raises.
+    (connection errors, timeouts, a response that ends early or arrives
+    garbled, HTTP 429/5xx). Anything else -- or a transient failure that
+    outlasts every retry -- raises. requests.get reads the whole body, so a
+    connection dropped mid-body surfaces here as ChunkedEncodingError, which
+    is not a ConnectionError (2026-11-20: betA's positives, 2 h into the v10
+    fetch, failed the whole task).
 
     Motivating bug (2026-11-04, markers.yaml build): one transient failure
     mid-fetch was caught by fetch_set's blanket RequestException handler,
@@ -102,7 +106,9 @@ def get_with_retry(url: str, **kwargs) -> requests.Response:
                 r.raise_for_status()
                 return r
             err: Exception = requests.HTTPError(f"HTTP {r.status_code}", response=r)
-        except (requests.ConnectionError, requests.Timeout) as e:
+        except (requests.ConnectionError, requests.Timeout,
+                requests.exceptions.ChunkedEncodingError,
+                requests.exceptions.ContentDecodingError) as e:
             err = e
         if attempt == RETRY_ATTEMPTS:
             raise err
