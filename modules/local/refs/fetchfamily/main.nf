@@ -31,6 +31,14 @@ process REFS_FETCHFAMILY {
 ${entry}
 FAMILY_YAML
     python ${T}/fetch_refs.py --families family.yaml --out ${name} --cache-dir cache --skip-shared
+    # fetched from the release it is stored under: fetch_refs.py records "unknown" when its own release
+    # lookup fails, and a stored fetch is never redone. Failing here retries it and keeps it out of the store.
+    python3 - <<'PY'
+import csv, sys
+got = sorted({r["uniprot_release"] for r in csv.DictReader(open("${name}/manifest.tsv"), delimiter="\\t")})
+if got != ["${uniprot_release}"]:
+    sys.exit(f"ERROR: ${name} fetched from UniProt release(s) {got}, expected ${uniprot_release}")
+PY
     """
 
     stub:
