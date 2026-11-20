@@ -12,6 +12,10 @@
 # more of the alignment's flanking columns kept, not trimmed away, to
 # preserve their true discriminating signal).
 #
+# ALIGN_ONLY="famA famB" restricts it to those families (a rebuild that reuses
+# another release's alignments realigns only the families whose train set
+# changed).
+#
 # Usage: bash 04_align_trim.sh [refs_dir] [alignments_dir] [families_yaml]
 # ---------------------------------------------------------------------------
 
@@ -21,6 +25,7 @@ REFS_DIR="${1:-refs}"
 ALN_DIR="${2:-alignments}"
 FAMILIES_FILE="${3:-families.yaml}"
 THREADS="${THREADS:-4}"
+ALIGN_ONLY="${ALIGN_ONLY:-}"
 
 mkdir -p "${ALN_DIR}"
 
@@ -41,6 +46,9 @@ else:
 for INPUT in "${REFS_DIR}"/*.positive.train.faa; do
     [ -s "${INPUT}" ] || continue
     FAMILY=$(basename "${INPUT}" .positive.train.faa)
+    if [ -n "${ALIGN_ONLY}" ] && [[ " ${ALIGN_ONLY} " != *" ${FAMILY} "* ]]; then
+        continue
+    fi
 
     RAW_ALN="${ALN_DIR}/${FAMILY}.aln.fasta"
     TRIMMED_ALN="${ALN_DIR}/${FAMILY}.trimmed.fasta"

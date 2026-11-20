@@ -12,8 +12,9 @@
 #     fusion_partner) -- e.g. mrpA_mrpD_fused -- real, reportable detection
 #     targets, unlike decoys, so NOT excluded via 08c.
 #
-# Deliberately EXCLUDES "_study"/"_refseq"-tagged sequences (01d/01e's
-# Bakta/RefSeq merges) from the DIAMOND reference specifically, even though
+# Deliberately EXCLUDES "_refseq"-tagged sequences (01e's RefSeq merge; the
+# retired 01d "_study" merge was excluded too) from the DIAMOND reference
+# specifically, even though
 # they remain in positive.train.faa for 04_align_trim.sh's alignment (which
 # already ran on the full file before this step, feeding HMM). Confirmed via
 # a clean A/B benchmark across 4 families (mrpG, otsA, mscS, otsB -- see
@@ -44,11 +45,11 @@ COMBINED_FAA="${RELEASE_DIR}/${RELEASE_NAME}.train_refs.faa"
 : > "${COMBINED_FAA}"
 for TRAIN_FAA in "${REFS_DIR}"/*.positive.train.faa; do
     [ -s "${TRAIN_FAA}" ] || continue
-    # Drop whole records (header + sequence lines) whose tag is _study or
-    # _refseq -- `keep` is set once per header and holds for every sequence
-    # line until the next one.
+    # Drop whole records (header + sequence lines) whose tag is _refseq --
+    # `keep` is set once per header and holds for every sequence line until
+    # the next one.
     awk '
-        /^>/ { keep = ($0 !~ /_study\||_refseq\|/) }
+        /^>/ { keep = ($0 !~ /_refseq\|/) }
         keep
     ' "${TRAIN_FAA}" >> "${COMBINED_FAA}"
 done
@@ -61,4 +62,4 @@ fi
 
 diamond makedb --in "${COMBINED_FAA}" --db "${RELEASE_DIR}/${RELEASE_NAME}" --threads "${THREADS}"
 
-echo "Built DIAMOND db: ${RELEASE_DIR}/${RELEASE_NAME}.dmnd (excludes _study/_refseq-tagged sequences)"
+echo "Built DIAMOND db: ${RELEASE_DIR}/${RELEASE_NAME}.dmnd (excludes _refseq-tagged sequences)"

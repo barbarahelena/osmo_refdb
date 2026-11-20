@@ -2101,6 +2101,38 @@ every family was reported on its own, however unreliable.
 - The pre-change v10 metrics are kept in
   `releases/v10/archive_pre_report_levels/`.
 
+### More stable HMM cutoffs (bagged F1 optimum)
+
+The calibrated GA of overlapping families jumped between builds that differed
+by a few dozen calibration sequences: removing the study sequences moved trkH
+from 403 to 504 bits and trkA from 91 to 272, while the genes' scores hardly
+changed (on 159,560 real gut genes trkH went from 36 claimed genes to 0).
+
+- **What was measured** (`pipeline/cutoff_stability.py`, real score files of v10,
+  v10-taxsplit and v10-rebuild; 30 F1-swept families). Within one build the plain
+  sweep is already steady (median interquartile range 2 bits under 80%
+  subsampling). Between builds it is not: it moves 45.8 bits on average (median
+  16.5) between the random-split and the genus-split build, and six families move
+  more than 100. Plateau rules (the middle of the cutoffs within epsilon of the
+  best F1) were no better and cost up to 0.019 F1 at epsilon 0.05.
+- **What changed.** `06_calibrate_cutoffs.py` now takes the median over 1000
+  seeded bootstrap resamples of the F1-optimal cutoff (positives and negatives
+  resampled separately; Python's seeded `random`, so the cutoff is reproducible).
+  Across the two builds it moves 42.7 bits on average (median 13.4) at a mean F1
+  cost of 0.004 on the calibration data; on the four families the study-sequence
+  removal changed it moves less in all four (trkH 100 -> 70, trkA 181 -> 40).
+  `--cutoff-method sweep` gives the old rule. 15 of 44 GA cutoffs change on the
+  rebuild's scores (trkA 271.7 -> 131.2).
+- **What it does not fix.** Families whose F1 optimum really sits elsewhere when
+  the calibration set changes (ktrB, trkH, mrpA) stay build-dependent; only more
+  calibration positives (cross-fitted scores) would pin them. The manifest now
+  records the plain sweep's cutoff, the bootstrap 10th-90th percentile range and
+  `cutoff_range_wide` (range > a quarter of the cutoff): trkA, proX, opuAB, opuBB,
+  mrpA, mrpC and gshA are flagged on the rebuild. The DIAMOND cutoffs (08b, a
+  percentile of the negatives) are unchanged.
+- Every cutoff downstream (annotate, the catalogue, the benchmark) is recomputed by
+  the next build; v10's published numbers used the plain sweep.
+
 ### Status
 
 `releases/v10` is a candidate, not a release: nothing is packaged or
@@ -2113,6 +2145,17 @@ uploaded. Open decisions:
   are unstable in either release.
 - ~~Which families the cascade should flag.~~ Decided together with the
   report levels on calibration reads (above).
+- **Catalog-based profiling** (osmotool `profile --catalog`, branch
+  `catalog-profile`; `run_pipeline.sh catalog`, `11d_benchmark_catalog.py`):
+  with the strains catalogued, median f1_all of the reported units 0.770 ->
+  0.892 and background false positives 2083 -> 170 per million; without
+  them the translated fallback keeps the v10 numbers. betL regresses (its
+  full-length HMM cannot separate betT/caiT). See `docs/catalog_benchmark.md`.
+- **betL HMM decoy** (branch `betl-decoy`, test release `v10-betl-decoy`): an HMM
+  decoy built from betL's betT/caiT negatives, with decoy-aware GA calibration.
+  betL annotate F1 0.554 -> 0.841, catalogue betL (strains catalogued) 0.459 ->
+  0.857; no other unit changes. Not adopted into v10 yet (the NaCl model uses
+  betL). See `docs/catalog_benchmark.md`.
 - **Split stringency.** Test positives are a median 81% identical to their
   nearest training reference (CD-HIT 90%; 53% of them above 80%, 8% below
   60%). Annotate HMM recall falls from 0.97 (80-90%) to 0.76 (40-60%).
@@ -2127,3 +2170,37 @@ uploaded. Open decisions:
   the F1 sweep is the problem.
 - Still open from before: opuBA; the mrpB DIAMOND cutoff; the PF08886 gshA
   family; MAFFT reproducibility. (The Dockerfile pin is now v0.8.0.)
+
+### Read simulation: one random stream per family (branch `rebuild-decoys-nostudy`)
+
+`09_simulate_reads.py` used one random generator shared by all families in
+`families.yaml` order. Changing one sequence in one family therefore changed
+the simulated reads of every family after it. The local `v10-rebuild` dry run
+showed it: only mazG, mscS, trkA and trkH had changed training sets, but the
+calibration reads of all 32 families from mscS onward (64 of 64 read files)
+differed from `v10-betl-decoy`, and so did 114 rows of
+`summary_by_report_unit.tsv`. How much of those 114 is new random reads and
+how much is real change was not separated.
+
+Each (family, label) now draws from its own generator, seeded from `RANDOM_SEED`
+and the family's name and label. Checked with two toy families: dropping one
+sequence from family A leaves family B's reads byte-identical (the old script
+changed them). Reads are no longer identical to any release built before this
+change, and the canonical build is a fresh build anyway. After this a rebuild
+with a changed family differs in the benchmark only where that family, or a
+family that competes with it, changed.
+
+### HPC: one Nextflow workflow instead of bash and sbatch scripts (branch `rebuild-decoys-nostudy`)
+
+`hpc/nextflow/` replaces `hpc/launch.sh`, `hpc/slurm/` and the Apptainer recipe. It follows the nf-core
+layout (`workflows/`, `subworkflows/local/`, `modules/local/<step>/`, `conf/base.config`,
+`conf/modules.config`, a parameter schema) without the nf-schema plugin, conda or nf-test. Every step is a
+SLURM job in a container of its own, declared in its module; nothing runs on a login node except the
+`sbatch` that starts the head job. The gene file and the full catalog index use `storeDir`. The gate
+(reading the catalog screen) is a stop between two invocations: `-resume --gate_passed true` continues.
+Institutional profiles come from nf-core/configs, pinned to a commit. Checked with `-stub-run` under
+Nextflow 25.04.6 and 26.10.6 only; no cluster run, and the container images are placeholders until they
+are built (`hpc/containers/README.md`).
+
+Found on the way: `environment.yml` had no classic `bwa`, which the full catalog index needs (added), and
+the simulated reads of every family depended on all families before it (see the read-simulation entry above).

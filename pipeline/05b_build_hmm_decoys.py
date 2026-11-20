@@ -33,6 +33,24 @@ family's positives and negatives, train or test, and the random
 background) is dropped before building, so no benchmark read comes from a
 sequence the decoy was trained on.
 
+`from_negatives_of: <family>` builds the decoy from that family's
+negative.train instead of a fetch: for a family whose named confusers are
+already its whole hard-negative pool (betL: every UniProt betT/caiT is in
+it), so no independent set exists. That is the HMM counterpart of
+decoy_from_negatives' DIAMOND decoy, on the same split: negative.test,
+which the benchmark scores, is disjoint from it. Any accession also present
+in a test split is dropped anyway.
+
+`decoy_aware_ga: true` makes the competing families' GA calibration
+decoy-aware (06_calibrate_cutoffs.py): their positive.calib and
+negative.train are scored against the decoy here
+(hmms/scores/<family>.<decoy>.{positive,negative}.tblout), and a sequence
+the decoy outscores is not called as the family, as in annotate's best-hit
+contest. Caveat for a from_negatives_of decoy: it was trained on that very
+negative.train, so it wins those negatives more easily than unseen ones;
+the cutoff it allows is therefore optimistic, and only the test split
+(negative.test) shows what it costs.
+
 Usage:
   python 05b_build_hmm_decoys.py --refs refs --aln alignments --hmms hmms \\
       --families families.yaml [--threads 4]
@@ -81,6 +99,16 @@ def accession(header: str) -> str:
     return parts[1] if len(parts) > 1 else parts[0]
 
 
+def test_accessions(refs: Path) -> set[str]:
+    """Accessions the benchmark scores: every family's positive.test and
+    negative.test, and the random background."""
+    out: set[str] = set()
+    for pattern in ("*.positive.test.faa", "*.negative.test.faa", "random_background.faa"):
+        for path in refs.glob(pattern):
+            out.update(accession(h) for h, _ in read_fasta(path))
+    return out
+
+
 def used_accessions(refs: Path) -> set[str]:
     used: set[str] = set()
     for path in refs.glob("*.faa"):
@@ -118,6 +146,7 @@ def main() -> None:
 
     set_ga_line = load_set_ga_line()
     used = used_accessions(args.refs)
+    tested = test_accessions(args.refs)
     args.aln.mkdir(parents=True, exist_ok=True)
     args.hmms.mkdir(parents=True, exist_ok=True)
 
@@ -126,11 +155,19 @@ def main() -> None:
         if not name.endswith("_decoy"):
             # 11_compute_metrics.py recognises decoy calls by this suffix.
             raise SystemExit(f"ERROR: hmm_decoys name {name!r} must end in '_decoy'")
-        raw = args.refs / f"{name}.hmm_decoy.raw.faa"
-        records = read_fasta(raw)
-        kept = [(h, s) for h, s in records if accession(h) not in used]
-        print(f"[{name}] {len(records)} fetched, {len(records) - len(kept)} dropped "
-              f"(accession already in another refs set), {len(kept)} kept")
+        source_family = decoy.get("from_negatives_of")
+        if source_family:
+            src = args.refs / f"{source_family}.negative.train.faa"
+            records = read_fasta(src)
+            kept = [(h, s) for h, s in records if accession(h) not in tested]
+            print(f"[{name}] {len(records)} from {src.name}, {len(records) - len(kept)} dropped "
+                  f"(accession in a test split), {len(kept)} kept")
+        else:
+            raw = args.refs / f"{name}.hmm_decoy.raw.faa"
+            records = read_fasta(raw)
+            kept = [(h, s) for h, s in records if accession(h) not in used]
+            print(f"[{name}] {len(records)} fetched, {len(records) - len(kept)} dropped "
+                  f"(accession already in another refs set), {len(kept)} kept")
         if len(kept) < 50:
             raise SystemExit(f"ERROR: [{name}] only {len(kept)} sequences left to build from")
 
@@ -159,6 +196,21 @@ def main() -> None:
         leng = next(l.split()[1] for l in hmm.read_text().splitlines() if l.startswith("LENG"))
         print(f"[{name}] {n_clu} clusters -> {hmm} (LENG {leng}, GA {float(decoy['ga']):.1f}; "
               f"competes with {', '.join(decoy.get('competes_with', [])) or 'unspecified'})")
+
+        if decoy.get("decoy_aware_ga"):
+            # 06_calibrate_cutoffs.py: the competing families' calibration
+            # sequences, scored against this decoy
+            score_dir = args.hmms / "scores"
+            score_dir.mkdir(exist_ok=True)
+            for fam in decoy.get("competes_with", []):
+                for kind, split in (("positive", "positive.calib"), ("negative", "negative.train")):
+                    faa = args.refs / f"{fam}.{split}.faa"
+                    if not faa.exists() or faa.stat().st_size == 0:
+                        continue
+                    out = score_dir / f"{fam}.{name}.{kind}.tblout"
+                    run(["hmmsearch", "--cpu", str(args.threads), "--tblout", str(out),
+                         "--noali", str(hmm), str(faa)])
+                print(f"[{name}] scored {fam}'s calibration sets for decoy-aware GA")
 
 
 if __name__ == "__main__":
