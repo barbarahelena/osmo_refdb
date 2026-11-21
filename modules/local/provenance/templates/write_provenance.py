@@ -18,7 +18,10 @@ Writes <release>/PROVENANCE.json:
     the environment: SPLIT_MODE, READ_LENGTHS, BACKGROUND_R1/R2,
     DIAMOND_MIN_SUBJECT_COVER), and a checksum over refs/ and alignments/;
   * outputs: checksums of every HMM (without the DATE and COM lines HMMER
-    writes), the DIAMOND database, cutoffs, cascade config and report levels.
+    writes), the DIAMOND database, cutoffs, cascade config and report levels;
+  * licence: the code is MIT, the release is CC-BY-4.0 with attribution to
+    the sources it is built from (UniProt; GMGC and the prevalence-filtered
+    catalogs when a catalog is in it).
 
 This is a record, not a guarantee: it says what ran so a rebuild can be
 compared and a difference traced.
@@ -178,6 +181,41 @@ def cpu_model() -> str:
     return platform.processor() or "unknown"
 
 
+def licence_record(has_catalogs: bool) -> dict:
+    """The code's licence, the release's licence and whom the release must credit. They differ: the
+    code is MIT, the release (databases, HMMs, reference sequences, gene catalogs) is CC-BY-4.0 and
+    carries its sources' attribution. The catalog's sources only apply when a catalog is in the release."""
+    sources = [{
+        "source": "UniProt",
+        "covers": "the reference sequences, and so the HMMs, the DIAMOND database and the benchmark sets",
+        "cite": "The UniProt Consortium. UniProt: the Universal Protein Knowledgebase in 2025. "
+                "Nucleic Acids Res 53(D1):D609-D617 (2025)",
+        "doi": "10.1093/nar/gkae1010",
+        "licence": "CC-BY-4.0"}]
+    if has_catalogs:
+        sources += [{
+            "source": "GMGC (Global Microbial Gene Catalog)",
+            "covers": "catalogs/: the genes, their annotation and index",
+            "cite": "Coelho LP et al. Towards the biogeography of prokaryotic genes. Nature 601:252-256 (2022)",
+            "doi": "10.1038/s41586-021-04233-4"}, {
+            "source": "Prevalence-filtered GMGC catalogs (Cayman)",
+            "covers": "catalogs/: the filtered gene set the catalog is taken from",
+            "cite": "Ducarmon QR et al. Cayman enables large-scale analysis of gut microbiome "
+                    "carbohydrate-active enzyme repertoires. Nat Microbiol 11:1739-1753 (2026)",
+            "doi": "10.1038/s41564-026-02318-2",
+            "data": "https://zenodo.org/records/10473258",
+            "licence": "CC-BY-4.0"}]
+    return {
+        "code": {"licence": "MIT", "file": "LICENSE", "repository": "https://github.com/barbarahelena/osmo_refdb"},
+        "release": {
+            "licence": "CC-BY-4.0",
+            "url": "https://creativecommons.org/licenses/by/4.0/",
+            "attribution": "Reuse of the release needs attribution to the sources below, and a "
+                           "citation of osmo_refdb (CITATION.cff in the repository).",
+            "sources": sources},
+    }
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -279,6 +317,7 @@ def main() -> None:
                                  if (cdir / "catalog.annotation.tsv").exists() else "missing",
             "index_files": tree_hash(cdir, "catalog.fna.*")}
     record["outputs"]["catalogs"] = catalogs or "none built into this release"
+    record["licence"] = licence_record(has_catalogs=bool(catalogs))
     out = args.out or (rel / "PROVENANCE.json" if rel else Path("PROVENANCE.json"))
     out.write_text(json.dumps(record, indent=2) + "\n")
     c = record["code"]["osmo_refdb"]
