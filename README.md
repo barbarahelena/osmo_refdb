@@ -484,7 +484,7 @@ release name.
 (The prevalence-filtered GMGC catalogs are on Zenodo, record 10473258;
 `modules/local/catalog/fetch/templates/fetch_zenodo_member.py` downloads one habitat without the 19.3 GB zip.)
 
-`osmotool profile --catalog NAME` assigns reads to a gene catalog the
+`osmotool profile` (>= 0.10.0) assigns reads to the gene catalog the
 release ships under `catalogs/NAME/` before translated search, the approach
 of catalog-based profilers such as Cayman: the family of each catalog gene is
 decided once, at full length, and reads are then matched at >= 97%
@@ -505,7 +505,7 @@ their defaults are GMGC v1.0 human gut).
   (`docs/validation_reports/catalog_index.md`). Reads from genes far from any hit gene fall back
   to translated search.
 - `osmotool profile` uses the catalog a release ships by default;
-  `--no_catalog` is translated search only. Every release scores it on the
+  `--translated_only` (0.9.x: `--no_catalog`) is translated search only. Every release scores it on the
   test reads (step 11d, `docs/validation_reports/catalog_benchmark.md`) and on reads from the
   real genomes (`docs/validation_reports/real_genome_validation.md`).
 

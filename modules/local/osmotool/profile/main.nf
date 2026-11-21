@@ -1,6 +1,6 @@
 // osmotool profile: paired reads against an osmo_refdb release (DIAMOND, the DIAMOND+HMM cascade,
 // copies-per-genome markers). Options go in ext.args (conf/modules.config): --keep_aln, --no_markers,
-// --catalog, --no_catalog, filters.
+// --habitat, --catalog_dir, --translated_only, filters.
 process OSMOTOOL_PROFILE {
     tag "${meta.id}"
     label 'process_high'

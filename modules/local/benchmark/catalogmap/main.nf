@@ -25,7 +25,7 @@ process BENCHMARK_CATALOGMAP {
     for r1 in ${reads}/*_R1.fastq; do
         s=\$(basename "\$r1" _R1.fastq)
         osmotool profile db -1 "\$r1" -2 ${reads}/\${s}_R2.fastq --out_prefix ${meta.id}/runs/\$s \\
-            --catalog catalog --catalog_only --no_cascade --no_markers --keep_aln --threads ${task.cpus}
+            --catalog_dir catalog --catalog_only --no_cascade --no_markers --keep_aln --threads ${task.cpus}
     done
     # the verify samples named in meta.verify that exist; with a families subset none may, then the first three
     todo=""
@@ -35,7 +35,7 @@ process BENCHMARK_CATALOGMAP {
     fi
     for s in \$todo; do
         osmotool profile db -1 ${reads}/\${s}_R1.fastq -2 ${reads}/\${s}_R2.fastq --out_prefix ${meta.id}/verify/\$s \\
-            --catalog catalog --min_identity 0.40 --min_query_cover 0.50 --no_markers --threads ${task.cpus} ${args}
+            --catalog_dir catalog --min_identity 0.40 --min_query_cover 0.50 --no_markers --threads ${task.cpus} ${args}
     done
     """
 
