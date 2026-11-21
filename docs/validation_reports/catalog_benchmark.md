@@ -3,9 +3,10 @@
 **Conclusion.** When a sample's strains are in the catalog, catalog-first
 profiling (`osmotool profile --catalog`) lifts the median f1_all of the 27
 reported units from 0.770 to 0.892. Precision rises from 0.890 to 0.989 and
-false positives on unrelated reads drop more than tenfold. When the strains
-are not in the catalog, nothing is lost: the translated fallback keeps the
-v10 numbers (0.800 in this simulation, against 0.770). The exception is
+false positives on unrelated reads drop more than tenfold. When the strains'
+own genes are not in the catalog, nothing is lost: the median is 0.800 in
+this simulation, against 0.770 without a catalog (the catalog still settles
+part of the reads through conserved regions of related genes; finding 7). The exception is
 betL, which drops from 0.87 to 0.46 because its full-length HMM cannot
 separate betL from betT/caiT. Five excluded units become reportable from
 catalog reads alone. The opu ATPases, opu substrate-binding proteins and the
@@ -27,12 +28,12 @@ if the per-read rebuild disagrees with a full `profile --catalog` run
 ## Design
 
 The catalog's value depends on whether a sample's strains are in it, so two
-bounds are scored on the same 854,484 test reads as steps 9-11:
+catalogs are scored on the same 854,484 test reads as steps 9-11:
 
-| scenario | catalog contains | genes | what it bounds |
+| scenario | catalog contains | genes | what it is |
 |---|---|---|---|
-| A | every sequence of the release: train, calib and test positives, both negative splits, the random background | 148,721 | upper: every test read's own gene is catalogued |
-| B | only what the benchmark does not score: positive.train, positive.calib, negative.train | 105,996 | lower: no test read's own gene is catalogued |
+| A | every sequence of the release: train, calib and test positives, both negative splits, the random background | 148,721 | upper bound: every test read's own gene is catalogued |
+| B | only what the benchmark does not score: positive.train, positive.calib, negative.train | 105,996 | no test read's own gene is catalogued, so no exact gene match. Not a floor: it still settles reads through conserved regions (finding 7) |
 
 - In the v10 run below, both were indexed in full (competitive mapping, as
   Cayman), and A also with the hits-only index (A_hits). The pipeline now
@@ -168,14 +169,25 @@ What the catalog settled (test reads):
    every gene has no hit, that gap will be larger than in this simulation.
 6. **The fallback barely matters when strains are catalogued** (catalog only
    0.890 vs hybrid 0.892). Its role is the uncatalogued strains (B).
-7. **B settles more than expected** (107,302 test reads, 28,743 of them
-   positives, 99.6% correctly called). They are near full-length alignments
-   at >= 97% identity to training genes of the same family. CD-HIT at 90%
-   limits identity over the whole protein, not over a 42-residue stretch.
+7. **B is not a floor: it settles reads, and almost all of them correctly**
+   (107,302 test reads, 28,743 of them positives, 99.6% correctly called).
+   The catalog's identity is 1 - NM / aligned columns, the identity of the
+   stretch a read covers, not of the whole gene. CD-HIT at 90% caps the
+   end-to-end identity of a catalog gene to a test gene at about 90%, but
+   two such genes still contain conserved windows that are >= 97% identical,
+   and a read that lands in one passes the bar. So B correctly assigns reads
+   from strains whose own gene is absent from the catalog, and the
+   "CD-HIT at 90% is below the 97% bar" argument does not hold. B is a
+   catalog with no exact gene matches. A true floor would be a catalog with
+   no homologous window at all, which for this panel probably does not
+   exist. The no-catalog line is the reference for running without
+   `--catalog`; it is not B.
+
    Because the simulation uses one codon per amino acid, nucleotide identity
-   equals protein identity here. Real strains differ synonymously and would
-   reach 97% far less often, so B's gain over no catalog (0.800 vs 0.770) is
-   optimistic. The realistic lower bound is the no-catalog line.
+   equals protein identity here. Real strains also differ at synonymous
+   sites and would reach 97% less often, so B's settled reads and its gain
+   over no catalog (0.800 vs 0.770) are probably larger than real
+   uncatalogued strains would give.
 
 ## Two bugs this benchmark found (fixed in `df87119`)
 
@@ -198,9 +210,13 @@ were in osmotool's catalog assignment, not in the approach:
 ## Caveats
 
 - A is an upper bound: the catalog holds the very strain each read came
-  from. Real catalogs hold relatives at various distances. Only the two
-  ends are scored, because the single-codon simulation cannot represent a
-  related strain's nucleotide divergence.
+  from. Real catalogs hold relatives at various distances. Only these two
+  catalogs are scored, because the single-codon simulation cannot represent
+  a related strain's nucleotide divergence.
+- B is not a lower bound (finding 7), so the mixture is an interpolation
+  between two scored catalogs, not between bounds. A overstates what a
+  catalog of relatives gives; B overstates through the single-codon
+  simulation. This benchmark does not establish which way the mixture errs.
 - A real catalog is mostly genes without an HMM hit. Here, 83% of the A
   catalog's genes have a hit, by construction. The background test reads
   cover the unrelated-gene case only through the 4,992 random background
@@ -256,8 +272,8 @@ rebuilt and benchmarked; a catalogue benchmark rerun.
    (a) is the general fix.
 2. **Report levels with a catalog.** No recalibration seems needed for the
    fallback path. The reads it sees in practice come from uncatalogued
-   strains, which is what v10's calibration reads represent, and B shows the
-   translated numbers hold. Units on none could be shown as reportable from
+   strains, which is what v10's calibration reads represent, and B (no test
+   read's own gene in the catalog) does not fall below the no-catalog numbers. Units on none could be shown as reportable from
    catalog reads (finding 3); `unit_counts.tsv` already gives their catalog
    counts.
 3. **Defaults.** `--catalog` is not the default yet. Remaining questions:

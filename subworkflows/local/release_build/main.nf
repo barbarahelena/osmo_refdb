@@ -70,8 +70,9 @@ workflow RELEASE_BUILD {
     BENCHMARK_ANNOTATESCORE(refs, families,
         OSMOTOOL_ANNOTATE_BENCHMARK.out.results.map { _meta, files -> files }.flatten().collect())
 
-    // profile --catalog on the same test reads, in two bounds: A, every sequence of the release is
-    // catalogued; B, only what the benchmark does not score. Both are indexed as the release's catalog
+    // profile --catalog on the same test reads, with two catalogs: A, every sequence of the release is
+    // catalogued (upper bound); B, only what the benchmark does not score (no test read's own gene, but
+    // not a floor: conserved regions still settle reads). Both are indexed as the release's catalog
     // is (ext.args); A is also run as profile --catalog in full on a few samples.
     BENCHMARK_CATALOGGENES(refs, families, BENCHMARK_SIMULATE_TEST.out.reads)
     catalog_sets = BENCHMARK_CATALOGGENES.out.genes_a.mix(BENCHMARK_CATALOGGENES.out.genes_b)
