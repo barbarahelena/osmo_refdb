@@ -594,5 +594,4 @@ attribution to the sources it is built from:
   data at [zenodo.org/records/10473258](https://zenodo.org/records/10473258).
 
 Each release's `PROVENANCE.json` records both licences and these sources under
-`licence`, so they travel with the data. To cite osmo_refdb itself, see
-`CITATION.cff` (GitHub's "Cite this repository" reads it).
+`licence`, so they travel with the data.

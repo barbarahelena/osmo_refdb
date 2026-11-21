@@ -210,8 +210,7 @@ def licence_record(has_catalogs: bool) -> dict:
         "release": {
             "licence": "CC-BY-4.0",
             "url": "https://creativecommons.org/licenses/by/4.0/",
-            "attribution": "Reuse of the release needs attribution to the sources below, and a "
-                           "citation of osmo_refdb (CITATION.cff in the repository).",
+            "attribution": "Reuse of the release needs attribution to the sources below.",
             "sources": sources},
     }
 
