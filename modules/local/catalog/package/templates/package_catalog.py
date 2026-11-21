@@ -128,9 +128,13 @@ def main() -> None:
     # provenance: the build machine's paths mean nothing in a release
     meta_path = out / "catalog.json"
     meta = json.loads(meta_path.read_text())
+    release_name = args.release_name or args.release.name
     meta.update({
         "name": args.name,
-        "osmo_refdb_release": args.release_name or args.release.name,
+        # build-catalog wrote the name of the directory it was given, which under Nextflow is the
+        # staged copy ("db"); the release's own name replaces it
+        "release": release_name,
+        "osmo_refdb_release": release_name,
         "packaged": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "source": args.source,
         "source_url": args.source_url,
