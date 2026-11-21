@@ -5,7 +5,7 @@
 // its per-read rebuild against. ext.args: the read benchmark's DIAMOND filters, for the verify runs.
 process BENCHMARK_CATALOGMAP {
     // calls: osmotool profile (bwa-mem3, diamond, hmmsearch)
-    container 'docker.io/barbarahelena/osmotool:0.9.0'
+    container 'docker.io/barbarahelena/osmotool:0.10.0'
     label 'process_medium'
     tag "${meta.id}"
     input:

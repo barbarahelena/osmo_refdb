@@ -115,6 +115,14 @@ def build_checks(rel: Path, families: list[str], markers: list[str], c: Checks) 
     for f in REQUIRED:
         c.require((rel / f).exists(), f"missing {f}")
     c.require(any((rel / "catalogs").glob("*/catalog.json")), "no catalog under catalogs/")
+    # a shipped catalog names the release it was built for, as PROVENANCE.json does (not the
+    # directory Nextflow staged the release under)
+    prov = rel / "PROVENANCE.json"
+    if prov.exists():
+        name = json.loads(prov.read_text()).get("release")
+        for cj in sorted((rel / "catalogs").glob("*/catalog.json")):
+            got = json.loads(cj.read_text()).get("release")
+            c.require(got == name, f"{cj.relative_to(rel)}: release is {got!r}, PROVENANCE.json says {name!r}")
 
     if (rel / "hmms/osmo_refdb.hmm").exists():
         ga = hmm_cutoffs(rel / "hmms/osmo_refdb.hmm")

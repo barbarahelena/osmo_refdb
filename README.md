@@ -570,3 +570,31 @@ release asset or Zenodo record) that `osmotool` users download and point
 Download the full release (databases + cutoffs/exclusion files + full
 build/benchmark provenance) from that record. Cite this DOI when using
 `osmotool` with this database.
+
+## Licence and citations
+
+The code in this repository is MIT-licensed (`LICENSE`).
+
+A release (the DIAMOND database, HMMs, reference sequences, gene catalog and
+results that `osmotool` downloads) is not code, and is licensed separately,
+under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Reuse needs
+attribution to the sources it is built from:
+
+- **UniProt** for the reference sequences, and through them the HMMs and the
+  DIAMOND database: The UniProt Consortium, *UniProt: the Universal Protein
+  Knowledgebase in 2025*, Nucleic Acids Res 53(D1):D609-D617 (2025),
+  [doi:10.1093/nar/gkae1010](https://doi.org/10.1093/nar/gkae1010).
+- **GMGC** for the gene catalog under `catalogs/`: Coelho et al., *Towards the
+  biogeography of prokaryotic genes*, Nature 601:252-256 (2022),
+  [doi:10.1038/s41586-021-04233-4](https://doi.org/10.1038/s41586-021-04233-4).
+- **The prevalence-filtered catalogs** the gene set is taken from: Ducarmon et
+  al., *Cayman enables large-scale analysis of gut microbiome
+  carbohydrate-active enzyme repertoires*, Nat Microbiol 11:1739-1753 (2026),
+  [doi:10.1038/s41564-026-02318-2](https://doi.org/10.1038/s41564-026-02318-2);
+  data at [zenodo.org/records/10473258](https://zenodo.org/records/10473258).
+
+Each release's `PROVENANCE.json` records both licences and these sources under
+`licence`, so they travel with the data.
+
+`CITATIONS.md` lists the tools and databases the pipeline uses, with the
+references to cite for them.
