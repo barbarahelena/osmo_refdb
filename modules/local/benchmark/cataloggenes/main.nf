@@ -4,8 +4,10 @@
 //   A  catalogued      every sequence of the release (train, calib and test positives, both negative
 //                      splits, the random background): every test read's own gene is in it
 //   B  not catalogued  only what the benchmark does not score (positive.train, positive.calib,
-//                      negative.train): CD-HIT at 90% keeps each <= ~90% identical to a test gene,
-//                      below profile --catalog's 97% bar
+//                      negative.train): no test read's own gene is in it, so no exact gene match.
+//                      Not a lower bound: identity is measured over the stretch a read covers, so
+//                      genes <= ~90% identical end to end (CD-HIT) still share windows >= 97%
+//                      identical, and B settles reads through them
 // Checks first that the test constructs' CDS are the back-translated test proteins.
 process BENCHMARK_CATALOGGENES {
     // calls: python + pyyaml (simulate_reads.py's protein_to_dna)
