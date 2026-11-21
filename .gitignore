@@ -4,6 +4,7 @@ __pycache__/
 .DS_Store
 osmotool_src/
 cache/
+.claude/
 .venv-nacl/
 bin/*/archive
 
