@@ -5,7 +5,7 @@ process OSMOTOOL_PROFILE {
     tag "${meta.id}"
     label 'process_high'
 
-    container 'docker.io/barbarahelena/osmotool:0.9.0'
+    container 'docker.io/barbarahelena/osmotool:0.10.0'
 
     input:
     tuple val(meta), path(reads)   // [R1, R2]

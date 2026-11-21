@@ -7,7 +7,7 @@ process BACDIVE_PROTEINS {
     label 'process_medium'
 
     // calls: prodigal, hmmsearch, awk, find, xargs, sort, gzip
-    container 'docker.io/barbarahelena/osmotool:0.9.0'
+    container 'docker.io/barbarahelena/osmotool:0.10.0'
 
     input:
     val(chunk)                                          // i/K: every K-th genome from the i-th
