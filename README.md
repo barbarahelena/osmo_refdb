@@ -571,7 +571,7 @@ Download the full release (databases + cutoffs/exclusion files + full
 build/benchmark provenance) from that record. Cite this DOI when using
 `osmotool` with this database.
 
-## Licence and citation
+## Licence and citations
 
 The code in this repository is MIT-licensed (`LICENSE`).
 
@@ -595,3 +595,6 @@ attribution to the sources it is built from:
 
 Each release's `PROVENANCE.json` records both licences and these sources under
 `licence`, so they travel with the data.
+
+`CITATIONS.md` lists the tools and databases the pipeline uses, with the
+references to cite for them.
