@@ -127,7 +127,8 @@ families:
   - name: ectA
     report_level: gene
     description: >
-      L-2,4-diaminobutyric acid acetyltransferase (ectoine synthesis step 1).
+      L-2,4-diaminobutyric acid acetyltransferase (ectoine synthesis step 2,
+      after EctB).
       Also includes ectA1/ectA2 (real, reviewed numbered-paralog gene
       symbols, same class of gap as murB1/murB2 -- see issue #8).
 
@@ -155,7 +156,8 @@ families:
   - name: ectB
     report_level: gene
     description: >
-      Diaminobutyric acid aminotransferase (ectoine synthesis step 2). Also
+      Diaminobutyric acid aminotransferase (ectoine synthesis step 1, before
+      EctA). Also
       includes ectB1/ectB2 (real, reviewed numbered-paralog gene symbols,
       same class of gap as murB1/murB2 -- see issue #8).
     positive_query: "(gene:ectB OR gene:ectB1 OR gene:ectB2) AND taxonomy_id:2"
