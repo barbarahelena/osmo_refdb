@@ -2205,6 +2205,23 @@ are built (`hpc/containers/README.md`).
 Found on the way: `environment.yml` had no classic `bwa`, which the full catalog index needs (added), and
 the simulated reads of every family depended on all families before it (see the read-simulation entry above).
 
+### osmotool 0.10.0: the catalog flags renamed (branch `osmotool-0.10-flags`)
+
+osmotool 0.10.0 makes the catalog the default mode of `profile`. It replaced `--no_catalog` with
+`--translated_only` and split `--catalog NAME|DIR` into `--habitat NAME` (one of the release's
+`catalogs/`) and `--catalog_dir DIR` (a catalog built locally). It also refuses a database that ships
+no catalog unless `--translated_only` is given. `run_benchmark.sh` looked for `--no_catalog` in
+`profile --help`, found nothing and passed no flag, so `BENCHMARK_READS_CALIB` failed on the
+benchmark's catalog-less train-only database.
+
+- `run_benchmark.sh` passes `--translated_only`, falling back to `--no_catalog` with osmotool 0.9.x.
+- `OSMOTOOL_PROFILE_RECALL`: `--translated_only`. `OSMOTOOL_PROFILE_RECALL_CATALOG` and
+  `BENCHMARK_CATALOGMAP`: `--catalog_dir`. `OSMOTOOL_PROFILE` (`-entry profile_samples`): `--habitat`.
+- The README lists the three options and says to check `profile --help` against the pipeline's flags
+  whenever the osmotool image is bumped.
+
+No benchmark numbers change: each call runs in the same mode as before, under the new flag names.
+
 ### Annotate report levels, decided on the calibration split (branch `annotate-report-levels`)
 
 annotate reported all 44 families, and seven score F1 below 0.5 on the test split. Dropping them on

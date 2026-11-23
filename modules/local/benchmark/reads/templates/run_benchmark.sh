@@ -102,7 +102,12 @@ fi
 # Translated search only: these reads score DIAMOND and the cascade, which a profile with a catalog
 # uses for the reads the catalog does not settle (the catalog benchmark scores the catalog). osmotool
 # uses a release's catalog by default; the benchmark's database ships none, and this says so.
-if osmotool profile --help 2>/dev/null | grep -q -- "--no_catalog"; then
+# osmotool >= 0.10.0 calls it --translated_only (and refuses a catalog-less db without it);
+# 0.9.x called it --no_catalog.
+PROFILE_HELP="$(osmotool profile --help 2>/dev/null || true)"
+if grep -q -- "--translated_only" <<< "${PROFILE_HELP}"; then
+    CASCADE_ARGS+=(--translated_only)
+elif grep -q -- "--no_catalog" <<< "${PROFILE_HELP}"; then
     CASCADE_ARGS+=(--no_catalog)
 fi
 

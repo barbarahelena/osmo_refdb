@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
 catalog_benchmark.py -- score `osmotool profile --catalog` on the release's
-simulated test reads, in two bounding scenarios.
+simulated test reads, with two catalogs.
 
 A catalog changes which reads reach translated search, so its value depends
-on whether a sample's strains are in the catalog. Two bounds are scored on
+on whether a sample's strains are in the catalog. Two catalogs are scored on
 the same test reads as the read benchmark:
 
   A  catalogued      the catalog holds every sequence of the release: train,
@@ -13,21 +13,31 @@ the same test reads as the read benchmark:
                      the upper bound, where the catalog settles what it can.
   B  not catalogued  the catalog holds only what the benchmark does not score
                      (positive.train, positive.calib, negative.train). No test
-                     read's own gene is in it; CD-HIT at 90% keeps every
-                     catalog gene <= ~90% identical to a test gene, below the
-                     97% bar, so B should settle (almost) nothing and
-                     reproduce the translated-search numbers. Any test read B
-                     settles anyway is reported.
+                     read's own gene is in it, so no read has an exact gene
+                     match. B is not a lower bound: it still settles reads
+                     through conserved regions of homologous genes.
 
-Both are indexed as the release's catalog is (build-catalog --index
+Why B settles reads. The catalog's identity is 1 - NM / aligned columns: the
+identity of the stretch the read covers, not of the whole gene. CD-HIT at 90%
+keeps every catalog gene at most about 90% identical, end to end, to a test
+gene, but two such genes still contain conserved windows that are >= 97%
+identical, and a read that lands in one passes the 97% bar. The reads B
+settles are mostly called as the right family (settled_reads.tsv): B assigns
+reads from strains whose own gene is absent from the catalog. A catalog with
+no homologous window at all would be a true floor; for this panel it probably
+does not exist. The reference for "no catalog" is the diamond_cascade line.
+
+Both catalogs are indexed as the release's catalog is (build-catalog --index
 neighbours: the genes with an HMM hit and the genes close to them).
 
 The catalog genes are the release's proteins back-translated exactly as the
 read constructs are (BENCHMARK_CATALOGGENES), so a test read matches its own
 gene base for base. That same choice makes simulated nucleotide identity
-track protein identity, which real strains do not: in B it is harmless (no
-catalog gene reaches 97%), but it is why only these two bounds are scored,
-not a "related strain" scenario.
+equal protein identity, which real strains do not match: they also differ at
+synonymous sites, so their windows reach 97% less often. This applies to B
+too, whose settled reads are therefore more than real uncatalogued strains
+would give. It is also why only these two catalogs are scored, not a "related
+strain" scenario.
 
 Per read, the hybrid call is the catalog's decision when the catalog settles
 the read (a unique call counts, a drop or an ambiguous read is no call) and
@@ -45,6 +55,9 @@ read benchmark):
 
 mixture.tsv: f1_all per reporting unit for samples where a fraction f of the
 reads comes from catalogued strains (counts mixed linearly between A and B).
+It interpolates between the two scored catalogs; neither end is a bound
+(A holds each read's own gene, where real catalogs hold relatives; B settles
+reads through conserved windows, see above).
 
 Usage:
   python catalog_benchmark.py --metrics-module compute_metrics.py --reads reads \\

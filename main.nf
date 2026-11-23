@@ -54,6 +54,6 @@ workflow profile_samples {
         .splitCsv(header: true)
         .map { row -> tuple([id: row.id], [file(row.r1, checkIfExists: true), file(row.r2, checkIfExists: true)]) }
     db    = files("${params.db}/*", checkIfExists: true)   // a release folder, staged as osmotool's DATABASE
-    // with the release's catalog and the index it ships (--catalog and --keep_aln: conf/modules.config)
+    // with the release's catalog and the index it ships (--habitat and --keep_aln: conf/modules.config)
     OSMOTOOL_PROFILE(samples, db)
 }
