@@ -6,8 +6,7 @@
 # these genes never sit in the same DIAMOND db as the osmo families: if they
 # did, they would compete with osmo families in select_best_hits'
 # best-alignment contest and shift those families' benchmarked
-# precision/recall. See README "Marker genes for copies-per-genome
-# normalisation". --markers_file points at another file.
+# precision/recall. --markers_file points at another file.
 #
 # Same schema as families.yaml (see its header for every field).
 #

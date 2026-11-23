@@ -50,7 +50,7 @@ def ints(row):
 
 @unittest.skipIf(cm is None, "compute_metrics.py's packages are not installed")
 class V10Replay(unittest.TestCase):
-    """The audit: without the bootstrap and the gain floor, the decision is v10's."""
+    """The audit: without the bootstrap and the minimum gain, the decision is v10's."""
 
     def decide(self, min_gain):
         summary = [ints(r) for r in read_tsv(DATA / "summary.tsv")]
@@ -80,7 +80,7 @@ class V10Replay(unittest.TestCase):
             for k in o:
                 self.assertEqual(str(cascade[o["family"]][k]), o[k], f"{o['family']} {k}")
 
-    def test_gain_floor_on_v10(self):
+    def test_min_cascade_gain_on_v10(self):
         _, cascade, sensitivity = self.decide(0.01)
         switched = sorted(r["unit"] for r in sensitivity if r["cascade_differs"] == "yes")
         self.assertEqual(switched, ["galE", "gshA", "opu_permease"])

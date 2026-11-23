@@ -24,7 +24,7 @@ gene, but two such genes still contain conserved windows that are >= 97%
 identical, and a read that lands in one passes the 97% bar. The reads B
 settles are mostly called as the right family (settled_reads.tsv): B assigns
 reads from strains whose own gene is absent from the catalog. A catalog with
-no homologous window at all would be a true floor; for this panel it probably
+no homologous window at all would be a true lower bound; for this panel it probably
 does not exist. The reference for "no catalog" is the diamond_cascade line.
 
 Both catalogs are indexed as the release's catalog is (build-catalog --index

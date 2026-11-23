@@ -87,7 +87,7 @@ workflow RELEASE_BUILD {
 
     // profile --catalog on the same test reads, with two catalogs: A, every sequence of the release is
     // catalogued (upper bound); B, only what the benchmark does not score (no test read's own gene, but
-    // not a floor: conserved regions still settle reads). Both are indexed as the release's catalog
+    // not a lower bound: conserved regions still settle reads). Both are indexed as the release's catalog
     // is (ext.args); A is also run as profile --catalog in full on a few samples.
     BENCHMARK_CATALOGGENES(refs, families, BENCHMARK_SIMULATE_TEST.out.reads)
     catalog_sets = BENCHMARK_CATALOGGENES.out.genes_a.mix(BENCHMARK_CATALOGGENES.out.genes_b)

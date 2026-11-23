@@ -2283,8 +2283,8 @@ support (`docs/validation_reports/decision_robustness.md`).
   proteins, in pure Python (1000 resamples of v10's 38,558 calibration proteins: 7.2 s, so no numpy
   in that container).
 - **Cascade:** on only for a point gain of at least `--profile_min_cascade_gain` (0.01) that is
-  positive in at least `--profile_decision_support` (0.9) of the paired resamples. On v10's calibration tables the floor alone
-  switches galE (+0.001), gshA (+0.002) and opu_permease (+0.006) off.
+  positive in at least `--profile_decision_support` (0.9) of the paired resamples. On v10's calibration tables the minimum gain
+  alone switches galE (+0.001), gshA (+0.002) and opu_permease (+0.006) off.
 - **Level:** `f1_all` at least the mode's threshold (0.5) on the point estimate and in 0.9 of the
   resamples. Clearing
   on the point estimate only gives `none` with the new reason `unstable`. In annotate on v10's

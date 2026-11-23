@@ -171,7 +171,7 @@ def main() -> None:
     positive_paths = [args.refs / f"{fam['name']}.positive.faa" for fam in families]
     missing = [p.name for p in positive_paths if not p.exists()]
     if missing:
-        raise SystemExit(f"ERROR: positives missing ({', '.join(missing[:5])}...): run steps 01-01e first")
+        raise SystemExit(f"ERROR: positives missing ({', '.join(missing[:5])}...): run the fetch, purity, length and RefSeq steps first")
     flagged_ids = flag_similar_to_positives(records, positive_paths, args.threshold, args.threads)
     kept = [r for r in records if r[0] not in flagged_ids]
     flagged = [r for r in records if r[0] in flagged_ids]

@@ -11,12 +11,12 @@ cutoffs. The current model was trained on **v10** and must be used with
 
 ## Files
 
-| file | role |
-|---|---|
-| `features.py` | Builds the features from `<prefix>.gene_counts.tsv` / `.systems.tsv`. Stdlib only; osmotool's reference. |
-| `train.py` | Training table, hyperparameter search, nested CV, ablations, final model, intervals, salt-in detector, `feature_schema.json`. |
-| `explain.py` | SHAP importance, stability, interactions, ridge reference, plots, and the README shipped with the model. |
-| `predict.py` | Reference inference on annotate output (osmotool's test oracle). |
+| file                         | role                                                                                                                                                                      |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `features.py`              | Builds the features from `<prefix>.gene_counts.tsv` / `.systems.tsv`. Stdlib only; osmotool's reference.                                                              |
+| `train.py`                 | Training table, hyperparameter search, nested CV, ablations, final model, intervals, salt-in detector, `feature_schema.json`.                                           |
+| `explain.py`               | SHAP importance, stability, interactions, ridge reference, plots, and the README shipped with the model.                                                                  |
+| `predict.py`               | Reference inference on annotate output (osmotool's test oracle).                                                                                                          |
 | `../package_nacl_model.py` | Copies the build into `<release>/nacl_model/` with checksums and `self_check.json`: the model's raw output for 5 training genomes, which osmotool recomputes on load. |
 
 ## Running
@@ -40,11 +40,13 @@ On macOS, set `MPLCONFIGDIR` to a writable directory if `~/.matplotlib` is not w
 ## Design
 
 **Features** (46). Everything comes from the annotate output, with no taxonomy:
+
 - `total_proteins`, `gc`, `n_contigs`;
 - the `raw_count` of the 43 osmo families that occur in the training set (`mrpA_mrpB_fused` and
   `opuBC` are zero in every Set A strain).
 
 Tested and left out, because they add nothing in genus- or family-blocked CV (`cv_results.tsv`):
+
 - `genome_mb`: also, osmotool counts N's in `genome_bp` and the training data does not;
 - the breadth summaries `n_families_present` and `total_osmo_copies`;
 - the `systems.tsv` calls.
@@ -55,6 +57,7 @@ Leaving them out also stops correlated features from splitting the SHAP credit.
 strains are not in the training set; they are covered by a separate warning (see below).
 
 Tested and not adopted:
+
 - a sqrt target: higher Spearman, higher RMSE;
 - 1/sqrt(n_genus) weights;
 - dropping the 326 censored labels.
@@ -64,10 +67,12 @@ None of these changed the results meaningfully.
 **Algorithm.** XGBoost regression trees; the hyperparameters come from a random search scored by
 genus-blocked CV. XGBoost fits about as well as sklearn's HistGradientBoosting (the existing CV in
 `analyze_extended.py`), and clearly better than ridge. It was chosen for two practical reasons:
+
 - it computes exact TreeSHAP itself (`pred_contribs`), so osmotool needs no `shap` package;
 - it stores the model as portable JSON instead of a pickle.
 
 **Validation.** Nested CV:
+
 - outer loop: 5 folds blocked by genus, and separately by taxonomic family;
 - inner loop: the hyperparameter search is rerun within each training fold.
 
@@ -81,23 +86,25 @@ features) sets `flags=salt_in_like` when p ≥ 0.5.
 
 ## Results (v10, 2026-11-15)
 
-| | genus-blocked | family-blocked |
-|---|---|---|
-| Spearman | 0.686 | 0.641 |
-| MAE (% NaCl) | 2.52 | 2.73 |
-| R² | 0.49 | 0.39 |
-| HGB baseline (Spearman) | 0.681 | 0.635 |
-| ridge baseline (Spearman) | 0.639 | 0.620 |
-| baseline model, total_proteins + gc only, own nested search (Spearman / R²) | 0.228 / 0.06 | 0.111 / −0.03 |
-| 80% interval coverage | 80.0% (calibrated on it) | 76.3% |
+|                                                                              | genus-blocked            | family-blocked |
+| ---------------------------------------------------------------------------- | ------------------------ | -------------- |
+| Spearman                                                                     | 0.686                    | 0.641          |
+| MAE (% NaCl)                                                                 | 2.52                     | 2.73           |
+| R²                                                                          | 0.49                     | 0.39           |
+| HGB baseline (Spearman)                                                      | 0.681                    | 0.635          |
+| ridge baseline (Spearman)                                                    | 0.639                    | 0.620          |
+| baseline model, total_proteins + gc only, own nested search (Spearman / R²) | 0.228 / 0.06             | 0.111 / −0.03 |
+| 80% interval coverage                                                        | 80.0% (calibrated on it) | 76.3%          |
 
 - **Range compression.** Per bin of the true value (genus-blocked):
+
   - strains with ≤1% average a prediction of 3.1%;
   - strains with >15% (mean 21.9%) average 13.2%.
 
   So the model works as a ranking plus a rough level. It does not report a tolerance class,
   because one derived from the prediction would be wrong for most low and extreme strains.
 - **What it weighs** (mean |SHAP|, in % NaCl):
+
   - `betL` (0.85; more copies → higher);
   - `total_proteins` (0.58; larger genome → lower);
   - `kdpA` (0.48; present → lower);
@@ -112,6 +119,7 @@ features) sets `flags=salt_in_like` when p ≥ 0.5.
 - **Salt-in strains** (72 with a label): median true 29.6%, median prediction 4.9%. This is out
   of domain, and the detector reaches precision 0.87 and recall 0.96 in genus-blocked CV. Its 12
   false alarms are:
+
   - 4 non-halophilic archaea (Pyrococcus, Palaeococcus, Staphylothermus, Archaeoglobus);
   - anaerobic Firmicutes (Sporosalibacterium, Fusibacter, Alkaliphilus, Natranaerobius);
   - Rubrobacter (2);
@@ -123,25 +131,13 @@ features) sets `flags=salt_in_like` when p ≥ 0.5.
 - **Reproducibility.** Refitting with the same seed gives a byte-identical model.
 - **Test genomes** (osmotool `test_genomes`; their genera are in the training data):
 
-  | genome | prediction |
-  |---|---|
-  | Collinsella | 1.8% |
-  | E. faecalis | 5.6% |
-  | E. coli | 7.2% |
-  | B. subtilis | 8.2% |
-  | L. monocytogenes | 10.7% |
-  | S. aureus | 11.1% |
-  | H. elongata | 13.3% |
-  | H. volcanii | flagged `salt_in_like` |
-
-## osmotool (next step)
-
-Integration needs these pieces:
-- **Resolver:** `RefDb.nacl_model` resolved from `<db>/nacl_model/`, following `_resolve_markers`
-  in `src/osmotool/utils.py`.
-- **Activation:** `annotate --predict_nacl` (or a `predict-nacl` subcommand on existing annotate
-  output), writing `<prefix>.nacl_prediction.tsv` with the columns of `predict.py`.
-- **Dependency:** xgboost as an optional extra `osmotool[predict]`, imported lazily.
-- **Version check:** refuse (or warn) when `feature_schema.json:refdb_release` does not match the
-  database.
-- **Test:** parity with `predict.py` on `test_genomes`.
+  | genome           | prediction               |
+  | ---------------- | ------------------------ |
+  | Collinsella      | 1.8%                     |
+  | E. faecalis      | 5.6%                     |
+  | E. coli          | 7.2%                     |
+  | B. subtilis      | 8.2%                     |
+  | L. monocytogenes | 10.7%                    |
+  | S. aureus        | 11.1%                    |
+  | H. elongata      | 13.3%                    |
+  | H. volcanii      | flagged `salt_in_like` |

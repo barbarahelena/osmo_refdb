@@ -29,17 +29,17 @@ class LevelTest(unittest.TestCase):
 
 
 class CascadeTest(unittest.TestCase):
-    def test_gain_above_floor_and_supported(self):
+    def test_gain_above_minimum_and_supported(self):
         self.assertTrue(rr.cascade_supported(0.039, 0.97, 0.01, 0.9))
 
-    def test_gain_above_floor_unsupported(self):
+    def test_gain_above_minimum_unsupported(self):
         self.assertFalse(rr.cascade_supported(0.027, 0.8, 0.01, 0.9))
 
-    def test_gain_supported_below_floor(self):
+    def test_gain_supported_below_minimum(self):
         # opu_permease on v10's calibration reads: +0.006
         self.assertFalse(rr.cascade_supported(0.006, 1.0, 0.01, 0.9))
 
-    def test_gain_at_floor(self):
+    def test_gain_at_minimum(self):
         self.assertTrue(rr.cascade_supported(round(0.645 - 0.635, 3), 0.95, 0.01, 0.9))
 
     def test_bare_sign(self):

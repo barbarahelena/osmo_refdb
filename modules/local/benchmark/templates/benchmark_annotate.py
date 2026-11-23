@@ -3,7 +3,7 @@
 benchmark_annotate.py — benchmark `osmotool annotate` on held-out
 full-length proteins.
 
-The read benchmark (steps 9-11) scores `osmotool profile`. Annotate mode
+The read benchmark (BENCHMARK_SIMULATE, BENCHMARK_READS, BENCHMARK_METRICS) scores `osmotool profile`. Annotate mode
 works differently: full-length ORFs, hmmsearch --cut_ga against each
 family's calibrated GA cutoff (or DIAMOND blastp gated by the per-family
 bitscore cutoffs from 08b), best hit per protein, decoy models competing and

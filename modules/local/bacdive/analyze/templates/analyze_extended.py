@@ -322,7 +322,7 @@ def main():
             null_rows.append({'kind': kind, 'panel': i, **{k: res[k][i] for k in res}})
     pd.DataFrame(null_rows).to_csv(os.path.join(args.out_dir, 'null_panels.tsv'), sep='\t', index=False)
     print('\n  p is one-sided: the share of random panels scoring at least as high as')
-    print('  the osmo panel (+1 smoothed, so the floor is 1/(n_panels+1)).')
+    print('  the osmo panel (+1 smoothed, so the smallest possible p is 1/(n_panels+1)).')
     print('  Pool panels overlap (44 drawn from a fixed pool), so the null is somewhat')
     print('  narrower than independent draws from all of Pfam would give.')
 
