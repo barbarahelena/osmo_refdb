@@ -10,7 +10,8 @@ bitscore cutoffs from 08b), best hit per protein, decoy models competing and
 then dropped. None of that is exercised by simulated reads, so it gets its
 own benchmark here, at the protein level.
 
-Evaluation set, all unseen by both the models and the cutoff calibration:
+Evaluation set, --split test (the default; results/annotate/), all unseen
+by both the models and the cutoff calibration:
   positives        every family's refs/<family>.positive.test.faa
                    (split_train_test.py: not in positive.train, which
                    builds the HMMs and DIAMOND db, and not in
@@ -20,6 +21,15 @@ Evaluation set, all unseen by both the models and the cutoff calibration:
                    is what calibrated the cutoffs)
   background       refs/random_background.faa (01f: random bacterial
                    proteins without any panel Pfam domain)
+
+--split calib (results/annotate_calib/) scores positive.calib against
+negative.train instead: the calibration split, the same sequences the read
+benchmark's calibration reads are simulated from. It decides what annotate
+reports (--report-levels-out: osmo_refdb.annotate_report_levels.tsv), with
+the rule profile mode's levels are decided by (report_rule.py), so no
+report level rests on a test sequence. These are the sequences the GA and
+DIAMOND cutoffs were calibrated on, so its numbers are in-sample for the
+cutoffs and optimistic; the test split is the estimate to quote.
 
 A negative or background protein whose accession is a curated positive of
 ANY family (train, calib or test) is left out: sibling families draw their
@@ -36,19 +46,36 @@ colocalise and plays no part.
 False positives for family F are counted as in compute_metrics.py:
   fp                  F's own hard negatives called F     -> precision, f1
   fp_cross            other families' positives called F  -> precision_panel
-  fp_other_negatives  other families' hard negatives called F (reported only)
-  fp_background       background proteins called F (reported only, plus
+  fp_other_negatives  other families' hard negatives called F
+  fp_all              fp + fp_cross + fp_other_negatives   -> precision_all, f1_all
+  fp_background       background proteins called F (in no precision, plus
                       background_fp_per_10k)
+f1_all is the report-level rule's metric, as in profile mode: it counts the
+same proteins at gene and group level, where per-gene precision leaves out
+the siblings' hard negatives that group precision counts.
+
+Average precision (test split, with osmotool annotate --keep_aln's
+alignments in --calls-from): per family and method, the ranking by
+bit score of the proteins whose best hit is the family, over the family's
+positives and its own hard negatives (report_rule.ap_row). The best hit is
+taken as osmotool takes it, from every alignment it kept: hmm, hmmsearch
+--cut_ga, so the ranking only reaches down to the family's GA; diamond,
+every DIAMOND alignment before the per-family bit-score cutoffs, so it
+reaches below them. verification.tsv checks those best hits against
+osmotool's own calls.
 
 Usage:
   python benchmark_annotate.py --refs releases/v10/refs \\
       --release releases/v10 --families families.yaml \\
-      --out releases/v10/results/annotate [--methods hmm diamond]
+      --out releases/v10/results/annotate [--methods hmm diamond] [--split calib]
 Output (in --out):
   summary.tsv           per family x method
   summary_by_group.tsv  per paralog_group x method (group scored as one unit)
   overall.tsv           micro/macro totals and background rate per method
   calls.<method>.tsv    one row per evaluated protein: truth and call
+  average_precision.tsv, ap_scores.<method>.tsv, verification.tsv
+                        test split with kept alignments: AP per family and
+                        method, the proteins it ranks, the best-hit check
 """
 
 from __future__ import annotations
@@ -62,7 +89,10 @@ from pathlib import Path
 
 import yaml
 
+import report_rule
+
 RANDOM_BG_FASTA = "random_background.faa"
+NEGATIVE_SPLIT = {"test": "test", "calib": "train"}   # positives' split -> its negatives'
 
 
 def parse_fasta(path: Path) -> list[tuple[str, str]]:
@@ -90,8 +120,11 @@ def accession_of(header: str) -> str:
     return parts[1] if len(parts) >= 2 else header.split()[0]
 
 
-def build_eval_set(refs: Path, families: list[str]) -> tuple[list[dict], dict[str, int]]:
-    """Assemble the evaluation proteins. Returns (rows, n_dropped_by_kind)."""
+def build_eval_set(refs: Path, families: list[str],
+                   split: str = "test") -> tuple[list[dict], dict[str, int]]:
+    """Assemble the evaluation proteins: positive.<split> and their hard
+    negatives (negative.test, or negative.train for calib), and the
+    background. Returns (rows, n_dropped_by_kind)."""
     curated_positive: set[str] = set()
     for family in families:
         for header, _ in parse_fasta(refs / f"{family}.positive.faa"):
@@ -105,16 +138,19 @@ def build_eval_set(refs: Path, families: list[str]) -> tuple[list[dict], dict[st
                      "accession": accession_of(header), "seq": seq.rstrip("*")})
 
     for family in families:
-        pos_path = refs / f"{family}.positive.test.faa"
-        if not (refs / f"{family}.positive.calib.faa").exists() and pos_path.exists():
+        pos_path = refs / f"{family}.positive.{split}.faa"
+        if split == "test" and not (refs / f"{family}.positive.calib.faa").exists() and pos_path.exists():
             print(f"[{family}] WARNING: no positive.calib split -- this family's "
                   f"cutoffs were calibrated on the positives scored here",
                   file=sys.stderr)
+        if not pos_path.exists():
+            print(f"[{family}] WARNING: no positive.{split} split, family has no "
+                  f"positives in this benchmark", file=sys.stderr)
         for header, seq in parse_fasta(pos_path):
             add("positive", family, header, seq)
-        neg_path = refs / f"{family}.negative.test.faa"
+        neg_path = refs / f"{family}.negative.{NEGATIVE_SPLIT[split]}.faa"
         if not neg_path.exists():
-            print(f"[{family}] WARNING: no negative.test split, family has no "
+            print(f"[{family}] WARNING: no negative.{NEGATIVE_SPLIT[split]} split, family has no "
                   f"hard negatives in this benchmark", file=sys.stderr)
         for header, seq in parse_fasta(neg_path):
             if accession_of(header) in curated_positive:
@@ -151,7 +187,7 @@ def run_annotate(release: Path, proteins: Path, out_prefix: Path, method: str,
     write_dummy_assembly(dummy)
     cmd = ["osmotool", "annotate", str(release), str(dummy),
            "--proteins", str(proteins), "--method", method,
-           "--out_prefix", str(out_prefix), "--threads", str(threads)]
+           "--out_prefix", str(out_prefix), "--threads", str(threads), "--keep_aln"]
     log_path = Path(str(out_prefix) + ".log")
     with open(log_path, "w") as log:
         subprocess.run(cmd, check=True, stdout=log, stderr=subprocess.STDOUT)
@@ -222,6 +258,8 @@ def score(rows: list[dict], calls: dict[str, str], members: set[str],
     precision = ratio(tp, tp + fp)
     precision_panel = ratio(tp, tp + fp + fp_cross)
     recall = ratio(tp, tp + fn)
+    fp_all = fp + fp_cross + fp_other_neg
+    precision_all = ratio(tp, tp + fp_all)
     return {
         "n_positive": tp + fn, "n_hard_negative": n_neg,
         "tp": tp, "fn": fn, "fp": fp, "fp_cross": fp_cross,
@@ -234,7 +272,172 @@ def score(rows: list[dict], calls: dict[str, str], members: set[str],
         "background_fp_per_10k": (round(fp_bg / n_background * 1e4, 2)
                                   if n_background else ""),
         "within_group_swaps": swaps,
+        # added after v10, as in compute_metrics.py: the report-level rule's metric
+        "fp_all": fp_all, "precision_all": r3(precision_all),
+        "f1_all": r3(f1_of(precision_all, recall)),
     }
+
+
+# ---- the report levels (calibration split)
+
+MANIFEST_COLUMNS = [
+    "unit", "report_level", "members", "paralog_group", "method",
+    "reason", "reason_detail", "rule_metric", "threshold", "n_eval_positives", "min_eval_positives",
+    "tp", "fp_all", "fn", "precision_all", "recall", "f1_all", "f1_all_gene", "f1_all_group",
+]
+
+
+def _value(row: dict | None, metric: str) -> float:
+    """A summary row's metric as a number; no row, or no calls, counts as 0."""
+    return float(row[metric]) if row and row[metric] != "" else 0.0
+
+
+def decide_levels(fam_cfg: list[dict], gene_rows: dict[str, dict], group_rows: dict[str, dict],
+                  method: str, min_value: float, min_n: int, metric: str = "f1_all") -> list[dict]:
+    """One manifest row per reporting unit (a paralog group reported as a
+    group, else a family), by report_rule.rule_levels on the calibration
+    split's rows of one method. families.yaml has no annotate report level
+    and no annotate scope, so every level here is the rule's."""
+    def cell(row, key):
+        return "NA" if not row or row[key] == "" else str(row[key])
+
+    def counts(row):
+        return {k: (row or {}).get(k, "") for k in ("tp", "fp_all", "fn", "precision_all", "recall", "f1_all")}
+
+    blocks, seen = [], set()
+    for fam in fam_cfg:
+        g = fam.get("paralog_group") or ""
+        if not g:
+            blocks.append(([fam["name"]], ""))
+        elif g not in seen:
+            seen.add(g)
+            blocks.append(([f["name"] for f in fam_cfg if f.get("paralog_group") == g], g))
+
+    rows = []
+    for members, group in blocks:
+        grow = group_rows.get(group) if group else None
+        levels = report_rule.rule_levels(
+            members, group, {f: _value(gene_rows.get(f), metric) for f in members},
+            {f: (gene_rows.get(f) or {}).get("n_positive", 0) for f in members},
+            _value(grow, metric) if group else None, (grow or {}).get("n_positive", 0) if group else None,
+            min_value, min_n, metric)
+        common = {"paralog_group": group, "method": method, "rule_metric": metric,
+                  "threshold": min_value, "min_eval_positives": min_n,
+                  "f1_all_group": cell(grow, "f1_all") if group else ""}
+        if levels[members[0]][0] == "group":
+            rows.append({"unit": group, "report_level": "group", "members": ",".join(members),
+                         "reason": levels[members[0]][1], "reason_detail": levels[members[0]][2],
+                         "n_eval_positives": grow["n_positive"], **counts(grow), **common,
+                         "f1_all_gene": ",".join(cell(gene_rows.get(f), "f1_all") for f in members)})
+            continue
+        for f in members:
+            level, reason, detail = levels[f]
+            row = gene_rows.get(f)
+            rows.append({"unit": f, "report_level": level, "members": f,
+                         "reason": reason, "reason_detail": detail,
+                         "n_eval_positives": (row or {}).get("n_positive", 0),
+                         **counts(row if level == "gene" else None), **common,
+                         "f1_all_gene": cell(row, "f1_all")})
+    return rows
+
+
+def write_report_levels(path: Path, rows: list[dict], method: str, min_value: float, min_n: int) -> None:
+    header = [
+        f"osmo_refdb annotate report levels: one row per reporting unit, for osmotool annotate --method {method}.",
+        "Decided on the calibration split (positive.calib against negative.train, full-length proteins; "
+        "results/annotate_calib/), never on the test split (results/annotate/).",
+        f"Rule (min_f1_all = {min_value}): gene if every member reaches f1_all >= min at gene level; else group "
+        "if the paralog group reaches it as one unit; else none. The rule of osmo_refdb.profile_report_levels.tsv "
+        "(report_rule.py).",
+        f"Minimum evidence (min_eval_positives = {min_n}): a level needs that many positive calibration "
+        "proteins (n_eval_positives; a group's summed over its members), else none for insufficient_evidence.",
+        "reason: meets_threshold | below_threshold | insufficient_evidence. out_of_scope and override do not "
+        "occur: families.yaml sets neither a scope nor a level for annotate. reason_detail: the numbers behind it.",
+        "f1_all = F1 with every non-background protein called as the unit counted as a false positive (own hard "
+        "negatives, other families' positives, other families' hard negatives); see benchmark_annotate.py.",
+        "tp..f1_all are calibration counts at the reported level (empty for none). f1_all_gene: per member, in "
+        "members order. f1_all_group: the paralog group as one unit.",
+        "The HMM GA and DIAMOND cutoffs were calibrated on these same sequences, so the numbers are in-sample "
+        "for the cutoffs (optimistic); the test split is the estimate to quote.",
+    ]
+    with open(path, "w", newline="") as fh:
+        for line in header:
+            fh.write(f"# {line}\n")
+        writer = csv.DictWriter(fh, fieldnames=MANIFEST_COLUMNS, delimiter="\t")
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+# ---- average precision (test split), from osmotool's kept alignments
+
+ALIGNMENT_FILES = {"hmm": "annotate_hmm.hmmsearch.tblout", "diamond": "annotate_diamond.blastp.tsv"}
+
+
+def read_best_hits(path: Path, method: str) -> dict[str, tuple[str, float]]:
+    """{protein_id: (family, bitscore)} of each protein's best alignment in an
+    osmotool annotate --keep_aln file, picked as osmotool's select_best_hits
+    does (higher bitscore, then lower evalue, then smallest subject id). The
+    family is the subject id up to its first '|'."""
+    best: dict[str, tuple[float, float, str]] = {}
+    with open(path) as fh:
+        for line in fh:
+            if line.startswith("#") or not line.strip():
+                continue
+            f = line.split() if method == "hmm" else line.rstrip("\n").split("\t")
+            if method == "hmm":      # hmmsearch tblout: target, acc, query (the model), acc, evalue, score
+                qid, sid, evalue, bits = f[0], f[2], float(f[4]), float(f[5])
+            else:                    # osmotool's DIAMOND_FIELDS: qseqid sseqid pident qcovhsp scovhsp length evalue bitscore
+                qid, sid, evalue, bits = f[0], f[1], float(f[6]), float(f[7])
+            key = (-bits, evalue, sid)
+            if qid not in best or key < best[qid]:
+                best[qid] = key
+    return {q: (k[2].split("|")[0], -k[0]) for q, k in best.items()}
+
+
+def average_precision(rows: list[dict], hits: dict[str, tuple[str, float]], method: str,
+                      families: list[str]) -> tuple[list[dict], list[dict]]:
+    """Per family: AP of the best-hit bit-score ranking over its positives and
+    its own hard negatives (report_rule.ap_row). A protein whose best hit is
+    another family, or a decoy (osmotool drops those), is not retrieved.
+    Returns (one row per family, the retrieved proteins with their scores)."""
+    out, scores = [], []
+    for family in families:
+        pos = [r for r in rows if r["kind"] == "positive" and r["source_family"] == family]
+        neg = [r for r in rows if r["kind"] == "negative" and r["source_family"] == family]
+        if not pos:
+            continue
+        got = {"positive": [], "hard_negative": []}
+        for label, items in (("positive", pos), ("hard_negative", neg)):
+            for r in items:
+                fam, bits = hits.get(r["protein_id"], (None, None))
+                if fam == family:
+                    got[label].append(bits)
+                    scores.append({"method": method, "family": family, "protein_id": r["protein_id"],
+                                   "accession": r["accession"], "label": label, "bitscore": bits})
+        out.append({"method": method, "family": family,
+                    **report_rule.ap_row(got["positive"], got["hard_negative"], len(pos), len(neg))})
+    return out, scores
+
+
+def verify_best_hits(rows: list[dict], hits: dict[str, tuple[str, float]],
+                     calls: dict[str, str], method: str) -> dict:
+    """The best hit read back from the kept alignments against osmotool's own
+    call. hmm: they must agree on every protein (the alignments are the
+    calls' input, decoys dropped). diamond: the per-family cutoffs are not
+    applied to the best hit, so only a called protein is checked, and it
+    agrees unless a cutoff dropped its top alignment."""
+    n_checked = n_disagree = 0
+    for r in rows:
+        pid = r["protein_id"]
+        fam = hits.get(pid, (None, None))[0]
+        best = None if fam is None or fam.endswith("_decoy") else fam
+        call = calls.get(pid)
+        if method == "diamond" and call is None:
+            continue
+        n_checked += 1
+        n_disagree += best != call
+    return {"check": f"best hit from {ALIGNMENT_FILES[method]} vs gene_coordinates.tsv",
+            "method": method, "proteins_checked": n_checked, "proteins_disagree": n_disagree}
 
 
 def write_tsv(path: Path, rows: list[dict]) -> None:
@@ -261,8 +464,23 @@ def main() -> None:
                          "running osmotool annotate elsewhere (the Nextflow pipeline does)")
     ap.add_argument("--calls-from", type=Path, default=None,
                     help="do not run osmotool: read the calls from "
-                         "<DIR>/annotate_<method>.gene_coordinates.tsv")
+                         "<DIR>/annotate_<method>.gene_coordinates.tsv (and, for average precision, "
+                         "the alignments osmotool annotate --keep_aln kept there)")
+    ap.add_argument("--split", choices=["test", "calib"], default="test",
+                    help="test: positive.test against negative.test (the benchmark); calib: "
+                         "positive.calib against negative.train (decides the report levels)")
+    ap.add_argument("--report-levels-out", type=Path, default=None,
+                    help="--split calib: write osmo_refdb.annotate_report_levels.tsv here")
+    ap.add_argument("--levels-method", default="hmm", choices=["hmm", "diamond"],
+                    help="the method the report levels are decided for (osmotool annotate's default: hmm)")
+    ap.add_argument("--min-f1", type=float, default=0.5,
+                    help="the f1_all a unit must reach on the calibration split (report_rule.py)")
+    ap.add_argument("--min-eval-positives", type=int, default=20,
+                    help="the positive calibration proteins a unit needs before the rule decides on it; "
+                         "below it, none for insufficient_evidence. 0: off.")
     args = ap.parse_args()
+    if args.report_levels_out and args.split != "calib":
+        ap.error("--report-levels-out needs --split calib: report levels are never decided on the test split")
     if args.release is None and not (args.prepare or args.calls_from):
         ap.error("--release is required unless --prepare or --calls-from is given")
 
@@ -275,11 +493,12 @@ def main() -> None:
             groups[f["paralog_group"]].add(f["name"])
 
     args.out.mkdir(parents=True, exist_ok=True)
-    rows, dropped = build_eval_set(args.refs, families)
+    rows, dropped = build_eval_set(args.refs, families, args.split)
     kinds = Counter(r["kind"] for r in rows)
     n_bg = kinds["background"]
-    print(f"Evaluation set: {kinds['positive']} held-out positives, "
-          f"{kinds['negative']} held-out hard negatives, {n_bg} background proteins")
+    print(f"Evaluation set ({args.split} split): {kinds['positive']} positives "
+          f"(positive.{args.split}), {kinds['negative']} hard negatives "
+          f"(negative.{NEGATIVE_SPLIT[args.split]}), {n_bg} background proteins")
     for what, n in dropped.items():
         print(f"  left out: {n} {what}")
     proteins = args.out / "eval_proteins.faa"
@@ -290,6 +509,7 @@ def main() -> None:
         return
 
     summary, group_summary, overall = [], [], []
+    ap_rows, verification = [], []
     for method in args.methods:
         print(f"\n=== osmotool annotate --method {method} ===")
         if args.calls_from:
@@ -304,6 +524,19 @@ def main() -> None:
             # count as misses for the true family and as nobody's FP.
             print(f"  calls to labels outside families.yaml: "
                   f"{dict(Counter(c for c in calls.values() if c in unknown))}")
+
+        aln = (args.calls_from or args.out) / ALIGNMENT_FILES[method]
+        if args.split == "test" and aln.exists():
+            hits = read_best_hits(aln, method)
+            verification.append(verify_best_hits(rows, hits, calls, method))
+            fam_ap, scores = average_precision(rows, hits, method, families)
+            ap_rows += fam_ap
+            write_tsv(args.out / f"ap_scores.{method}.tsv", scores)
+            v = verification[-1]
+            print(f"  best hits from {aln.name}: {v['proteins_checked'] - v['proteins_disagree']}/"
+                  f"{v['proteins_checked']} agree with osmotool's calls")
+        elif args.split == "test":
+            print(f"  no {ALIGNMENT_FILES[method]} (osmotool annotate --keep_aln): no average precision")
 
         write_tsv(args.out / f"calls.{method}.tsv", [
             {"protein_id": r["protein_id"], "kind": r["kind"],
@@ -322,7 +555,8 @@ def main() -> None:
             s = score(rows, calls, members, n_bg)
             if s["n_positive"]:
                 group_summary.append({"method": method, "group": group,
-                                      "members": ",".join(sorted(members)), **s})
+                                      "members": ",".join(sorted(members)), **s,
+                                      "paralog_group": group})   # compute_metrics.py's name for it
 
         tp = sum(r["tp"] for r in fam_rows)
         fn = sum(r["fn"] for r in fam_rows)
@@ -366,8 +600,26 @@ def main() -> None:
     write_tsv(args.out / "summary.tsv", summary)
     write_tsv(args.out / "summary_by_group.tsv", group_summary)
     write_tsv(args.out / "overall.tsv", overall)
-    print(f"\nAnnotate-mode benchmark written to {args.out}/"
+    write_tsv(args.out / "average_precision.tsv", ap_rows)
+    write_tsv(args.out / "verification.tsv", verification)
+    print(f"\nAnnotate-mode benchmark ({args.split} split) written to {args.out}/"
           f"{{summary,summary_by_group,overall}}.tsv")
+
+    if args.report_levels_out:
+        if args.levels_method not in args.methods:
+            sys.exit(f"ERROR: --levels-method {args.levels_method} was not scored (--methods)")
+        units = decide_levels(
+            fam_cfg, {r["family"]: r for r in summary if r["method"] == args.levels_method},
+            {r["group"]: r for r in group_summary if r["method"] == args.levels_method},
+            args.levels_method, args.min_f1, args.min_eval_positives)
+        args.report_levels_out.parent.mkdir(parents=True, exist_ok=True)
+        write_report_levels(args.report_levels_out, units, args.levels_method,
+                            args.min_f1, args.min_eval_positives)
+        print(f"Annotate report levels ({args.levels_method}) written to {args.report_levels_out}")
+        for level in ("gene", "group", "none"):
+            picked = [u for u in units if u["report_level"] == level]
+            print(f"  {level}: {len(picked)} units: "
+                  + ", ".join(f"{u['unit']}" + (f" ({u['reason']})" if level == "none" else "") for u in picked))
 
 
 if __name__ == "__main__":

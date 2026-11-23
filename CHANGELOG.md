@@ -2204,3 +2204,51 @@ are built (`hpc/containers/README.md`).
 
 Found on the way: `environment.yml` had no classic `bwa`, which the full catalog index needs (added), and
 the simulated reads of every family depended on all families before it (see the read-simulation entry above).
+
+### Annotate report levels, decided on the calibration split (branch `annotate-report-levels`)
+
+annotate reported all 44 families, and seven score F1 below 0.5 on the test split. Dropping them on
+those numbers would choose them on the set that then scores the choice, so annotate now gets the
+calibration pass that profile already had.
+
+- **Two annotate benchmarks, like the reads.** `BENCHMARK_ANNOTATEPREP`, `OSMOTOOL_ANNOTATE` and
+  `BENCHMARK_ANNOTATESCORE` run twice, as `_CALIB` and `_TEST` (`benchmark_annotate.py --split`). The
+  calibration split is positive.calib against negative.train, the sequences the calibration reads come
+  from, in `results/annotate_calib/`; the test split is unchanged in `results/annotate/`. The negatives
+  follow the positives' split, not the old benchmark's negative.test: otherwise test sequences would
+  decide the levels. The GA and DIAMOND cutoffs were calibrated on these same sequences, so the
+  calibration numbers are optimistic (in-sample for the cutoffs), as for profile's calibration reads.
+- **`f1_all` in annotate too.** `summary.tsv` and `summary_by_group.tsv` gain `fp_all`,
+  `precision_all` and `f1_all` (and the group table a `paralog_group` column, next to `group`); no
+  column was renamed. The group table already existed, without `f1_all`.
+- **`osmo_refdb.annotate_report_levels.tsv`**, decided by the profile rule (`report_rule.py`, now shared
+  by both benchmarks) on the calibration split, for `--method hmm`, at f1_all 0.5. osmotool does not read
+  it yet. On v10's sequences (osmotool 0.10.0, run locally, not by the pipeline): 30 gene, opu_permease
+  as a group (f1_all 0.667), 11 none: teaA, opuAC, opuBC, opuCC, opuBA, ktrD for too few positives;
+  opuAA, opuCA, mrpD, trkH, ktrB below threshold. All seven families under F1 0.5 on test, and opuBC,
+  are none. On plain `f1` instead of `f1_all`, opuAA, opuCA and mrpD would be reported.
+- **A fixed `reason` in both manifests:** `meets_threshold`, `below_threshold`,
+  `insufficient_evidence`, `out_of_scope`, `override`. The profile manifest's `reason` held free text;
+  that text is now `reason_detail`, and `reason` is the code (murB: `out_of_scope`). New columns at the
+  end: `reason_detail`, `rule_metric`, `threshold`, `n_eval_positives`, `min_eval_positives`. osmotool
+  reads only `unit`, `report_level` and `members`. Optional `families.yaml` `report_level_reason`
+  records why an override is there.
+- **Minimum evidence** (`--min_eval_positives`, default 20 distinct positive calibration sequences; a
+  group's summed): below it, a unit is none for `insufficient_evidence`, whatever it scored. In profile,
+  `families.yaml` still decides, so this changes no profile output; on v10's calibration tables it turns
+  teaA (15 sequences, f1_all 0.826) from agreeing with the rule into an `override`. `n_positive_sequences`
+  is a new column of the read summaries.
+- **Average precision on the test split**, per family and method, against the family's own hard
+  negatives (`ap_vs_own_hard_negatives`, with `max_recall` and `ap_random_baseline`): reads
+  (`results/metrics/average_precision.tsv`, reads in `average_precision_scores.tsv.gz`) and annotate
+  (`results/annotate/average_precision.tsv`, proteins in `ap_scores.<method>.tsv`, from the alignments
+  osmotool now keeps with `--keep_aln`; `verification.tsv` checks those best hits against osmotool's
+  calls). A sequence not called as the family adds nothing, so AP is at most `max_recall`. For annotate
+  hmm the ranking only reaches down to GA (`--cut_ga`).
+- `PROVENANCE.json` hashes the new manifest and lists osmotool's version per step.
+
+Checked: the new scorer reproduces every cell of v10's `results/annotate/` tables; the profile rule
+replayed on v10's calibration tables gives v10's levels and cascade unchanged, apart from teaA's
+reason; the stub run and `nf-test --tag stub` pass (profile `test,local`, tool versions shimmed, not in
+the containers). Not run: the pipeline for real, so no read-level AP and no `n_positive_sequences` from
+real reads yet.

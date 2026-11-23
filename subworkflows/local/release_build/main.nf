@@ -1,6 +1,7 @@
 //
 // Build a release from scratch: references (UniProt, RefSeq), splits, alignments, HMMs, DIAMOND database,
-// then the benchmark (calibration decides the cascade and report levels, the test reads score them).
+// then the benchmark (calibration decides the cascade and report levels, the test split scores them; for
+// reads and for annotate alike).
 // Every part is passed on as it is made; the steps that make a part of the release publish it into
 // <outdir> (conf/modules.config).
 //
@@ -14,9 +15,12 @@ include { BENCHMARK_READS    as BENCHMARK_READS_CALIB    } from '../../../module
 include { BENCHMARK_READS    as BENCHMARK_READS_TEST     } from '../../../modules/local/benchmark/reads/main'
 include { BENCHMARK_METRICS  as BENCHMARK_METRICS_CALIB  } from '../../../modules/local/benchmark/metrics/main'
 include { BENCHMARK_METRICS  as BENCHMARK_METRICS_TEST   } from '../../../modules/local/benchmark/metrics/main'
-include { BENCHMARK_ANNOTATEPREP  } from '../../../modules/local/benchmark/annotateprep/main'
-include { OSMOTOOL_ANNOTATE as OSMOTOOL_ANNOTATE_BENCHMARK } from '../../../modules/local/osmotool/annotate/main'
-include { BENCHMARK_ANNOTATESCORE } from '../../../modules/local/benchmark/annotatescore/main'
+include { BENCHMARK_ANNOTATEPREP  as BENCHMARK_ANNOTATEPREP_CALIB  } from '../../../modules/local/benchmark/annotateprep/main'
+include { BENCHMARK_ANNOTATEPREP  as BENCHMARK_ANNOTATEPREP_TEST   } from '../../../modules/local/benchmark/annotateprep/main'
+include { OSMOTOOL_ANNOTATE       as OSMOTOOL_ANNOTATE_BENCHMARK_CALIB } from '../../../modules/local/osmotool/annotate/main'
+include { OSMOTOOL_ANNOTATE       as OSMOTOOL_ANNOTATE_BENCHMARK_TEST  } from '../../../modules/local/osmotool/annotate/main'
+include { BENCHMARK_ANNOTATESCORE as BENCHMARK_ANNOTATESCORE_CALIB } from '../../../modules/local/benchmark/annotatescore/main'
+include { BENCHMARK_ANNOTATESCORE as BENCHMARK_ANNOTATESCORE_TEST  } from '../../../modules/local/benchmark/annotatescore/main'
 include { BENCHMARK_CATALOGGENES } from '../../../modules/local/benchmark/cataloggenes/main'
 include { OSMOTOOL_BUILDCATALOG as OSMOTOOL_BUILDCATALOG_BENCHMARK } from '../../../modules/local/osmotool/buildcatalog/main'
 include { BENCHMARK_CATALOGMAP   } from '../../../modules/local/benchmark/catalogmap/main'
@@ -61,14 +65,25 @@ workflow RELEASE_BUILD {
     BENCHMARK_READS_TEST(BENCHMARK_SIMULATE_TEST.out.reads, db, 'on')
     BENCHMARK_METRICS_TEST(BENCHMARK_SIMULATE_TEST.out.reads, BENCHMARK_READS_TEST.out.results, cascade, families, 'test')
 
-    // osmotool annotate on held-out full-length proteins, once per method (ext.args: --method)
-    BENCHMARK_ANNOTATEPREP(refs, families)
-    eval_set = channel.of('hmm', 'diamond')
-        .combine(BENCHMARK_ANNOTATEPREP.out.eval_set)
-        .map { method, dummy, proteins -> tuple([id: "annotate_${method}", method: method], dummy, proteins) }
-    OSMOTOOL_ANNOTATE_BENCHMARK(eval_set, db)
-    BENCHMARK_ANNOTATESCORE(refs, families,
-        OSMOTOOL_ANNOTATE_BENCHMARK.out.results.map { _meta, files -> files }.flatten().collect())
+    // osmotool annotate on full-length proteins, once per method (ext.args: --method, --keep_aln), on the
+    // two splits the reads use: the calibration split (positive.calib, negative.train) decides what annotate
+    // reports, osmo_refdb.annotate_report_levels.tsv, by the profile rule; the held-out test split scores it.
+    // annotate reads no cascade, so the calibration run needs only db_calib
+    BENCHMARK_ANNOTATEPREP_CALIB(refs, families, 'calib')
+    eval_calib = channel.of('hmm', 'diamond')
+        .combine(BENCHMARK_ANNOTATEPREP_CALIB.out.eval_set)
+        .map { method, dummy, proteins -> tuple([id: "annotate_${method}", method: method, split: 'calib'], dummy, proteins) }
+    OSMOTOOL_ANNOTATE_BENCHMARK_CALIB(eval_calib, db_calib)
+    BENCHMARK_ANNOTATESCORE_CALIB(refs, families,
+        OSMOTOOL_ANNOTATE_BENCHMARK_CALIB.out.results.map { _meta, files -> files }.flatten().collect(), 'calib')
+
+    BENCHMARK_ANNOTATEPREP_TEST(refs, families, 'test')
+    eval_test = channel.of('hmm', 'diamond')
+        .combine(BENCHMARK_ANNOTATEPREP_TEST.out.eval_set)
+        .map { method, dummy, proteins -> tuple([id: "annotate_${method}", method: method, split: 'test'], dummy, proteins) }
+    OSMOTOOL_ANNOTATE_BENCHMARK_TEST(eval_test, db)
+    BENCHMARK_ANNOTATESCORE_TEST(refs, families,
+        OSMOTOOL_ANNOTATE_BENCHMARK_TEST.out.results.map { _meta, files -> files }.flatten().collect(), 'test')
 
     // profile --catalog on the same test reads, in two bounds: A, every sequence of the release is
     // catalogued; B, only what the benchmark does not score. Both are indexed as the release's catalog
@@ -94,6 +109,8 @@ workflow RELEASE_BUILD {
     alignments    = HMM_BUILD.out.alignments
     hmms          = hmms
     release_files = release_files                 // the DIAMOND database and its files
-    cascade       = cascade                       // cascade config and report levels
-    done          = BENCHMARK_METRICS_TEST.out.metrics.mix(BENCHMARK_ANNOTATESCORE.out.annotate, BENCHMARK_CATALOGSCORE.out.metrics).collect()
+    // cascade config and the report levels, profile's and annotate's
+    cascade       = cascade.mix(BENCHMARK_ANNOTATESCORE_CALIB.out.levels).flatten().collect()
+    done          = BENCHMARK_METRICS_TEST.out.metrics.mix(BENCHMARK_ANNOTATESCORE_CALIB.out.annotate,
+                        BENCHMARK_ANNOTATESCORE_TEST.out.annotate, BENCHMARK_CATALOGSCORE.out.metrics).collect()
 }
