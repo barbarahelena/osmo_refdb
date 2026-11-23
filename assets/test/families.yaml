@@ -142,7 +142,7 @@ hmm_decoys:
     so betL''s F1-calibrated GA sat at 570.8 bits and annotate HMM betL reached F1 0.55 (v10, precision
     0.55, recall 0.56). Translated search avoids it with DIAMOND decoy references from the same set (decoy_from_negatives),
     but annotate and catalog-based profiling decide at full length with the HMM, where catalogued strains
-    brought betL from 0.87 to 0.46 (docs/validation_reports/catalog_benchmark.md). Every UniProt betT/caiT
+    brought betL from 0.87 to 0.46 in the catalog benchmark. Every UniProt betT/caiT
     entry is already in betL''s negatives (1190 raw, 479 after QC), so the model is built from betL.negative.train,
     the split the DIAMOND decoy uses, and betL''s GA is calibrated decoy-aware.
 

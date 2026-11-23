@@ -11,7 +11,7 @@ HMM hit (sub-cutoff homologs and decoys included, so their reads are
 recognised and dropped) plus the genes without a hit that are close to one,
 so reads from those competitors map to their own gene and are dropped too.
 Small enough to ship, and on real gut genes as free of catalog false calls as
-an index of the whole catalog (docs/validation_reports/catalog_index.md).
+an index of the whole catalog.
 
 The work is done by `osmotool build-catalog` (translate, hmmsearch with the
 release's HMMs, assign each gene as `annotate --method hmm` does, index the

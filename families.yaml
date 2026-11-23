@@ -422,8 +422,8 @@ families:
       this cluster along with mrpC). scope: annotate_only set: still built
       and searchable for osmotool annotate co-occurrence checks, excluded
       from osmotool profile's reported output where 0.543 precision would
-      be misleading. See README's "Structural negative-pool contamination"
-      section.
+      be misleading. See docs/FAMILIES_SUMMARY.md's "Structural negative-pool
+      contamination" section.
 
       Specific mechanism confirmed (2026-07-29), same bug as mrpA/mrpB's:
       both otsA's and otsB's negative pools are contaminated by genuine
@@ -524,8 +524,8 @@ families:
       precision (0.927) is fine in practice -- calibration still found a
       workable separating cutoff -- so no scope change; the highest
       contamination rate in the panel doesn't automatically mean the
-      worst outcome. See README's "Structural negative-pool contamination"
-      section.
+      worst outcome. See docs/FAMILIES_SUMMARY.md's "Structural negative-pool
+      contamination" section.
     positive_query: "(gene:mscL OR gene:mscL1 OR gene:mscL2) AND taxonomy_id:2"
     negative_query: "xref:pfam-PF01741 NOT (gene:mscL OR gene:mscL1 OR gene:mscL2) AND taxonomy_id:2"
     # RefSeq novelty check: 56,506 RefSeq bacterial proteins vs. 8,910 in
@@ -662,8 +662,8 @@ families:
       (0.870) is borderline but kept in profile mode rather than scoped
       out, since this family's own description already carries a
       biological-confidence caveat above -- a second, structural caveat on
-      top would be redundant. See README's "Structural negative-pool
-      contamination" section.
+      top would be redundant. See docs/FAMILIES_SUMMARY.md's "Structural
+      negative-pool contamination" section.
 
       Also, unlike every other family in this panel (confirmed via a
       systematic sweep, 2026-07-29, of all 38 families whose negative
@@ -1224,8 +1224,8 @@ families:
       meaning the HMM path already defers to Pfam's own GA cutoff instead
       of a locally-calibrated one, so the domain-architecture screening
       that justified pfam_model here turns out to be the right call for a
-      second, independent reason. See README's "Structural negative-pool
-      contamination" section for the full analysis.
+      second, independent reason. See docs/FAMILIES_SUMMARY.md's "Structural
+      negative-pool contamination" section for the full analysis.
 
       Full 43-family v7 rebuild shows the largest single regression in
       this rebuild: DIAMOND F1 0.673->0.587. Notably DIAMOND-only -- HMM
@@ -1350,8 +1350,8 @@ families:
       precision than otsA (0.543), which got the same treatment for this
       exact reason -- scope: annotate_only set here too: still built and
       searchable for osmotool annotate co-occurrence checks, excluded from
-      osmotool profile's reported output. See README's "Structural
-      negative-pool contamination" section.
+      osmotool profile's reported output. See docs/FAMILIES_SUMMARY.md's
+      "Structural negative-pool contamination" section.
     positive_query: "(gene:mrpC OR gene:mrpC1 OR gene:mrpC2 OR gene:mnhC OR gene:mnhC1 OR gene:mnhC2) AND taxonomy_id:2"
     negative_query: "xref:pfam-PF00420 NOT (gene:mrpC OR gene:mrpC1 OR gene:mrpC2 OR gene:mnhC OR gene:mnhC1 OR gene:mnhC2) AND taxonomy_id:2"
     negative_pfam: PF00420   # Oxidored_q2, broad Complex-I-type subunit 4L family, also covers nuoK/ndhK
@@ -1570,7 +1570,7 @@ families:
       gshF/gshAB enzyme that carries this same PF04262 catalytic domain,
       so PF04262 is no longer gshA-exclusive within this panel -- the same
       "condition 2" situation as opuAC/opuBC/opuCC vs. proX and
-      trkH/ktrB/ktrD (see families.yaml header comment and README). NOT
+      trkH/ktrB/ktrD (see families.yaml header comment and docs/FAMILIES_SUMMARY.md). NOT
       pfam_model-adopted for that reason: Pfam's own PF04262 GA cutoff is
       trained across the whole family, gshF included, so using it directly
       risks calling gshF proteins as gshA. Negative pool now also excludes
@@ -1586,8 +1586,9 @@ families:
       fallback doesn't rescue it either (no pfam_model here, same reason
       as mrpC/otsA). Unlike otsA/mrpC, though, DIAMOND precision (0.905)
       is fine in practice -- calibration still found a workable separating
-      cutoff despite the noisy pool -- so no scope change. See README's
-      "Structural negative-pool contamination" section.
+      cutoff despite the noisy pool -- so no scope change. See
+      docs/FAMILIES_SUMMARY.md's "Structural negative-pool contamination"
+      section.
     # Restricted to PF04262 on 2026-11-06. The gshA gene symbol covers three
     # unrelated glutamate-cysteine ligase families in UniProt (2026_04,
     # bacteria): PF04262 Glu_cys_ligase 3,443 entries (72%), PF08886 GshA
@@ -1893,7 +1894,8 @@ families:
       numbered-paralog gap as murB1/murB2/trkA1/trkA2/ktrB1/ktrD1 etc.
 
       Same structural negative-pool contamination as mrpB/otsA/etc. (see
-      README's "Structural negative-pool contamination" section):
+      docs/FAMILIES_SUMMARY.md's "Structural negative-pool contamination"
+      section):
       confirmed via v7's negative_purity_manifest.tsv that the
       numbered-paralog fix above barely moved this family's contamination
       (v6 27% flagged -> v7 29%), consistent with the pattern being real
@@ -2058,7 +2060,7 @@ hmm_decoys:
       with DIAMOND decoy references from the same set (decoy_from_negatives),
       but annotate and catalog-based profiling decide at full length with
       the HMM, where catalogued strains brought betL from 0.87 to 0.46
-      (docs/validation_reports/catalog_benchmark.md). Every UniProt betT/caiT entry is already
+      in the catalog benchmark. Every UniProt betT/caiT entry is already
       in betL's negatives (1190 raw, 479 after QC), so the model is built
       from betL.negative.train, the split the DIAMOND decoy uses, and betL's
       GA is calibrated decoy-aware.
