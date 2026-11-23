@@ -1,4 +1,4 @@
-// Step 1 of a release's references, put together: every family's fetch (REFS_FETCHFAMILY) and the shared one
+// A release's references (REFS_BUILD), put together: every family's fetch (REFS_FETCHFAMILY) and the shared one
 // (REFS_FETCHSHARED) in one refs/, their manifest rows in one refs/manifest.tsv. Checks that every family was
 // fetched from the UniProt release the fetches are keyed on (UniProt can release between two of them).
 process REFS_COMBINE {

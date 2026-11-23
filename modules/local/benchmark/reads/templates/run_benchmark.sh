@@ -38,8 +38,8 @@ DIAMOND_MIN_QUERY_COVER="${DIAMOND_MIN_QUERY_COVER:-0.50}"
 DIAMOND_MIN_SUBJECT_COVER="${DIAMOND_MIN_SUBJECT_COVER:-0.0}"
 # CASCADE=on (default) runs `osmotool profile` the way users get it: with the
 # DIAMOND+HMM cascade, configured by <release>/osmo_refdb.profile_cascade.tsv.
-# That file is written by step 11 from the CALIBRATION reads (the pipeline
-# runs steps 9-11 on --split calib first), never from the reads scored here.
+# That file is written by BENCHMARK_METRICS_CALIB from the CALIBRATION reads
+# (the calibration pass runs first), never from the reads scored here.
 # --keep_aln retains the raw DIAMOND alignments and the cascade's own
 # hmmsearch table, so compute_metrics.py scores DIAMOND alone and
 # DIAMOND+cascade from this single run.

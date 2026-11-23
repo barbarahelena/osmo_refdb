@@ -1,4 +1,4 @@
-// Step 1 of a release's references, per family: its positives and hard negatives from UniProt
+// A release's references (REFS_BUILD), per family: its positives and hard negatives from UniProt
 // (templates/fetch_refs.py --skip-shared; families.yaml says what to query). UniProt is live: the release and
 // fetch dates go into the family's manifest.tsv row, and PROVENANCE keeps them.
 // One task per family, at most a few at a time (maxForks: UniProt answers 429 to more). With --refs_store,

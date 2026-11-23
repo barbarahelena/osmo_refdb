@@ -1,0 +1,50 @@
+# osmo_refdb profile report levels: one row per reporting unit (osmotool profile's unit table).
+# Decided on the calibration reads (positive.calib + negative.train), never on the benchmark (test) reads.
+# Rule (min_f1_all = 0.5): gene if every member reaches f1_all >= min at gene level; else group if the paralog group reaches it as one unit; else none.
+# At each level the cascade (HMM second opinion, osmo_refdb.profile_cascade.tsv) is used only where it raises f1_all; cascade_members lists where it is on.
+# f1_all = F1 with every non-background read called as the unit counted as a false positive (own hard negatives and flanks, other panel genes, other families' hard negatives); see compute_metrics.py.
+# report_level is families.yaml's report_level; calibration_level is the rule's. tp..f1_all are calibration counts at the reported level and cascade (empty for none).
+# f1_all_gene_*: per member, in members order (NA: no HMM threshold, so no cascade option). f1_all_group_*: the paralog group as one unit.
+unit	report_level	members	paralog_group	cascade_members	calibration_level	level_source	reason	tp	fp_all	fn	precision_all	recall	f1_all	f1_all_gene_off	f1_all_gene_on	f1_all_group_off	f1_all_group_on
+ectA	gene	ectA			gene	families.yaml	f1_all 0.809 >= 0.5	1202	0	567	1.0	0.679	0.809	0.809	0.726		
+ectB	gene	ectB		ectB	gene	families.yaml	f1_all 0.675 >= 0.5	1294	264	981	0.831	0.569	0.675	0.636	0.675		
+ectC	gene	ectC			gene	families.yaml	f1_all 0.801 >= 0.5	487	0	242	1.0	0.668	0.801	0.801	0.758		
+teaA	gene	teaA		teaA	gene	families.yaml	f1_all 0.826 >= 0.5	181	22	54	0.892	0.77	0.826	0.546	0.826		
+betL	gene	betL			gene	families.yaml	f1_all 0.904 >= 0.5	1040	1	219	0.999	0.826	0.904	0.904	0.858		
+kdpA	gene	kdpA			gene	families.yaml	f1_all 0.976 >= 0.5	7076	0	349	1.0	0.953	0.976	0.976	0.956		
+nhaA	gene	nhaA			gene	families.yaml	f1_all 0.949 >= 0.5	11696	0	1265	1.0	0.902	0.949	0.949	0.864		
+proX	gene	proX	opu_substrate_binding	proX	gene	families.yaml	f1_all 0.527 >= 0.5 at gene level; group opu_substrate_binding f1_all 0.284 < 0.5	607	581	507	0.511	0.545	0.527	0.191	0.527	0.103	0.284
+opuAC	none	opuAC	opu_substrate_binding		none	families.yaml	f1_all 0.043 < 0.5 at gene level; group opu_substrate_binding f1_all 0.284 < 0.5							0.032	0.043	0.103	0.284
+opuBC	none	opuBC	opu_substrate_binding		none	families.yaml	f1_all 0.005 < 0.5 at gene level; group opu_substrate_binding f1_all 0.284 < 0.5							0.005	0.005	0.103	0.284
+opuCC	none	opuCC	opu_substrate_binding		none	families.yaml	f1_all 0.073 < 0.5 at gene level; group opu_substrate_binding f1_all 0.284 < 0.5							0.038	0.073	0.103	0.284
+proP	gene	proP			gene	families.yaml	f1_all 0.519 >= 0.5	1703	2719	434	0.385	0.797	0.519	0.519	0.451		
+otsA	none	otsA			gene	families.yaml	scope: annotate_only; calibration rule: gene (f1_all 0.541 >= 0.5)							0.541	0.511		
+otsB	gene	otsB			gene	families.yaml	f1_all 0.807 >= 0.5	3364	400	1205	0.894	0.736	0.807	0.807	0.623		
+mscL	gene	mscL			gene	families.yaml	f1_all 0.774 >= 0.5	3841	265	1978	0.935	0.66	0.774	0.774	0.57		
+mscS	none	mscS			none	families.yaml	f1_all 0.435 < 0.5 at gene level							0.398	0.435		
+galE	gene	galE		galE	gene	families.yaml	f1_all 0.850 >= 0.5	10811	862	2950	0.926	0.786	0.85	0.849	0.85		
+mazG	gene	mazG			gene	families.yaml	f1_all 0.897 >= 0.5	4169	93	869	0.978	0.828	0.897	0.897	0.858		
+murB	none	murB			gene	families.yaml	scope: annotate_only; calibration rule: gene (f1_all 0.932 >= 0.5)							0.932	0.704		
+opuAA	none	opuAA	opu_atpase		none	families.yaml	f1_all 0.223 < 0.5 at gene level; group opu_atpase f1_all 0.197 < 0.5							0.204	0.223	0.197	0.196
+opuBA	none	opuBA	opu_atpase		none	families.yaml	f1_all 0.141 < 0.5 at gene level; group opu_atpase f1_all 0.197 < 0.5							0.098	0.141	0.197	0.196
+opuCA	none	opuCA	opu_atpase		none	families.yaml	f1_all 0.163 < 0.5 at gene level; group opu_atpase f1_all 0.197 < 0.5							0.163	0.141	0.197	0.196
+opu_permease	group	opuAB,opuBB,opuCB	opu_permease	opuAB,opuBB,opuCB	gene	families.yaml	families.yaml overrides the calibration rule, which gives gene (f1_all 0.685 >= 0.5 at gene level; group opu_permease f1_all 0.490 < 0.5)	293	259	352	0.531	0.454	0.49	0.685,0.259,0.218	0.652,0.282,0.223	0.484	0.49
+mrpA	none	mrpA	mrp_large_subunit		none	families.yaml	f1_all 0.391 < 0.5 at gene level; group mrp_large_subunit f1_all 0.315 < 0.5							0.391	0.255	0.315	0.252
+mrpD	none	mrpD	mrp_large_subunit		none	families.yaml	f1_all 0.266 < 0.5 at gene level; group mrp_large_subunit f1_all 0.315 < 0.5							0.266	0.249	0.315	0.252
+mrpB	gene	mrpB			gene	families.yaml	f1_all 0.633 >= 0.5	75	0	87	1.0	0.463	0.633	0.633	0.603		
+mrpC	none	mrpC			none	families.yaml	scope: annotate_only; calibration rule: none (f1_all 0.476 < 0.5 at gene level)							0.476	0.407		
+mrpE	gene	mrpE			gene	families.yaml	f1_all 0.706 >= 0.5	175	0	146	1.0	0.545	0.706	0.706	0.651		
+mrpF	gene	mrpF			gene	families.yaml	f1_all 0.751 >= 0.5	133	0	88	1.0	0.602	0.751	0.751	0.708		
+mrpG	gene	mrpG			gene	families.yaml	f1_all 0.663 >= 0.5	647	0	657	1.0	0.496	0.663	0.663	0.59		
+betA	gene	betA		betA	gene	families.yaml	f1_all 0.625 >= 0.5	2043	1535	919	0.571	0.69	0.625	0.47	0.625		
+betB	gene	betB		betB	none	families.yaml	families.yaml overrides the calibration rule, which gives none (f1_all 0.490 < 0.5 at gene level)	1407	1734	1195	0.448	0.541	0.49	0.463	0.49		
+gshA	gene	gshA	glutathione_step1	gshA	gene	families.yaml	every member of glutathione_step1 reaches f1_all 0.5 at gene level (gshA 0.801)	2592	813	478	0.761	0.844	0.801	0.799	0.801	0.771	0.778
+gshF	gene	gshF	glutathione_step1		gene	families.yaml	every member of glutathione_step1 reaches f1_all 0.5 at gene level (gshF 0.647)	629	589	98	0.516	0.865	0.647	0.647	0.643	0.771	0.778
+gshB	gene	gshB			gene	families.yaml	f1_all 0.914 >= 0.5	5124	396	569	0.928	0.9	0.914	0.914	0.874		
+gor	gene	gor			gene	families.yaml	f1_all 0.967 >= 0.5	1801	11	112	0.994	0.941	0.967	0.967	0.863		
+cspA	gene	cspA			gene	families.yaml	f1_all 0.804 >= 0.5	651	0	317	1.0	0.673	0.804	0.804	0.758		
+trkA	gene	trkA	trk_ktr_regulatory	trkA	gene	families.yaml	every member of trk_ktr_regulatory reaches f1_all 0.5 at gene level (trkA 0.816)	3195	814	627	0.797	0.836	0.816	0.707	0.816	0.709	0.803
+ktrA	gene	ktrA	trk_ktr_regulatory		gene	families.yaml	every member of trk_ktr_regulatory reaches f1_all 0.5 at gene level (ktrA 0.731)	241	10	167	0.96	0.591	0.731	0.731	0.629	0.709	0.803
+trkH	none	trkH	trk_ktr_channel		none	families.yaml	scope: annotate_only; calibration rule: none (f1_all 0.114 < 0.5 at gene level; group trk_ktr_channel f1_all 0.099 < 0.5)							0.105	0.114	0.099	0.098
+ktrB	none	ktrB	trk_ktr_channel		none	families.yaml	scope: annotate_only; calibration rule: none (f1_all 0.085 < 0.5 at gene level; group trk_ktr_channel f1_all 0.099 < 0.5)							0.077	0.085	0.099	0.098
+ktrD	none	ktrD	trk_ktr_channel		none	families.yaml	scope: annotate_only; calibration rule: none (f1_all 0.080 < 0.5 at gene level; group trk_ktr_channel f1_all 0.099 < 0.5)							0.08	0.049	0.099	0.098

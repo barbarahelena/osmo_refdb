@@ -53,7 +53,8 @@ False positives are counted three ways for family F (summary.tsv):
                 sees. With fp_all both levels count the same reads: summed
                 over a group's members, fp_all is the group's fp_all plus
                 its within_group_swaps, which the group instead counts as
-                tp. The report-level and cascade decision (below) uses f1_all.
+                tp. The report-level and cascade decision (below) uses f1_all,
+                with its bootstrap support (see Calibration mode).
 
 summary_by_group.tsv repeats these metrics per families.yaml
 `paralog_group`, scoring a group's members as one unit: a read called as
@@ -66,6 +67,17 @@ level and the cascade together, and writes both release manifests:
 osmo_refdb.profile_cascade.tsv (which families get the HMM second opinion)
 and osmo_refdb.profile_report_levels.tsv (what osmotool profile reports, per
 unit, with the calibration numbers each choice rests on). See decide_units.
+Neither decision rests on a bare point estimate: a cluster bootstrap
+(cluster_bootstrap: source sequences resampled, not reads, n_boot =
+--decision-bootstrap, seed --decision-bootstrap-seed) gives each unit's
+f1_all a spread, and
+  - the cascade is on only if its point gain is >= --min-cascade-gain and
+    the paired gain is positive in >= --decision-support of the resamples;
+  - a level is passed only if f1_all >= --min-f1 on the point estimate and
+    in >= --decision-support of the resamples (else none, reason unstable).
+decision_sensitivity.tsv sets the decision on point estimates alone (the
+cascade at bare sign: the rule up to v10) next to the support rule's, per
+unit. --decision-bootstrap 0 with --min-cascade-gain 0 is the v10 rule.
 Benchmark mode (--cascade-config, --report-levels; the test reads) only
 scores those choices, adding summary_by_report_unit.tsv, and the
 threshold-free average precision per family and method
@@ -110,6 +122,7 @@ from pathlib import Path
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 import yaml
 from sklearn.metrics import precision_recall_curve, roc_curve, auc
@@ -592,16 +605,136 @@ def _f1_value(row: dict | None) -> float:
     return float(row["f1_all"])
 
 
-def _best_cascade(off: dict | None, on: dict | None) -> tuple[bool, float]:
-    """(cascade on?, f1_all) for the better of the two options. The cascade
-    costs hmmsearch time and recall, so it is chosen only if it raises
-    f1_all (on the 3-decimal values in the manifest, so anyone can redo the
-    comparison from it)."""
+def _cascade_choice(off: dict | None, on: dict | None, has_on: bool,
+                    samples: dict | None, min_value: float, min_gain: float,
+                    min_support: float) -> dict:
+    """The cascade option one unit is judged with, and the numbers behind it.
+
+    The cascade costs hmmsearch time and recall, so it is switched on only if
+    report_rule.cascade_supported holds: the point gain in f1_all (on minus
+    off, on the 3-decimal values in the manifest, so anyone can redo the
+    comparison from it) is positive and at least min_gain, and, with a
+    bootstrap (samples), positive in at least min_support of the paired
+    resamples. min_gain 0 without a bootstrap is the bare sign of the gain,
+    the rule up to v10.
+
+    samples: {"off": f1_all per resample, "on": ...} (cluster_bootstrap), or
+    None. Returns on, value (f1_all of the chosen option), gain ("" without a
+    cascade option), gain_support, point_on (the bare-sign choice), and at
+    the chosen option level_support (fraction of resamples with f1_all >=
+    min_value), p10, p90 (None / "" without a bootstrap)."""
     f_off = _f1_value(off)
-    if on is None:
-        return False, f_off
-    f_on = _f1_value(on)
-    return (True, f_on) if f_on > f_off else (False, f_off)
+    res = {"on": False, "point_on": False, "value": f_off, "point_value": f_off,
+           "gain": "", "gain_support": None}
+    if has_on:
+        f_on = _f1_value(on)
+        gain = round(f_on - f_off, 3)
+        gain_support = (float(np.mean(samples["on"] - samples["off"] > 0))
+                        if samples is not None else None)
+        chosen = report_rule.cascade_supported(gain, gain_support, min_gain, min_support)
+        res.update(on=chosen, point_on=gain > 0, value=f_on if chosen else f_off,
+                   point_value=max(f_on, f_off), gain=gain, gain_support=gain_support)
+    arr = None if samples is None else samples["on" if res["on"] else "off"]
+    res["level_support"] = None if arr is None else float(np.mean(arr >= min_value))
+    res["p10"] = "" if arr is None else round(float(np.percentile(arr, 10)), 3)
+    res["p90"] = "" if arr is None else round(float(np.percentile(arr, 90)), 3)
+    return res
+
+
+BOOT_CHUNK = 100     # resamples drawn at a time; part of what a seed reproduces
+
+
+def cluster_bootstrap(configs: dict[str, pd.DataFrame], units: dict[tuple, set[str]],
+                      n_boot: int, seed: int) -> tuple[dict[tuple, dict], dict[tuple, dict]]:
+    """f1_all of every unit under every configuration, in n_boot resamples of
+    the calibration evidence, resampled by source sequence, not by read.
+
+    Reads from one sequence are not independent (one CDS gives many reads),
+    so the cluster is the source sequence: (family_true, label, uniprot_id),
+    a flank read going with the construct it was cut from. The clusters are
+    stratified by (family_true, label), and a resample draws each stratum
+    with replacement to its own size, so every family's positives and hard
+    negatives keep their numbers. The four pools of f1_all are unions of
+    strata: the unit's positives (tp, fn), its own hard negatives and flanks
+    (fp), other families' genuine reads (fp_cross) and other families' hard
+    negatives (fp_other_negatives). The background is left out, as it is
+    from f1_all.
+
+    One draw serves every unit and every configuration: the comparison of
+    cascade off with on is paired (the same clusters in both), which is
+    what the gain's support needs, and gene and group level are judged on
+    the same resamples.
+
+    configs: {"off": merged, "on": merged} (label_reads tables of the same
+    reads under each option). units: {key: member families}. Counts per
+    cluster are computed once per unit and configuration; a resample is a
+    weight per cluster. Returns ({key: {config: f1_all per resample}},
+    {key: {config: (tp, fn, fp_all) summed over every cluster}}: the point
+    counts, for a check against summary.tsv)."""
+    def keys(m: pd.DataFrame) -> pd.Series:
+        return (m["family_true"].astype(str) + "\t" + m["label"].astype(str) + "\t"
+                + m["uniprot_id"].fillna("").astype(str))
+
+    frames = {c: m[~m["_bg_source"]] for c, m in configs.items()}
+    cluster_keys = sorted(set().union(*(set(keys(m)) for m in frames.values())))
+    index = {k: i for i, k in enumerate(cluster_keys)}
+    n_clusters = len(cluster_keys)
+    strata: dict[str, list[int]] = {}
+    for i, k in enumerate(cluster_keys):
+        strata.setdefault(k.rsplit("\t", 1)[0], []).append(i)
+    strata_idx = [np.asarray(v) for _, v in sorted(strata.items())]
+
+    vectors: dict[tuple, dict] = {}
+    point: dict[tuple, dict] = {}
+    for c, m in frames.items():
+        cl = keys(m).map(index).to_numpy()
+        fam_true = m["family_true"].astype(str)
+        fam_called = m["family_called"].astype(str)
+        genuine = m["is_genuine_positive"].to_numpy(bool)
+        for key, members in units.items():
+            own = fam_true.isin(members).to_numpy()
+            called = fam_called.isin(members).to_numpy()
+            own_pos = own & genuine
+            counts = np.stack([np.bincount(cl[mask], minlength=n_clusters)
+                               for mask in (own_pos & called, own_pos & ~called, called & ~own_pos)], axis=1)
+            nz = np.flatnonzero(counts.any(axis=1))
+            vectors.setdefault(key, {})[c] = (nz, counts[nz].astype(np.int64))
+            point.setdefault(key, {})[c] = tuple(int(x) for x in counts.sum(axis=0))
+
+    rng = np.random.default_rng(seed)
+    out = {key: {c: np.empty(n_boot) for c in v} for key, v in vectors.items()}
+    for start in range(0, n_boot, BOOT_CHUNK):
+        b = min(BOOT_CHUNK, n_boot - start)
+        weights = np.zeros((b, n_clusters), dtype=np.int64)
+        for idx in strata_idx:
+            n = len(idx)
+            draws = rng.integers(0, n, size=(b, n)) + (np.arange(b) * n)[:, None]
+            weights[:, idx] = np.bincount(draws.ravel(), minlength=b * n).reshape(b, n)
+        for key, by_config in vectors.items():
+            for c, (nz, vals) in by_config.items():
+                tp, fn, fp_all = (weights[:, nz] @ vals).T.astype(float)   # integer: exact, no BLAS
+                den = 2 * tp + fn + fp_all
+                out[key][c][start:start + b] = np.divide(2 * tp, den, out=np.zeros(b), where=den > 0)
+    return out, point
+
+
+def check_bootstrap_points(point: dict[tuple, dict], tables: dict[tuple, dict]) -> None:
+    """The bootstrap's clusters, summed with weight 1, must give the counts in
+    summary.tsv / summary_by_group.tsv: otherwise it resamples something
+    other than what the decision is made on."""
+    bad = []
+    for key, by_config in point.items():
+        for c, (tp, fn, fp_all) in by_config.items():
+            row = tables.get((key, c))
+            if row is None:
+                if tp or fn or fp_all:
+                    bad.append(f"{key} {c}: no summary row, bootstrap counts {tp}/{fn}/{fp_all}")
+                continue
+            if (tp, fn, fp_all) != (row["tp"], row["fn"], row["fp_all"]):
+                bad.append(f"{key} {c}: summary tp/fn/fp_all {row['tp']}/{row['fn']}/{row['fp_all']}, "
+                           f"bootstrap {tp}/{fn}/{fp_all}")
+    if bad:
+        raise SystemExit("bootstrap clusters do not add up to the summary tables:\n  " + "\n  ".join(bad))
 
 
 def _n_value(row: dict | None) -> int:
@@ -615,10 +748,17 @@ def _fmt(x) -> str:
     return "NA" if x is None or x == "" else str(x)
 
 
+def _r(x) -> str | float:
+    """A support fraction or similar for the manifest: 3 decimals, "" for none."""
+    return "" if x is None or x == "" else round(x, 3)
+
+
 def decide_units(meta: dict[str, dict], thresholds: dict[str, float],
                  gene_off: dict[str, dict], gene_on: dict[str, dict],
                  group_off: dict[str, dict], group_on: dict[str, dict],
-                 min_f1: float, min_n: int = 0) -> tuple[list[dict], dict[str, dict]]:
+                 min_f1: float, min_n: int = 0, boot: dict | None = None,
+                 min_gain: float = 0.0, min_support: float = 0.0,
+                 ) -> tuple[list[dict], dict[str, dict], list[dict]]:
     """
     Decide report level and cascade together, per family or paralog group
     (families.yaml paralog_group), on the calibration reads.
@@ -630,24 +770,39 @@ def decide_units(meta: dict[str, dict], thresholds: dict[str, float],
     family's numbers depend only on its own flag and a group's only on its
     members': these four tables score every option.
 
-    Rule, on f1_all (see the module docstring), each level taking the
-    better of its cascade options (report_rule.rule_levels, shared with
-    the annotate benchmark):
-      a family without a group: gene if it reaches min_f1, else none;
-      a paralog group: gene for every member if every member reaches
-        min_f1; else group (one unit, one cascade option for all members)
-        if the group reaches min_f1; else each member on its own, gene if
-        it reaches min_f1, none if not.
-    A level needs min_n distinct positive sequences (n_positive_sequences)
-    as well; a unit with fewer is none for insufficient_evidence.
+    boot: {("gene", family) | ("group", group): {"off": f1_all per
+    resample, "on": ...}} from cluster_bootstrap, or None for point
+    estimates alone. min_gain, min_support: the cascade's minimum gain and
+    the fraction of resamples a decision needs (params.profile_min_cascade_gain,
+    params.profile_decision_support).
+
+    Rule, on f1_all (see the module docstring), each level judged at its
+    cascade option (_cascade_choice: on only for a gain of at least min_gain
+    that is positive in min_support of the paired resamples), by
+    report_rule.rule_levels, shared with the annotate benchmark:
+      a family without a group: gene if it passes the level test, else none;
+      a paralog group: gene for every member if every member passes; else
+        group (one unit, one cascade option for all members) if the group
+        passes; else each member on its own, gene if it passes, none if not.
+    The level test: f1_all >= min_f1 on the point estimate and in at least
+    min_support of the resamples (a unit that clears on the point estimate
+    only is none for unstable). A level needs min_n distinct positive
+    sequences (n_positive_sequences) as well; a unit with fewer is none for
+    insufficient_evidence.
     families.yaml's report_level is what gets reported; the rule's level is
     written next to it (calibration_level) and a mismatch is printed as a
     warning. The cascade follows the reported level (off for none).
     reason is report_rule's vocabulary, reason_detail the numbers.
 
     Returns (manifest rows: one per reporting unit, i.e. a paralog group on
-    "group" and a family otherwise; {family: cascade-config row}).
+    "group" and a family otherwise; {family: cascade-config row};
+    decision_sensitivity rows: per reporting unit, the decision the point
+    estimates alone give, at bare sign for the cascade, next to the rule's;
+    cascade_point / cascade_rule are the choice at the unit's level, and
+    cascade_differs is NA where no cascade ships: no option, or report
+    level none).
     """
+    boot = boot or {}
     blocks: list[tuple[list[str], str]] = []
     seen_groups: set[str] = set()
     for family, m in meta.items():
@@ -664,20 +819,38 @@ def decide_units(meta: dict[str, dict], thresholds: dict[str, float],
         row = row or {}
         return {k: row.get(k, "") for k in ("tp", "fp_all", "fn", "precision_all", "recall", "f1_all")}
 
+    def robust(ch: dict, has_on: bool) -> dict:
+        return {"f1_all_p10": ch["p10"], "f1_all_p90": ch["p90"],
+                "level_support": _r(ch["level_support"]),
+                "cascade_gain": ch["gain"] if has_on else "NA",
+                "cascade_gain_support": _r(ch["gain_support"]) if has_on else "NA"}
+
+    def yes_no(flag: bool, has_on: bool) -> str:
+        return ("yes" if flag else "no") if has_on else "NA"
+
     manifest: list[dict] = []
     cascade: dict[str, dict] = {}
+    sensitivity: list[dict] = []
     for members, group in blocks:
-        gene_choice = {f: _best_cascade(gene_off.get(f), gene_on.get(f) if f in thresholds else None)
+        gene_choice = {f: _cascade_choice(gene_off.get(f), gene_on.get(f), f in thresholds,
+                                          boot.get(("gene", f)), min_f1, min_gain, min_support)
                        for f in members}
         group_has_on = any(f in thresholds for f in members)
-        group_choice = (_best_cascade(group_off.get(group), group_on.get(group) if group_has_on else None)
+        group_choice = (_cascade_choice(group_off.get(group), group_on.get(group), group_has_on,
+                                        boot.get(("group", group)), min_f1, min_gain, min_support)
                         if group else None)
 
         gene_n = {f: _n_value(gene_off.get(f)) for f in members}
+        group_n = _n_value(group_off.get(group)) if group else None
         calib = report_rule.rule_levels(
-            members, group, {f: gene_choice[f][1] for f in members}, gene_n,
-            group_choice[1] if group else None, _n_value(group_off.get(group)) if group else None,
-            min_f1, min_n)
+            members, group, {f: gene_choice[f]["value"] for f in members}, gene_n,
+            group_choice["value"] if group else None, group_n, min_f1, min_n,
+            gene_support={f: gene_choice[f]["level_support"] for f in members},
+            group_support=group_choice["level_support"] if group else None, min_support=min_support)
+        # the same rule on the point estimates alone, the cascade at bare sign: what v10's rule gives
+        point = report_rule.rule_levels(
+            members, group, {f: gene_choice[f]["point_value"] for f in members}, gene_n,
+            group_choice["point_value"] if group else None, group_n, min_f1, min_n)
 
         level: dict[str, str] = {}
         source: dict[str, str] = {}
@@ -708,28 +881,31 @@ def decide_units(meta: dict[str, dict], thresholds: dict[str, float],
 
         aggregated = any(level[f] == "group" for f in members)
         if aggregated:
-            on = group_choice[0]
+            on = group_choice["on"]
             flags = {f: on and f in thresholds for f in members}
         else:
-            flags = {f: level[f] == "gene" and gene_choice[f][0] for f in members}
+            flags = {f: level[f] == "gene" and gene_choice[f]["on"] for f in members}
 
         group_cells = {"f1_all_group_off": f1_cell(group_off, group) if group else "",
                        "f1_all_group_on": (f1_cell(group_on, group) if group_has_on else "NA") if group else ""}
         if aggregated:
             f0 = members[0]
+            units = [(group, members, group_choice, group_has_on)]
             manifest.append({
                 "unit": group, "report_level": "group", "members": ",".join(members),
                 "paralog_group": group,
                 "cascade_members": ",".join(f for f in members if flags[f]),
                 "calibration_level": calib[f0][0], "level_source": source[f0], "reason": code[f0],
-                **chosen((group_on if group_choice[0] else group_off).get(group)),
+                **chosen((group_on if group_choice["on"] else group_off).get(group)),
                 "f1_all_gene_off": ",".join(f1_cell(gene_off, f) for f in members),
                 "f1_all_gene_on": ",".join(f1_cell(gene_on, f) if f in thresholds else "NA" for f in members),
                 **group_cells,
                 "reason_detail": reason[f0], **evidence,
-                "n_eval_positives": _n_value(group_off.get(group)),
+                "n_eval_positives": group_n,
+                **robust(group_choice, group_has_on),
             })
         else:
+            units = [(f, [f], gene_choice[f], f in thresholds) for f in members]
             for f in members:
                 manifest.append({
                     "unit": f, "report_level": level[f], "members": f, "paralog_group": group,
@@ -741,15 +917,36 @@ def decide_units(meta: dict[str, dict], thresholds: dict[str, float],
                     **group_cells,
                     "reason_detail": reason[f], **evidence,
                     "n_eval_positives": gene_n[f],
+                    **robust(gene_choice[f], f in thresholds),
                 })
+
+        for unit, unit_members, ch, has_on in units:
+            f0 = unit_members[0]
+            sensitivity.append({
+                "unit": unit, "report_level": level[f0], "members": ",".join(unit_members),
+                "level_point": point[f0][0], "level_rule": calib[f0][0],
+                "reason_rule": calib[f0][1],
+                "level_differs": "yes" if point[f0][0] != calib[f0][0] else "no",
+                "cascade_point": yes_no(ch["point_on"], has_on), "cascade_rule": yes_no(ch["on"], has_on),
+                # only where a cascade ships: a unit on none is never cascaded
+                "cascade_differs": (("yes" if ch["point_on"] != ch["on"] else "no")
+                                    if has_on and level[f0] != "none" else "NA"),
+                "cascade_gain": ch["gain"] if has_on else "NA",
+                "cascade_gain_support": _r(ch["gain_support"]) if has_on else "NA",
+                "f1_all_point": ch["point_value"], "f1_all_rule": ch["value"],
+                "level_support": _r(ch["level_support"]),
+                "f1_all_p10": ch["p10"], "f1_all_p90": ch["p90"],
+            })
 
         for f in members:
             if aggregated:
                 off_cell = f1_cell(group_off, group)
                 on_cell = f1_cell(group_on, group) if group_has_on else "NA"
+                ch, has_on = group_choice, group_has_on
             else:
                 off_cell = f1_cell(gene_off, f)
                 on_cell = f1_cell(gene_on, f) if f in thresholds else "NA"
+                ch, has_on = gene_choice[f], f in thresholds
             cascade[f] = {
                 "family": f,
                 "report_unit": group if aggregated else f,
@@ -759,8 +956,11 @@ def decide_units(meta: dict[str, dict], thresholds: dict[str, float],
                 "f1_all_cascade_on": on_cell,
                 "needs_cascade_check": "yes" if flags[f] else "no",
                 "hmm_short_read_threshold": thresholds[f] if flags[f] else "",
+                # added after v10; osmotool reads only family, needs_cascade_check and the threshold
+                "cascade_gain": ch["gain"] if has_on else "NA",
+                "cascade_gain_support": _r(ch["gain_support"]) if has_on else "NA",
             }
-    return manifest, cascade
+    return manifest, cascade, sensitivity
 
 
 MANIFEST_COLUMNS = [
@@ -770,31 +970,31 @@ MANIFEST_COLUMNS = [
     "f1_all_gene_off", "f1_all_gene_on", "f1_all_group_off", "f1_all_group_on",
     # added after v10: reason became report_rule's vocabulary, its old free text is reason_detail
     "reason_detail", "rule_metric", "threshold", "n_eval_positives", "min_eval_positives",
+    # added after v10: the bootstrap behind the decision (decide_units)
+    "f1_all_p10", "f1_all_p90", "level_support", "cascade_gain", "cascade_gain_support",
 ]
 
 
-def write_report_levels(path: Path, rows: list[dict], min_f1: float, min_n: int = 0) -> None:
+def write_report_levels(path: Path, rows: list[dict], min_f1: float, min_n: int = 0, n_boot: int = 0,
+                        seed: int = 0, min_support: float = 0.0, min_gain: float = 0.0) -> None:
     header = [
         "osmo_refdb profile report levels: one row per reporting unit (osmotool profile's unit table).",
         "Decided on the calibration reads (positive.calib + negative.train), never on the benchmark (test) reads.",
-        f"Rule (min_f1_all = {min_f1}): gene if every member reaches f1_all >= min at gene level; else group "
-        "if the paralog group reaches it as one unit; else none.",
-        f"Minimum evidence (min_eval_positives = {min_n}): a level needs that many distinct positive calibration "
-        "sequences (n_eval_positives; a group's summed over its members), else the rule gives none for "
-        "insufficient_evidence.",
-        "reason: meets_threshold | below_threshold | insufficient_evidence (the rule's), out_of_scope "
+        *report_rule.rule_header_lines(min_f1, min_n, n_boot, seed, min_support, "sequences", min_gain,
+                                       mode="profile"),
+        "reason: meets_threshold | below_threshold | unstable | insufficient_evidence (the rule's), out_of_scope "
         "(families.yaml scope: annotate_only, not performance), override (families.yaml report_level differs "
         "from the rule's; reason_detail gives families.yaml's report_level_reason and the rule's level). "
         "reason_detail: the numbers behind it.",
-        "At each level the cascade (HMM second opinion, osmo_refdb.profile_cascade.tsv) is used only where it "
-        "raises f1_all; cascade_members lists where it is on.",
+        "cascade_members lists where the cascade (osmo_refdb.profile_cascade.tsv) is on.",
         "f1_all = F1 with every non-background read called as the unit counted as a false positive "
         "(own hard negatives and flanks, other panel genes, other families' hard negatives); "
         "see compute_metrics.py.",
         "report_level is families.yaml's report_level; calibration_level is the rule's. "
         "tp..f1_all are calibration counts at the reported level and cascade (empty for none).",
         "f1_all_gene_*: per member, in members order (NA: no HMM threshold, so no cascade option). "
-        "f1_all_group_*: the paralog group as one unit.",
+        "f1_all_group_*: the paralog group as one unit. f1_all_p10..cascade_gain_support: the row's unit at the "
+        "cascade option the rule judged it with.",
     ]
     with open(path, "w", newline="") as fh:
         for line in header:
@@ -971,11 +1171,23 @@ def main() -> None:
                          "<out>/profile_report_levels.tsv.")
     ap.add_argument("--min-f1", type=float, default=0.5,
                     help="Calibration mode: the f1_all a unit must reach on the "
-                         "calibration reads to be reported at a level (see decide_units).")
+                         "calibration reads to be reported at a level (see decide_units; "
+                         "params.profile_min_report_f1).")
+    ap.add_argument("--min-cascade-gain", type=float, default=0.01,
+                    help="Calibration mode: the smallest point gain in f1_all that switches the "
+                         "cascade on (params.profile_min_cascade_gain; 0 with --decision-bootstrap 0: bare sign).")
+    ap.add_argument("--decision-support", type=float, default=0.9,
+                    help="Calibration mode: the fraction of bootstrap resamples a level, and the "
+                         "cascade's gain, must hold in (params.profile_decision_support).")
+    ap.add_argument("--decision-bootstrap", type=int, default=1000,
+                    help="Calibration mode: cluster-bootstrap resamples behind each decision "
+                         "(params.profile_decision_bootstrap; 0: point estimates alone).")
+    ap.add_argument("--decision-bootstrap-seed", type=int, default=42,
+                    help="Calibration mode: the bootstrap's seed (params.decision_bootstrap_seed).")
     ap.add_argument("--min-eval-positives", type=int, default=20,
                     help="Calibration mode: the distinct positive calibration sequences a unit "
                          "needs before the rule decides on it; below it, none for "
-                         "insufficient_evidence (see report_rule.py). 0: off.")
+                         "insufficient_evidence (see report_rule.py; params.profile_min_eval_positives). 0: off.")
     ap.add_argument("--cascade-config", type=Path, default=None,
                     help="Benchmark (test-read) mode: an existing "
                          "profile_cascade.tsv, written earlier from the "
@@ -1055,6 +1267,7 @@ def main() -> None:
 
     manifest_rows: list[dict] = []
     cascade_rows: list[dict] = []
+    sensitivity_rows: list[dict] = []
     if calibration and not diamond_calls.empty:
         # Every family with an HMM short-read threshold cascaded at once:
         # with the no-cascade tables this scores every option per unit.
@@ -1065,11 +1278,27 @@ def main() -> None:
 
         def by(rows, method, key):
             return {r[key]: r for r in rows if r["method"] == method}
-        manifest_rows, cascade = decide_units(
-            meta, thresholds,
-            by(summary_rows, "diamond", "family"), by(summary_rows, "diamond_cascade_all", "family"),
-            by(group_rows, "diamond", "paralog_group"), by(group_rows, "diamond_cascade_all", "paralog_group"),
-            args.min_f1, args.min_eval_positives)
+        tables = {"gene_off": by(summary_rows, "diamond", "family"),
+                  "gene_on": by(summary_rows, "diamond_cascade_all", "family"),
+                  "group_off": by(group_rows, "diamond", "paralog_group"),
+                  "group_on": by(group_rows, "diamond_cascade_all", "paralog_group")}
+        boot = None
+        if args.decision_bootstrap > 0:
+            members_by_group: dict[str, set[str]] = {}
+            for f, g in groups.items():
+                members_by_group.setdefault(g, set()).add(f)
+            units = {**{("gene", f): {f} for f in families},
+                     **{("group", g): ms for g, ms in members_by_group.items()}}
+            boot, point = cluster_bootstrap({"off": diamond_merged, "on": all_on}, units,
+                                            args.decision_bootstrap, args.decision_bootstrap_seed)
+            check_bootstrap_points(point, {
+                (key, c): tables[f"{key[0]}_{c}"].get(key[1])
+                for key in units for c in ("off", "on")})
+            print(f"Decision bootstrap: {args.decision_bootstrap} resamples of source sequences, "
+                  f"seed {args.decision_bootstrap_seed}, {len(units)} units")
+        manifest_rows, cascade, sensitivity_rows = decide_units(
+            meta, thresholds, tables["gene_off"], tables["gene_on"], tables["group_off"], tables["group_on"],
+            args.min_f1, args.min_eval_positives, boot, args.min_cascade_gain, args.decision_support)
         cascade_rows = list(cascade.values())
 
     unit_rows = []
@@ -1116,6 +1345,12 @@ def main() -> None:
               + "; nothing decided from these reads.")
         return
 
+    if sensitivity_rows:
+        _write_tsv(args.out / "decision_sensitivity.tsv", sensitivity_rows,
+                   "\nDecisions on point estimates alone vs the support rule")
+        for what in ("level", "cascade"):
+            diff = [r["unit"] for r in sensitivity_rows if r[f"{what}_differs"] == "yes"]
+            print(f"  {what}: {len(diff)} units decided differently: {', '.join(diff)}")
     if cascade_rows:
         cascade_path = args.cascade_out or (args.out / "profile_cascade.tsv")
         _write_tsv(cascade_path, cascade_rows, "\nProfile-mode DIAMOND+HMM cascade config")
@@ -1123,7 +1358,9 @@ def main() -> None:
         print(f"  {len(flagged)}/{len(cascade_rows)} families cascaded: {', '.join(flagged)}")
     if manifest_rows:
         levels_path = args.report_levels_out or (args.out / "profile_report_levels.tsv")
-        write_report_levels(levels_path, manifest_rows, args.min_f1, args.min_eval_positives)
+        write_report_levels(levels_path, manifest_rows, args.min_f1, args.min_eval_positives,
+                            args.decision_bootstrap, args.decision_bootstrap_seed, args.decision_support,
+                            args.min_cascade_gain)
         print(f"Profile report levels written to {levels_path}")
         for level in REPORT_LEVELS:
             units = [r["unit"] for r in manifest_rows if r["report_level"] == level]

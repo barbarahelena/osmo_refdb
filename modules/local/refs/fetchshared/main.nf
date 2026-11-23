@@ -1,4 +1,4 @@
-// Step 1 of a release's references, what needs every family once (templates/fetch_refs.py --shared-only): the
+// A release's references (REFS_BUILD), what needs every family once (templates/fetch_refs.py --shared-only): the
 // dedicated fusion-pair candidates (from the families' fetched positives and Pfam domains) and the HMM decoys'
 // sequences. With --refs_store kept there (storeDir) under <uniprot_release>/<families>.shared_<key>, key a hash
 // of families.yaml's hmm_decoys, its fusion_partner families' entries and fetch_refs.py.

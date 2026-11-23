@@ -16,7 +16,10 @@ Writes <release>/PROVENANCE.json:
   * inputs: families.yaml checksum, the UniProt release(s) and fetch dates in
     refs/manifest.tsv, the pipeline parameters that shape the benchmark (from
     the environment: SPLIT_MODE, READ_LENGTHS, BACKGROUND_R1/R2,
-    DIAMOND_MIN_SUBJECT_COVER), and a checksum over refs/ and alignments/;
+    DIAMOND_MIN_SUBJECT_COVER), the parameters of the report-level and
+    cascade decision, set per mode (DECISION_RULE_ENV: PROFILE_* and
+    ANNOTATE_*, and the shared DECISION_BOOTSTRAP_SEED), and a
+    checksum over refs/ and alignments/;
   * outputs: checksums of every HMM (without the DATE and COM lines HMMER
     writes), the DIAMOND database, cutoffs, cascade config and report levels;
   * licence: the code is MIT, the release is CC-BY-4.0 with attribution to
@@ -44,6 +47,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
+
+# the report-level and cascade rule's parameters, per mode (params.<name lowercased>)
+DECISION_RULE_ENV = (
+    "PROFILE_MIN_REPORT_F1", "PROFILE_MIN_EVAL_POSITIVES", "PROFILE_MIN_CASCADE_GAIN",
+    "PROFILE_DECISION_SUPPORT", "PROFILE_DECISION_BOOTSTRAP",
+    "ANNOTATE_MIN_REPORT_F1", "ANNOTATE_MIN_EVAL_POSITIVES", "ANNOTATE_DECISION_SUPPORT",
+    "ANNOTATE_DECISION_BOOTSTRAP", "DECISION_BOOTSTRAP_SEED",
+)
 
 TOOLS = {
     "mafft": (["mafft", "--version"], r"v?\d[\w.]*\s*\(.*?\)|v?\d[\w.]*"),
@@ -290,6 +301,8 @@ def main() -> None:
             "benchmark_read_lengths": os.environ.get("READ_LENGTHS") or "simulator default",
             "benchmark_background_reads": [x for x in (os.environ.get("BACKGROUND_R1"), os.environ.get("BACKGROUND_R2")) if x] or "none",
             "benchmark_diamond_min_subject_cover": os.environ.get("DIAMOND_MIN_SUBJECT_COVER", "0.0"),
+            # how the report levels and the cascade were decided, per mode (report_rule.py)
+            "decision_rule": {k.lower(): os.environ.get(k, "not recorded") for k in DECISION_RULE_ENV},
             "refs": tree_hash(refs_dir, "*.faa"),
             "alignments": tree_hash(aln_dir) if aln_dir else {"n_files": 0},
         },
