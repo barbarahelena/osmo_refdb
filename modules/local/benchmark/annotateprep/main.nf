@@ -1,6 +1,9 @@
-// The protein set for the annotate benchmark: held-out positives, hard negatives and background,
-// each on its own one-gene contig with a Prodigal-style header (benchmark/templates/benchmark_annotate.py, shared with the other annotate benchmark step; --prepare).
+// The protein set for the annotate benchmark: one split's positives (positive.<split>), their hard negatives
+// (negative.test for test, negative.train for calib) and background, each on its own one-gene contig with
+// a Prodigal-style header (benchmark/templates/benchmark_annotate.py, shared with the other annotate
+// benchmark step; --prepare).
 process BENCHMARK_ANNOTATEPREP {
+    tag "${split}"
     label 'process_single'
 
     // Seqera container 'py-yaml' (environment.yml next to this file: its packages)
@@ -11,6 +14,7 @@ process BENCHMARK_ANNOTATEPREP {
     input:
     path(refs, stageAs: 'refs/*')
     path(families)
+    val(split)          // calib | test
 
     output:
     tuple path('annotate/dummy_assembly.fna'), path('annotate/eval_proteins.faa'), emit: eval_set
@@ -19,7 +23,7 @@ process BENCHMARK_ANNOTATEPREP {
 
     script:
     """
-    python ${moduleDir}/../templates/benchmark_annotate.py --prepare --refs refs --families ${families} --out annotate
+    python ${moduleDir}/../templates/benchmark_annotate.py --prepare --split ${split} --refs refs --families ${families} --out annotate
     """
 
     stub:

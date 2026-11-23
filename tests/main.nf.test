@@ -23,10 +23,12 @@ nextflow_pipeline {
                 { assert [
                     "osmo_refdb.dmnd", "osmo_refdb.diamond_cutoffs.tsv", "osmo_refdb.train_refs.faa",
                     "osmo_refdb.profile_cascade.tsv", "osmo_refdb.profile_report_levels.tsv",
+                    "osmo_refdb.annotate_report_levels.tsv",
                     "osmo_refdb.profile_excluded_families.txt", "osmo_refdb.annotate_excluded_families.txt",
                     "hmms/osmo_refdb.hmm", "refs", "alignments", "markers/osmo_markers.dmnd",
                     "catalogs/gmgc_gut/catalog.json", "catalogs/gmgc_gut/screen.tsv",
-                    "results/metrics", "results/calib_metrics", "results/annotate", "results/catalog_benchmark",
+                    "results/metrics", "results/calib_metrics", "results/annotate", "results/annotate_calib",
+                    "results/catalog_benchmark",
                     "real_genome_validation", "phenotype_validation", "PROVENANCE.json", "software_versions.yml",
                   ].findAll { p -> !new File(rel, p).exists() } == [] },
                 { assert workflow.trace.failed().size() == 0 },

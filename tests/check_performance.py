@@ -6,11 +6,14 @@ and its accuracy has not dropped against a recorded baseline.
 Checks that must hold exactly (any failure fails the run):
   * the release's parts are there (DIAMOND database, HMMs, cascade, report
     levels, markers, catalog, provenance, the benchmark results);
-  * every family has an HMM with a gathering cutoff, a reporting unit, and a
-    row in the benchmark; every marker is in markers/;
+  * every family has an HMM with a gathering cutoff, a reporting unit in both
+    report-level manifests (profile and annotate), each with a reason from
+    the fixed vocabulary, and a row in the benchmark; every marker is in
+    markers/;
   * the per-read rebuilds agree with osmotool's own counts, in the read
     benchmark (results/metrics/verification.tsv) and the catalog benchmark
-    (results/catalog_benchmark/verification.tsv);
+    (results/catalog_benchmark/verification.tsv), and annotate's hmm best hits
+    with its calls (results/annotate/verification.tsv);
   * the catalog does not make things worse: median f1_all over the reported
     units with every sequence catalogued (A) >= with none of the scored ones (B).
 
@@ -50,15 +53,21 @@ from pathlib import Path
 REQUIRED = [
     "osmo_refdb.dmnd", "osmo_refdb.diamond_cutoffs.tsv", "osmo_refdb.train_refs.faa",
     "osmo_refdb.profile_cascade.tsv", "osmo_refdb.profile_report_levels.tsv",
+    "osmo_refdb.annotate_report_levels.tsv",
     "osmo_refdb.profile_excluded_families.txt", "osmo_refdb.annotate_excluded_families.txt",
     "hmms/osmo_refdb.hmm", "hmms/cutoff_manifest.tsv", "refs/manifest.tsv",
     "markers/osmo_markers.dmnd", "markers/osmo_markers.manifest.tsv", "markers/osmo_markers.train_refs.faa",
     "PROVENANCE.json", "software_versions.yml",
     "results/metrics/summary_by_report_unit.tsv", "results/metrics/verification.tsv",
-    "results/annotate/summary.tsv",
+    "results/metrics/average_precision.tsv",
+    "results/annotate/summary.tsv", "results/annotate/summary_by_group.tsv",
+    "results/annotate/average_precision.tsv",
+    "results/annotate_calib/summary.tsv", "results/annotate_calib/summary_by_group.tsv",
     "results/catalog_benchmark/summary_by_report_unit.tsv", "results/catalog_benchmark/verification.tsv",
 ]
 HIGHER_IS_BETTER = ("f1", "f1_all", "precision", "precision_all", "recall")
+REPORT_LEVEL_FILES = ("osmo_refdb.profile_report_levels.tsv", "osmo_refdb.annotate_report_levels.tsv")
+REASONS = ("meets_threshold", "below_threshold", "insufficient_evidence", "out_of_scope", "override")
 
 
 def yaml_names(path: Path, section: str) -> list[str]:
@@ -128,12 +137,16 @@ def build_checks(rel: Path, families: list[str], markers: list[str], c: Checks) 
         ga = hmm_cutoffs(rel / "hmms/osmo_refdb.hmm")
         for fam in families:
             c.require(ga.get(fam, False), f"{fam}: no HMM with a GA cutoff in hmms/osmo_refdb.hmm")
-    if (rel / "osmo_refdb.profile_report_levels.tsv").exists():
+    for levels in REPORT_LEVEL_FILES:
+        if not (rel / levels).exists():
+            continue
         members = set()
-        for r in read_tsv(rel / "osmo_refdb.profile_report_levels.tsv"):
+        for r in read_tsv(rel / levels):
             members.update(m for m in r.get("members", "").split(",") if m)
+            c.require(r.get("reason") in REASONS,
+                      f"{levels}: unit {r.get('unit')}: reason {r.get('reason')!r} is not one of {', '.join(REASONS)}")
         for fam in families:
-            c.require(fam in members, f"{fam}: in no reporting unit (osmo_refdb.profile_report_levels.tsv)")
+            c.require(fam in members, f"{fam}: in no reporting unit ({levels})")
     if (rel / "markers/osmo_markers.manifest.tsv").exists():
         listed = {r["marker"] for r in read_tsv(rel / "markers/osmo_markers.manifest.tsv")}
         for m in markers:
@@ -154,6 +167,13 @@ def build_checks(rel: Path, families: list[str], markers: list[str], c: Checks) 
                 what = r.get("check") or r.get("sample") or "?"
                 c.require(r.get("cells_disagree", r.get("disagree")) == "0",
                           f"{v}: {what} disagrees with osmotool ({r})")
+
+    v = "results/annotate/verification.tsv"
+    if (rel / v).exists():
+        for r in read_tsv(rel / v):
+            if r.get("method") == "hmm":      # diamond's best hit is taken before its cutoffs: not exact
+                c.require(r.get("proteins_disagree") == "0",
+                          f"{v}: hmm best hits disagree with osmotool's calls ({r})")
 
     if (rel / "results/metrics/summary.tsv").exists():
         seen = {r["family"] for r in read_tsv(rel / "results/metrics/summary.tsv")}

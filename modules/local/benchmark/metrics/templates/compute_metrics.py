@@ -67,7 +67,16 @@ osmo_refdb.profile_cascade.tsv (which families get the HMM second opinion)
 and osmo_refdb.profile_report_levels.tsv (what osmotool profile reports, per
 unit, with the calibration numbers each choice rests on). See decide_units.
 Benchmark mode (--cascade-config, --report-levels; the test reads) only
-scores those choices, adding summary_by_report_unit.tsv.
+scores those choices, adding summary_by_report_unit.tsv, and the
+threshold-free average precision per family and method
+(average_precision.tsv, with the per-read scores it is computed from in
+average_precision_scores.tsv.gz; see report_rule.ap_row).
+
+The rule, its reason vocabulary and the minimum-evidence guard
+(--min-eval-positives) are shared with the annotate benchmark:
+../../templates/report_rule.py. n_positive_sequences (summary tables) is
+the number of distinct positive sequences a unit's genuine reads come from,
+the count the guard applies to.
 
 Precision depends on how many negative reads are mixed in, which is set by
 fetch caps and split fractions, not biology. hard_negative_fp_per_million
@@ -95,6 +104,7 @@ from __future__ import annotations
 import argparse
 import csv
 import re
+import sys
 from pathlib import Path
 
 import matplotlib
@@ -103,6 +113,10 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import yaml
 from sklearn.metrics import precision_recall_curve, roc_curve, auc
+
+# the report-level rule and average precision, shared with benchmark_annotate.py
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "templates"))
+import report_rule  # noqa: E402
 
 
 RANDOM_BG_FAMILY = "random_bg"             # must match 01f / 09
@@ -483,6 +497,9 @@ def _metrics(merged: pd.DataFrame, members: set[str], n_random_bg: int) -> dict 
         "within_group_swaps": (int((own & genuine & called & (
             merged["family_called"].astype(str) != merged["family_true"].astype(str))).sum())
             if len(members) > 1 else 0),
+        # the sequences the unit was measured on (report_rule's evidence guard)
+        "n_positive_sequences": (int(merged.loc[own & genuine, "uniprot_id"].nunique())
+                                 if "uniprot_id" in merged else ""),
     }
 
 
@@ -498,8 +515,9 @@ def summarize(merged: pd.DataFrame, method: str, families: list[str],
         if m is None:
             continue
         del m["within_group_swaps"]
+        n_seq = m.pop("n_positive_sequences")
         rows.append({"method": method, "family": family, **m,
-                     "paralog_group": groups.get(family, "")})
+                     "paralog_group": groups.get(family, ""), "n_positive_sequences": n_seq})
     return rows
 
 
@@ -543,6 +561,7 @@ def load_family_meta(path: Path) -> dict[str, dict]:
     for fam in data["families"]:
         meta[fam["name"]] = {"group": fam.get("paralog_group") or "",
                              "report_level": fam.get("report_level") or "",
+                             "report_level_reason": " ".join(str(fam.get("report_level_reason") or "").split()),
                              "scope": fam.get("scope") or ""}
     errors = []
     levels_by_group: dict[str, set[str]] = {}
@@ -585,6 +604,13 @@ def _best_cascade(off: dict | None, on: dict | None) -> tuple[bool, float]:
     return (True, f_on) if f_on > f_off else (False, f_off)
 
 
+def _n_value(row: dict | None) -> int:
+    """n_positive_sequences of a summary row; 0 without one."""
+    if row is None or row.get("n_positive_sequences", "") == "":
+        return 0
+    return int(row["n_positive_sequences"])
+
+
 def _fmt(x) -> str:
     return "NA" if x is None or x == "" else str(x)
 
@@ -592,7 +618,7 @@ def _fmt(x) -> str:
 def decide_units(meta: dict[str, dict], thresholds: dict[str, float],
                  gene_off: dict[str, dict], gene_on: dict[str, dict],
                  group_off: dict[str, dict], group_on: dict[str, dict],
-                 min_f1: float) -> tuple[list[dict], dict[str, dict]]:
+                 min_f1: float, min_n: int = 0) -> tuple[list[dict], dict[str, dict]]:
     """
     Decide report level and cascade together, per family or paralog group
     (families.yaml paralog_group), on the calibration reads.
@@ -605,15 +631,19 @@ def decide_units(meta: dict[str, dict], thresholds: dict[str, float],
     members': these four tables score every option.
 
     Rule, on f1_all (see the module docstring), each level taking the
-    better of its cascade options:
+    better of its cascade options (report_rule.rule_levels, shared with
+    the annotate benchmark):
       a family without a group: gene if it reaches min_f1, else none;
       a paralog group: gene for every member if every member reaches
         min_f1; else group (one unit, one cascade option for all members)
         if the group reaches min_f1; else each member on its own, gene if
         it reaches min_f1, none if not.
+    A level needs min_n distinct positive sequences (n_positive_sequences)
+    as well; a unit with fewer is none for insufficient_evidence.
     families.yaml's report_level is what gets reported; the rule's level is
     written next to it (calibration_level) and a mismatch is printed as a
     warning. The cascade follows the reported level (off for none).
+    reason is report_rule's vocabulary, reason_detail the numbers.
 
     Returns (manifest rows: one per reporting unit, i.e. a paralog group on
     "group" and a family otherwise; {family: cascade-config row}).
@@ -643,27 +673,19 @@ def decide_units(meta: dict[str, dict], thresholds: dict[str, float],
         group_choice = (_best_cascade(group_off.get(group), group_on.get(group) if group_has_on else None)
                         if group else None)
 
-        weak = [f for f in members if gene_choice[f][1] < min_f1]
-        calib: dict[str, tuple[str, str]] = {}
-        for f in members:
-            f1 = gene_choice[f][1]
-            if not weak:
-                calib[f] = ("gene", f"every member of {group} reaches f1_all {min_f1} at gene level ({f} {f1:.3f})"
-                            if group else f"f1_all {f1:.3f} >= {min_f1}")
-            elif group_choice[1] >= min_f1 if group else False:
-                calib[f] = ("group", f"{', '.join(weak)} below f1_all {min_f1} at gene level; "
-                                     f"group f1_all {group_choice[1]:.3f} >= {min_f1}")
-            else:
-                tail = f"; group {group} f1_all {group_choice[1]:.3f} < {min_f1}" if group else ""
-                calib[f] = (("gene", f"f1_all {f1:.3f} >= {min_f1} at gene level{tail}") if f not in weak
-                            else ("none", f"f1_all {f1:.3f} < {min_f1} at gene level{tail}"))
+        gene_n = {f: _n_value(gene_off.get(f)) for f in members}
+        calib = report_rule.rule_levels(
+            members, group, {f: gene_choice[f][1] for f in members}, gene_n,
+            group_choice[1] if group else None, _n_value(group_off.get(group)) if group else None,
+            min_f1, min_n)
 
         level: dict[str, str] = {}
         source: dict[str, str] = {}
+        code: dict[str, str] = {}
         reason: dict[str, str] = {}
         for f in members:
             m = meta[f]
-            calib_level, why = calib[f]
+            calib_level, calib_code, why = calib[f]
             if m["report_level"]:
                 level[f], source[f] = m["report_level"], "families.yaml"
             elif m["scope"] == "annotate_only":
@@ -671,13 +693,18 @@ def decide_units(meta: dict[str, dict], thresholds: dict[str, float],
             else:
                 level[f], source[f] = calib_level, "calibration (report_level not set in families.yaml)"
             if m["scope"] == "annotate_only":
+                code[f] = report_rule.OUT_OF_SCOPE
                 reason[f] = f"scope: annotate_only; calibration rule: {calib_level} ({why})"
             elif level[f] != calib_level:
-                reason[f] = f"families.yaml overrides the calibration rule, which gives {calib_level} ({why})"
+                code[f] = report_rule.OVERRIDE
+                note = m["report_level_reason"] or "families.yaml gives no report_level_reason"
+                reason[f] = (f"families.yaml sets {level[f]}: {note}; "
+                             f"the calibration rule gives {calib_level} ({why})")
                 print(f"WARNING: {f}: families.yaml report_level {level[f]}, calibration rule "
                       f"gives {calib_level} ({why})")
             else:
-                reason[f] = why
+                code[f], reason[f] = calib_code, why
+        evidence = {"rule_metric": "f1_all", "threshold": min_f1, "min_eval_positives": min_n}
 
         aggregated = any(level[f] == "group" for f in members)
         if aggregated:
@@ -694,22 +721,26 @@ def decide_units(meta: dict[str, dict], thresholds: dict[str, float],
                 "unit": group, "report_level": "group", "members": ",".join(members),
                 "paralog_group": group,
                 "cascade_members": ",".join(f for f in members if flags[f]),
-                "calibration_level": calib[f0][0], "level_source": source[f0], "reason": reason[f0],
+                "calibration_level": calib[f0][0], "level_source": source[f0], "reason": code[f0],
                 **chosen((group_on if group_choice[0] else group_off).get(group)),
                 "f1_all_gene_off": ",".join(f1_cell(gene_off, f) for f in members),
                 "f1_all_gene_on": ",".join(f1_cell(gene_on, f) if f in thresholds else "NA" for f in members),
                 **group_cells,
+                "reason_detail": reason[f0], **evidence,
+                "n_eval_positives": _n_value(group_off.get(group)),
             })
         else:
             for f in members:
                 manifest.append({
                     "unit": f, "report_level": level[f], "members": f, "paralog_group": group,
                     "cascade_members": f if flags[f] else "",
-                    "calibration_level": calib[f][0], "level_source": source[f], "reason": reason[f],
+                    "calibration_level": calib[f][0], "level_source": source[f], "reason": code[f],
                     **chosen((gene_on if flags[f] else gene_off).get(f) if level[f] == "gene" else None),
                     "f1_all_gene_off": f1_cell(gene_off, f),
                     "f1_all_gene_on": f1_cell(gene_on, f) if f in thresholds else "NA",
                     **group_cells,
+                    "reason_detail": reason[f], **evidence,
+                    "n_eval_positives": gene_n[f],
                 })
 
         for f in members:
@@ -737,15 +768,24 @@ MANIFEST_COLUMNS = [
     "calibration_level", "level_source", "reason",
     "tp", "fp_all", "fn", "precision_all", "recall", "f1_all",
     "f1_all_gene_off", "f1_all_gene_on", "f1_all_group_off", "f1_all_group_on",
+    # added after v10: reason became report_rule's vocabulary, its old free text is reason_detail
+    "reason_detail", "rule_metric", "threshold", "n_eval_positives", "min_eval_positives",
 ]
 
 
-def write_report_levels(path: Path, rows: list[dict], min_f1: float) -> None:
+def write_report_levels(path: Path, rows: list[dict], min_f1: float, min_n: int = 0) -> None:
     header = [
         "osmo_refdb profile report levels: one row per reporting unit (osmotool profile's unit table).",
         "Decided on the calibration reads (positive.calib + negative.train), never on the benchmark (test) reads.",
         f"Rule (min_f1_all = {min_f1}): gene if every member reaches f1_all >= min at gene level; else group "
         "if the paralog group reaches it as one unit; else none.",
+        f"Minimum evidence (min_eval_positives = {min_n}): a level needs that many distinct positive calibration "
+        "sequences (n_eval_positives; a group's summed over its members), else the rule gives none for "
+        "insufficient_evidence.",
+        "reason: meets_threshold | below_threshold | insufficient_evidence (the rule's), out_of_scope "
+        "(families.yaml scope: annotate_only, not performance), override (families.yaml report_level differs "
+        "from the rule's; reason_detail gives families.yaml's report_level_reason and the rule's level). "
+        "reason_detail: the numbers behind it.",
         "At each level the cascade (HMM second opinion, osmo_refdb.profile_cascade.tsv) is used only where it "
         "raises f1_all; cascade_members lists where it is on.",
         "f1_all = F1 with every non-background read called as the unit counted as a false positive "
@@ -873,6 +913,34 @@ def summarize_background_fpr(merged: pd.DataFrame, method: str) -> tuple[list[di
     return overall, by_family
 
 
+def average_precision_rows(merged: pd.DataFrame, method: str,
+                           families: list[str]) -> tuple[list[dict], pd.DataFrame]:
+    """Threshold-free metric per family on these reads: average precision of
+    the bit-score ranking of the reads called as the family, over the
+    family's genuine reads (positives) and its own hard-negative reads only
+    (report_rule.ap_row). Returns (one row per family, the retrieved reads
+    with their scores: what the curve is computed from)."""
+    rows, kept = [], []
+    for family in families:
+        own = merged["family_true"] == family
+        pos = own & merged["is_genuine_positive"]
+        neg = own & merged["_hard_neg"]
+        n_pos, n_neg = int(pos.sum()), int(neg.sum())
+        if not n_pos:
+            continue
+        hit = merged["family_called"] == family
+        sel = merged.loc[(pos | neg) & hit, ["read_id", "bitscore"]].copy()
+        sel["label"] = ["positive" if p else "hard_negative" for p in pos[(pos | neg) & hit]]
+        rows.append({"method": method, "family": family,
+                     **report_rule.ap_row(sel.loc[sel["label"] == "positive", "bitscore"].tolist(),
+                                          sel.loc[sel["label"] == "hard_negative", "bitscore"].tolist(),
+                                          n_pos, n_neg)})
+        sel.insert(0, "family", family)
+        sel.insert(0, "method", method)
+        kept.append(sel[["method", "family", "read_id", "label", "bitscore"]])
+    return rows, (pd.concat(kept, ignore_index=True) if kept else pd.DataFrame())
+
+
 def _write_tsv(path: Path, rows: list[dict], label: str) -> None:
     if not rows:
         return
@@ -904,6 +972,10 @@ def main() -> None:
     ap.add_argument("--min-f1", type=float, default=0.5,
                     help="Calibration mode: the f1_all a unit must reach on the "
                          "calibration reads to be reported at a level (see decide_units).")
+    ap.add_argument("--min-eval-positives", type=int, default=20,
+                    help="Calibration mode: the distinct positive calibration sequences a unit "
+                         "needs before the rule decides on it; below it, none for "
+                         "insufficient_evidence (see report_rule.py). 0: off.")
     ap.add_argument("--cascade-config", type=Path, default=None,
                     help="Benchmark (test-read) mode: an existing "
                          "profile_cascade.tsv, written earlier from the "
@@ -997,13 +1069,21 @@ def main() -> None:
             meta, thresholds,
             by(summary_rows, "diamond", "family"), by(summary_rows, "diamond_cascade_all", "family"),
             by(group_rows, "diamond", "paralog_group"), by(group_rows, "diamond_cascade_all", "paralog_group"),
-            args.min_f1)
+            args.min_f1, args.min_eval_positives)
         cascade_rows = list(cascade.values())
 
     unit_rows = []
     for method, merged in merged_by_method.items():
         if report_units and method != "diamond_cascade_all":
             unit_rows += summarize_report_units(merged, method, report_units)
+
+    # threshold-free, on the benchmark (test) reads only: nothing is decided from it
+    ap_rows, ap_scores = [], []
+    if not calibration:
+        for method, merged in merged_by_method.items():
+            rows, scores = average_precision_rows(merged, method, families)
+            ap_rows += rows
+            ap_scores.append(scores)
 
     _write_tsv(args.out / "summary.tsv", summary_rows, "Per-family precision/recall/F1")
     _write_tsv(args.out / "summary_by_group.tsv", group_rows, "Per-paralog-group precision/recall/F1")
@@ -1018,6 +1098,12 @@ def main() -> None:
                "Background false positives by called family")
     _write_tsv(args.out / "verification.tsv", verification_rows,
                "Rebuilt per-read calls against osmotool's own counts")
+    _write_tsv(args.out / "average_precision.tsv", ap_rows,
+               "Average precision per family and method, against its own hard negatives")
+    if ap_rows:
+        scores_path = args.out / "average_precision_scores.tsv.gz"
+        pd.concat(ap_scores, ignore_index=True).to_csv(scores_path, sep="\t", index=False, compression="gzip")
+        print(f"  the reads it ranks (every read called as its family): {scores_path}")
 
     if all_curve_stats:
         print("\nOverall ROC/PR AUC by method:")
@@ -1037,7 +1123,7 @@ def main() -> None:
         print(f"  {len(flagged)}/{len(cascade_rows)} families cascaded: {', '.join(flagged)}")
     if manifest_rows:
         levels_path = args.report_levels_out or (args.out / "profile_report_levels.tsv")
-        write_report_levels(levels_path, manifest_rows, args.min_f1)
+        write_report_levels(levels_path, manifest_rows, args.min_f1, args.min_eval_positives)
         print(f"Profile report levels written to {levels_path}")
         for level in REPORT_LEVELS:
             units = [r["unit"] for r in manifest_rows if r["report_level"] == level]

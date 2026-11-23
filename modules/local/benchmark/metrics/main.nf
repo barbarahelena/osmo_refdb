@@ -1,4 +1,5 @@
 // Precision / recall / F1 for DIAMOND, DIAMOND+cascade and HMM.
+// It imports ../../templates/report_rule.py (the report-level rule, shared with the annotate benchmark).
 // mode = calib: scores the calibration reads and WRITES the cascade config and report levels (cascade/)
 //      | test:  scores the test reads with those (cascade_in)
 process BENCHMARK_METRICS {
@@ -29,10 +30,11 @@ process BENCHMARK_METRICS {
     def args = mode == 'calib'
         ? '--cascade-out cascade/osmo_refdb.profile_cascade.tsv --report-levels-out cascade/osmo_refdb.profile_report_levels.tsv'
         : '--cascade-config cascade_in/osmo_refdb.profile_cascade.tsv --report-levels cascade_in/osmo_refdb.profile_report_levels.tsv'
+    def extra = task.ext.args ?: ''   // e.g. --min-eval-positives (conf/modules.config)
     """
     mkdir cascade
     python ${moduleDir}/templates/compute_metrics.py --reads ${reads} --diamond run/diamond --hmm run/hmm \\
-        --out metrics --families ${families} ${args}
+        --out metrics --families ${families} ${args} ${extra}
     """
 
     stub:

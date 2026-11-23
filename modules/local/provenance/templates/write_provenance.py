@@ -259,7 +259,10 @@ def main() -> None:
     osmotool = osmotool_info()
     if per_process and "error" in osmotool:     # not importable here: each step has its own image
         versions = merged_tools(per_process).get("osmotool")
-        osmotool = {"version": versions or "not used", "source": "versions.yml of the steps"}
+        osmotool = {"version": versions or "not used", "source": "versions.yml of the steps",
+                    # what `osmotool --version` printed in each step's container (a list above: they differ)
+                    "per_step": {proc: tools["osmotool"] for proc, tools in sorted(per_process.items())
+                                 if "osmotool" in tools}}
     explicit = Path("/opt/osmo_refdb/conda-explicit.txt")
 
     record = {
@@ -295,7 +298,8 @@ def main() -> None:
                 p.name: hmm_sha256(p) for p in sorted(hmm_dir.glob("*.hmm"))},
             "files": {n: sha256_of(top[n]) for n in (
                 "osmo_refdb.dmnd", "osmo_refdb.diamond_cutoffs.tsv", "osmo_refdb.profile_cascade.tsv",
-                "osmo_refdb.profile_report_levels.tsv", "osmo_refdb.profile_excluded_families.txt",
+                "osmo_refdb.profile_report_levels.tsv", "osmo_refdb.annotate_report_levels.tsv",
+                "osmo_refdb.profile_excluded_families.txt",
                 "osmo_refdb.annotate_excluded_families.txt", "osmo_refdb.train_refs.faa")
                 if n in top},
         },

@@ -88,6 +88,9 @@
 #                     11c prints a warning, and the manifest a reason, when
 #                     this value and the rule disagree. scope:
 #                     annotate_only requires none. Unset: the rule's level.
+#   report_level_reason  optional free text: why report_level differs from
+#                     the rule's level. Copied into the manifest's
+#                     reason_detail on that unit's override row.
 #   refseq_gene_symbols  optional list of gene symbols; when set,
 #                     add_refseq_positives.py additionally pulls NCBI
 #                     RefSeq bacterial proteins tagged with any of these gene
