@@ -1,0 +1,45 @@
+family	report_unit	report_level	diamond_precision	f1_all_cascade_off	f1_all_cascade_on	needs_cascade_check	hmm_short_read_threshold
+ectA	ectA	gene	1.0	0.809	0.726	no	
+ectB	ectB	gene	0.487	0.636	0.675	yes	46.6
+ectC	ectC	gene	1.0	0.801	0.758	no	
+teaA	teaA	gene	0.39	0.546	0.826	yes	41.7
+betL	betL	gene	0.999	0.904	0.858	no	
+kdpA	kdpA	gene	1.0	0.976	0.956	no	
+nhaA	nhaA	gene	1.0	0.949	0.864	no	
+proX	proX	gene	0.489	0.191	0.527	yes	34.6
+opuAC	opuAC	none	0.082	0.032	0.043	no	
+opuBC	opuBC	none	0.015	0.005	0.005	no	
+opuCC	opuCC	none	0.106	0.038	0.073	no	
+proP	proP	gene	0.387	0.519	0.451	no	
+otsA	otsA	none	0.441	0.541	0.511	no	
+otsB	otsB	gene	0.901	0.807	0.623	no	
+mscL	mscL	gene	0.935	0.774	0.57	no	
+mscS	mscS	none	0.274	0.398	0.435	no	
+galE	galE	gene	0.818	0.849	0.85	yes	17.2
+mazG	mazG	gene	0.979	0.897	0.858	no	
+murB	murB	none	1.0	0.932	0.704	no	
+opuAA	opuAA	none	0.296	0.204	0.223	no	
+opuBA	opuBA	none	0.168	0.098	0.141	no	
+opuCA	opuCA	none	0.266	0.163	0.141	no	
+opuAB	opu_permease	group	0.865	0.484	0.49	yes	20.0
+opuBB	opu_permease	group	0.812	0.484	0.49	yes	32.4
+opuCB	opu_permease	group	0.694	0.484	0.49	yes	36.0
+mrpA	mrpA	none	0.433	0.391	0.255	no	
+mrpD	mrpD	none	0.321	0.266	0.249	no	
+mrpB	mrpB	gene	1.0	0.633	0.603	no	
+mrpC	mrpC	none	0.428	0.476	0.407	no	
+mrpE	mrpE	gene	1.0	0.706	0.651	no	
+mrpF	mrpF	gene	1.0	0.751	0.708	no	
+mrpG	mrpG	gene	1.0	0.663	0.59	no	
+betA	betA	gene	0.318	0.47	0.625	yes	34.1
+betB	betB	gene	0.308	0.463	0.49	yes	41.4
+gshA	gshA	gene	0.873	0.799	0.801	yes	11.3
+gshF	gshF	gene	0.687	0.647	0.643	no	
+gshB	gshB	gene	0.948	0.914	0.874	no	
+gor	gor	gene	1.0	0.967	0.863	no	
+cspA	cspA	gene	1.0	0.804	0.758	no	
+trkA	trkA	gene	0.832	0.707	0.816	yes	12.6
+ktrA	ktrA	gene	0.996	0.731	0.629	no	
+trkH	trkH	none	0.226	0.105	0.114	no	
+ktrB	ktrB	none	0.164	0.077	0.085	no	
+ktrD	ktrD	none	0.179	0.08	0.049	no	

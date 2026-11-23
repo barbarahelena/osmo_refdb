@@ -144,11 +144,68 @@
           "maximum": 1,
           "description": "The read benchmark's osmotool profile --min_subject_cover (0: off, osmotool's default)"
         },
-        "min_eval_positives": {
+        "profile_min_report_f1": {
+          "type": "number",
+          "default": 0.5,
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Profile report levels: the f1_all a reporting unit must reach on the calibration reads, on the point estimate and in profile_decision_support of the bootstrap resamples"
+        },
+        "profile_min_eval_positives": {
           "type": "integer",
           "default": 20,
           "minimum": 0,
-          "description": "Report levels, profile and annotate: the distinct positive calibration sequences a reporting unit needs before the rule decides on it; below it the unit is none with reason insufficient_evidence (0: off)"
+          "description": "Profile report levels: the distinct positive calibration sequences a reporting unit needs before the rule decides on it; below it the unit is none with reason insufficient_evidence (0: off)"
+        },
+        "profile_min_cascade_gain": {
+          "type": "number",
+          "default": 0.01,
+          "minimum": 0,
+          "description": "Profile cascade: the smallest calibration gain in f1_all (cascade on minus off) that switches the HMM second opinion on for a unit (0 with profile_decision_bootstrap 0: any positive gain, the rule up to v10)"
+        },
+        "profile_decision_support": {
+          "type": "number",
+          "default": 0.9,
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Profile report levels and cascade: the fraction of bootstrap resamples in which a level must clear profile_min_report_f1, and the cascade's paired gain must be positive"
+        },
+        "profile_decision_bootstrap": {
+          "type": "integer",
+          "default": 1000,
+          "minimum": 0,
+          "description": "Profile report levels and cascade: cluster-bootstrap resamples of the calibration source sequences behind each decision (0: point estimates alone)"
+        },
+        "annotate_min_report_f1": {
+          "type": "number",
+          "default": 0.5,
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Annotate report levels (--method hmm): the f1_all a reporting unit must reach on the calibration proteins, on the point estimate and in annotate_decision_support of the bootstrap resamples"
+        },
+        "annotate_min_eval_positives": {
+          "type": "integer",
+          "default": 20,
+          "minimum": 0,
+          "description": "Annotate report levels: the positive calibration proteins a reporting unit needs before the rule decides on it; below it the unit is none with reason insufficient_evidence (0: off)"
+        },
+        "annotate_decision_support": {
+          "type": "number",
+          "default": 0.9,
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Annotate report levels: the fraction of bootstrap resamples in which a level must clear annotate_min_report_f1"
+        },
+        "annotate_decision_bootstrap": {
+          "type": "integer",
+          "default": 1000,
+          "minimum": 0,
+          "description": "Annotate report levels: protein-bootstrap resamples of the calibration proteins behind each level (0: point estimates alone)"
+        },
+        "decision_bootstrap_seed": {
+          "type": "integer",
+          "default": 42,
+          "description": "The decision bootstrap's random seed, both modes"
         },
         "refs_store": {
           "type": "string",

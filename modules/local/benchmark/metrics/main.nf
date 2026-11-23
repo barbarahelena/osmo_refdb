@@ -1,6 +1,7 @@
 // Precision / recall / F1 for DIAMOND, DIAMOND+cascade and HMM.
 // It imports ../../templates/report_rule.py (the report-level rule, shared with the annotate benchmark).
-// mode = calib: scores the calibration reads and WRITES the cascade config and report levels (cascade/)
+// mode = calib: scores the calibration reads and WRITES the cascade config and report levels (cascade/),
+//               with metrics/decision_sensitivity.tsv: the decisions on point estimates alone vs the support rule
 //      | test:  scores the test reads with those (cascade_in)
 process BENCHMARK_METRICS {
     // calls: python + numpy, pandas, matplotlib, pyyaml
@@ -40,6 +41,8 @@ process BENCHMARK_METRICS {
     stub:
     """
     mkdir metrics cascade
-    if [ "${mode}" = calib ]; then touch cascade/osmo_refdb.profile_cascade.tsv cascade/osmo_refdb.profile_report_levels.tsv; fi
+    if [ "${mode}" = calib ]; then
+        touch cascade/osmo_refdb.profile_cascade.tsv cascade/osmo_refdb.profile_report_levels.tsv metrics/decision_sensitivity.tsv
+    fi
     """
 }

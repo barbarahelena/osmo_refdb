@@ -63,11 +63,19 @@ REQUIRED = [
     "results/annotate/summary.tsv", "results/annotate/summary_by_group.tsv",
     "results/annotate/average_precision.tsv",
     "results/annotate_calib/summary.tsv", "results/annotate_calib/summary_by_group.tsv",
+    "results/calib_metrics/decision_sensitivity.tsv",
     "results/catalog_benchmark/summary_by_report_unit.tsv", "results/catalog_benchmark/verification.tsv",
 ]
 HIGHER_IS_BETTER = ("f1", "f1_all", "precision", "precision_all", "recall")
 REPORT_LEVEL_FILES = ("osmo_refdb.profile_report_levels.tsv", "osmo_refdb.annotate_report_levels.tsv")
-REASONS = ("meets_threshold", "below_threshold", "insufficient_evidence", "out_of_scope", "override")
+REASONS = ("meets_threshold", "below_threshold", "unstable", "insufficient_evidence", "out_of_scope",
+           "override")
+# the decision bootstrap, in both manifests (cascade_gain*: NA in annotate's, which has no cascade)
+ROBUST_COLUMNS = ("f1_all_p10", "f1_all_p90", "level_support", "cascade_gain", "cascade_gain_support")
+DECISION_PARAMS = ("profile_min_report_f1", "profile_min_eval_positives", "profile_min_cascade_gain",
+                   "profile_decision_support", "profile_decision_bootstrap",
+                   "annotate_min_report_f1", "annotate_min_eval_positives", "annotate_decision_support",
+                   "annotate_decision_bootstrap", "decision_bootstrap_seed")
 
 
 def yaml_names(path: Path, section: str) -> list[str]:
@@ -141,7 +149,10 @@ def build_checks(rel: Path, families: list[str], markers: list[str], c: Checks) 
         if not (rel / levels).exists():
             continue
         members = set()
-        for r in read_tsv(rel / levels):
+        rows = read_tsv(rel / levels)
+        for col in ROBUST_COLUMNS:
+            c.require(bool(rows) and col in rows[0], f"{levels}: no column {col}")
+        for r in rows:
             members.update(m for m in r.get("members", "").split(",") if m)
             c.require(r.get("reason") in REASONS,
                       f"{levels}: unit {r.get('unit')}: reason {r.get('reason')!r} is not one of {', '.join(REASONS)}")
@@ -156,6 +167,10 @@ def build_checks(rel: Path, families: list[str], markers: list[str], c: Checks) 
             prov = json.loads((rel / "PROVENANCE.json").read_text())
             for key in ("inputs", "outputs"):
                 c.require(key in prov, f"PROVENANCE.json has no {key}")
+            rule = prov.get("inputs", {}).get("decision_rule", {})
+            for key in DECISION_PARAMS:
+                c.require(rule.get(key, "not recorded") != "not recorded",
+                          f"PROVENANCE.json inputs.decision_rule does not record {key}")
         except json.JSONDecodeError as e:
             c.require(False, f"PROVENANCE.json does not parse: {e}")
 

@@ -28,6 +28,7 @@ nextflow_pipeline {
                     "hmms/osmo_refdb.hmm", "refs", "alignments", "markers/osmo_markers.dmnd",
                     "catalogs/gmgc_gut/catalog.json", "catalogs/gmgc_gut/screen.tsv",
                     "results/metrics", "results/calib_metrics", "results/annotate", "results/annotate_calib",
+                    "results/calib_metrics/decision_sensitivity.tsv",
                     "results/catalog_benchmark",
                     "real_genome_validation", "phenotype_validation", "PROVENANCE.json", "software_versions.yml",
                   ].findAll { p -> !new File(rel, p).exists() } == [] },

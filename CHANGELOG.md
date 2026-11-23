@@ -2269,3 +2269,58 @@ replayed on v10's calibration tables gives v10's levels and cascade unchanged, a
 reason; the stub run and `nf-test --tag stub` pass (profile `test,local`, tool versions shimmed, not in
 the containers). Not run: the pipeline for real, so no read-level AP and no `n_positive_sequences` from
 real reads yet.
+
+### Report levels and cascade decided with bootstrap support (branch `decision-robustness`; release v11)
+
+Both calibration decisions rested on point estimates. The cascade was switched on for any gain in
+`f1_all`, and the level threshold was a bare `f1_all >= 0.5`. On v10 the cascade raised opu_permease's
+calibration `f1_all` by 0.006 and lowered it on test (0.455 -> 0.407). Now each decision needs bootstrap
+support (`docs/validation_reports/decision_robustness.md`).
+
+- **Cluster bootstrap over the calibration evidence** (`compute_metrics.cluster_bootstrap`). It resamples
+  source sequences, not reads, stratified by family and positive/hard negative, with one draw for every
+  unit. The cascade comparison is paired. `benchmark_annotate.protein_bootstrap` is the same for
+  proteins, in pure Python (1000 resamples of v10's 38,558 calibration proteins: 7.2 s, so no numpy
+  in that container).
+- **Cascade:** on only for a point gain of at least `--profile_min_cascade_gain` (0.01) that is
+  positive in at least `--profile_decision_support` (0.9) of the paired resamples. On v10's calibration tables the floor alone
+  switches galE (+0.001), gshA (+0.002) and opu_permease (+0.006) off.
+- **Level:** `f1_all` at least the mode's threshold (0.5) on the point estimate and in 0.9 of the
+  resamples. Clearing
+  on the point estimate only gives `none` with the new reason `unstable`. In annotate on v10's
+  calibration proteins this moves mrpC (0.548, support 0.886) to `none`. In profile, families.yaml
+  still sets every level, so the test can only turn a unit into an `override`.
+- **Settings per mode.** Profile and annotate share the rule's machinery and its reasons, not its
+  settings: reads and proteins are different benchmarks for different uses, each decided on its own
+  calibration split. The parameters, all recorded in `PROVENANCE.json` (`inputs.decision_rule`):
+  - profile: `profile_min_report_f1` (0.5; the old hard-coded `--min-f1`), `profile_min_eval_positives`
+    (20), `profile_min_cascade_gain` (0.01), `profile_decision_support` (0.9) and
+    `profile_decision_bootstrap` (1000; 0: point estimates alone);
+  - annotate: `annotate_min_report_f1`, `annotate_min_eval_positives`, `annotate_decision_support` and
+    `annotate_decision_bootstrap`, at the same defaults;
+  - shared: `decision_bootstrap_seed` (42).
+
+  `min_eval_positives` (above, not in a release) is split into the two `*_min_eval_positives`, and it
+  was not in `PROVENANCE.json` before.
+- **Manifest change (v11, not compatible with v10's columns past `min_eval_positives`):**
+  - both report-level manifests gain `f1_all_p10`, `f1_all_p90`, `level_support`, `cascade_gain` and
+    `cascade_gain_support` (NA in annotate);
+  - `profile_cascade.tsv` gains `cascade_gain` and `cascade_gain_support`. osmotool (0.10.0 and the
+    current tree) reads that file by column name and only `family`, `needs_cascade_check` and
+    `hmm_short_read_threshold`, so extra columns are safe. It does not skip `#` lines, so that file
+    still has no header comment;
+  - the report-level manifests' header states the whole rule, that mode's settings and parameter names,
+    and the seed.
+- **`results/calib_metrics/decision_sensitivity.tsv`:** per unit, the level and cascade on point
+  estimates alone (the cascade at bare sign), next to the rule's, with the gain and its support.
+- **Tests** (`python -m unittest discover -s tests/python`):
+  - the decision helpers at their boundaries;
+  - the bootstrap's clusters add up to the summary tables;
+  - the same seed gives the same manifest byte for byte, and the cascade comparison is paired;
+  - `profile_decision_bootstrap = 0` with `profile_min_cascade_gain = 0` reproduces v10's two profile
+    manifests cell for cell from v10's calibration tables (`tests/python/data/v10_calibration/`).
+
+  `check_performance.py` checks the new columns and the provenance record.
+
+Not run: the profile bootstrap on real calibration reads (v10 ships the tables, not the reads), so
+which profile cascades lose support and which units become `unstable` is still open.

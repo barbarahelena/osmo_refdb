@@ -26,8 +26,8 @@ short reads can't tell it from (`group`), or not at all (`none`, listed as
 excluded rather than left out). Both files are decided together on
 calibration reads, never on the benchmark reads (see steps 9c-11c).
 `osmo_refdb.annotate_report_levels.tsv` does the same for `osmotool
-annotate --method hmm`, decided by the same rule on the calibration split's
-full-length proteins (step 11b); osmotool does not read it yet. `osmotool annotate` (full-length ORFs from
+annotate --method hmm`, decided by the same rule, at settings of its own, on
+the calibration split's full-length proteins (step 11b); osmotool does not read it yet. `osmotool annotate` (full-length ORFs from
 an assembly) defaults to HMM (`--method hmm`) since real-genome testing
 showed it meaningfully more specific than DIAMOND for this reference
 database (see `hmms/osmo_refdb.hmm` + `--hmm_db`); pass `--method diamond`
@@ -326,8 +326,25 @@ its members; otherwise each member is `gene` or `none` on its own.
 `scope: annotate_only` requires `none`. The values were set from the
 calibration rule in `compute_metrics.py` (`decide_units`): a unit is
 reported at the finest level whose `f1_all` on the calibration reads
-reaches 0.5 (gene before group), each level taking the better of cascade
-off/on, and the cascade config follows the chosen level. `f1_all` counts
+reaches `--profile_min_report_f1` (0.5; gene before group), and the cascade
+config follows the chosen level. Neither choice rests on a bare point
+estimate: a cluster bootstrap (`--profile_decision_bootstrap` 1000
+resamples of the calibration source sequences, not reads, seed
+`--decision_bootstrap_seed` 42) gives each a support. A level must clear
+the threshold on the point estimate and in `--profile_decision_support`
+(0.9) of the resamples, else `none` for `unstable`; the cascade is on at a
+level only if its gain in `f1_all` is at least `--profile_min_cascade_gain`
+(0.01) and positive in 0.9 of the paired resamples.
+`--profile_decision_bootstrap 0 --profile_min_cascade_gain 0` is the rule up
+to v10 (point estimates, any positive gain). Annotate's levels go through
+the same rule with settings of their own (`--annotate_min_report_f1`,
+`--annotate_min_eval_positives`, `--annotate_decision_support`,
+`--annotate_decision_bootstrap`), decided on the calibration proteins: reads
+and proteins are different benchmarks, so neither mode's threshold is tied
+to the other's. The defaults are the same values. `results/calib_metrics/decision_sensitivity.tsv`
+sets the two decisions side by side per unit, and
+`docs/validation_reports/decision_robustness.md` has what they change on
+v10. `f1_all` counts
 every non-background read called as the unit as a false positive, so gene
 and group level share one denominator (per-gene `precision` leaves out a
 sibling's hard negatives that group precision counts). Step 11c writes the
@@ -338,9 +355,12 @@ pipeline. A family without the field takes the rule's level (markers.yaml,
 subset files).
 
 Both report-level manifests give every unit a `reason` from one vocabulary
-(`report_rule.py`): `meets_threshold`, `below_threshold` (measured, and it
-fails), `insufficient_evidence` (fewer than `--min_eval_positives`, default
-20, distinct positive calibration sequences: the unit is `none` whatever it
+(`report_rule.py`): `meets_threshold`, `below_threshold` (measured, and
+the point estimate fails), `unstable` (the point estimate clears the
+threshold, fewer than `--{profile,annotate}_decision_support` of the
+resamples do), `insufficient_evidence` (fewer than
+`--{profile,annotate}_min_eval_positives`, default 20, distinct positive
+calibration sequences: the unit is `none` whatever it
 scored, and `n_eval_positives` gives the count), `out_of_scope` (`scope:
 annotate_only`, not performance) and `override` (`report_level` differs from
 the rule's level). `reason_detail` holds the numbers. Optional
@@ -485,12 +505,12 @@ release name.
 | 8 | `DIAMOND_TRAINREFS / DIAMOND_MAKEDB` | Build a DIAMOND db from TRAIN positives + any decoy refs from step 8a + any fused refs from step 8d -- excludes `_refseq`-tagged sequences specifically (kept for HMM's alignment, dropped for DIAMOND): confirmed across 4 families that the merged pool helps HMM but mostly hurts DIAMOND's identity-based matching |
 | 8b | `calibrate_diamond_cutoffs.py` | Calibrate a per-family minimum DIAMOND bitscore, mirroring HMM's GA cutoff -- DIAMOND otherwise applies one flat `--min_identity` across every family, which can't separate a true gene from a genuinely close paralog (e.g. betL vs betT) whose identity to it happens to exceed that flat threshold |
 | 8c | `DIAMOND_SCOPE` | Write `osmo_refdb.profile_excluded_families.txt` (families marked `scope: annotate_only`, e.g. murB, plus all decoy labels) and `osmo_refdb.annotate_excluded_families.txt` (decoy labels only), consumed by `osmotool profile`/`annotate --exclude_families` |
-| 9c-11c | steps 9-11 with `--split calib` | Calibration pass, run first by `benchmark`: simulate reads from positive.calib + negative.train, run DIAMOND with `CASCADE=score` (every family flagged at a threshold nothing fails, so no call is dropped but each one's HMM score is kept) and HMM on them. 11c then decides per family or paralog group, on these reads only, the report level and the cascade together: it replays cascade off and on for every unit, applies the report-level rule (see `report_level` above) and writes `osmo_refdb.profile_cascade.tsv` and `osmo_refdb.profile_report_levels.tsv`. Neither was tuned on benchmark reads (the cascade was, up to v9). Output in `results/calib/` |
+| 9c-11c | steps 9-11 with `--split calib` | Calibration pass, run first by `benchmark`: simulate reads from positive.calib + negative.train, run DIAMOND with `CASCADE=score` (every family flagged at a threshold nothing fails, so no call is dropped but each one's HMM score is kept) and HMM on them. 11c then decides per family or paralog group, on these reads only, the report level and the cascade together: it replays cascade off and on for every unit, applies the report-level rule (see `report_level` above; each decision with its bootstrap support) and writes `osmo_refdb.profile_cascade.tsv`, `osmo_refdb.profile_report_levels.tsv` and `decision_sensitivity.tsv` (the decisions on point estimates alone next to the rule's). Neither was tuned on benchmark reads (the cascade was, up to v9). Output in `results/calib/` |
 | 9 | `simulate_reads.py` | Simulate reads from held-out TEST positives + TEST negatives (the negative split disjoint from calibration and from any decoy refs, so a benchmark read is never scored against a threshold or db entry built from its own source sequence) |
 | 9b | `compute_read_truth.py` | Locate each read on its source contig (k-mer match) and label it by actual CDS overlap, not just its source construct -- a read that lands entirely in flanking DNA carries no gene signal and must not be scored as a positive. Also labels real background reads and records read length. |
 | 10 | `run_benchmark.sh` | Run `osmotool profile --translated_only` (the benchmark's train-only database ships no catalog; the catalog is scored in step 11d) with its default DIAMOND+HMM cascade (`CASCADE=off` for DIAMOND alone, `CASCADE=score` for the calibration pass; `SKIP_HMM=1` reruns only the DIAMOND side) and HMM (hmmscan; `JOBS` samples in parallel) on the simulated reads. `--keep_aln` keeps the raw DIAMOND alignments and the cascade's hmmsearch table, so one run scores both DIAMOND alone and DIAMOND+cascade |
 | 11 | `compute_metrics.py` | Precision/recall/F1, ROC/PR curves, per-family best-threshold summary, read-length-stratified summary and background false-positive rate, for three methods: `diamond`, `diamond_cascade` (what `osmotool profile` reports by default; per-read calls rebuilt from osmotool's kept files and checked against its `gene_counts.tsv`) and `hmm`. In the calibration pass (no `--cascade-config`) it instead decides and writes `osmo_refdb.profile_cascade.tsv` and `osmo_refdb.profile_report_levels.tsv` (step 9c-11c); on the test reads it scores those choices per reporting unit in `summary_by_report_unit.tsv` (the numbers for the paper) and checks osmotool's `unit_counts.tsv` against the rebuilt calls. `summary.tsv` counts false positives three ways: `fp` (the family's own hard negatives and flanks; `precision`/`f1`, comparable to releases up to v8), `fp_cross` (other panel genes' real reads called as this family, mostly close-paralog confusion; `precision_panel`/`f1_panel`), and `fp_background`/`background_fp_per_million` (random background reads). `fp_other_negatives` (other families' hard negatives called as this family) is in none of those, since sibling families share one negative pool. `fp_all` = all three, with `precision_all`/`f1_all`: the same denominator at gene and group level, used for the report-level and cascade decision. `hard_negative_fp_per_million` and `background_fp_per_million` are rates per million negative reads, independent of how many negatives were mixed in: use those to compare families or releases. Families sharing a `families.yaml` `paralog_group` are also scored as one unit in `summary_by_group.tsv`, where a read called as a sibling counts as correct (`within_group_swaps`). `n_positive_sequences`: the distinct positive sequences a unit's reads come from, which the report-level rule's evidence guard counts. On the test reads only, `average_precision.tsv`: average precision per family and method against its own hard-negative reads, from the bit-score ranking of the reads called as the family (`average_precision_scores.tsv.gz`, those reads and scores; a read not called as the family adds nothing, so AP is at most `max_recall`). Average precision rather than ROC AUC, since the classes are unbalanced, unevenly across families |
-| 11b | `modules/local/benchmark/templates/benchmark_annotate.py` | Annotate-mode benchmark at protein level, on the two splits the reads use: runs `osmotool annotate --proteins --keep_aln` (HMM with GA cutoffs, and DIAMOND with its bitscore cutoffs) on one split's positives, their hard negatives and the random background, and scores per-protein calls from `gene_coordinates.tsv`, per family (`summary.tsv`) and per paralog group (`summary_by_group.tsv`, with `within_group_swaps`), with `fp_all`/`f1_all` as in step 11. The calibration split (positive.calib against negative.train; `results/annotate_calib/`) decides `osmo_refdb.annotate_report_levels.tsv` by the profile rule for `--method hmm`; its numbers are in-sample for the cutoffs, which were calibrated on the same sequences. The held-out test split (`results/annotate/`) scores it, and adds `average_precision.tsv`: average precision per family and method against the family's own hard negatives, ranked by the bit score of each protein's best hit (`ap_scores.<method>.tsv`, the proteins ranked; for hmm only hits above GA, as osmotool searches with `--cut_ga`; for diamond, hits below the per-family cutoffs too), and `verification.tsv`, those best hits against osmotool's own calls |
+| 11b | `modules/local/benchmark/templates/benchmark_annotate.py` | Annotate-mode benchmark at protein level, on the two splits the reads use: runs `osmotool annotate --proteins --keep_aln` (HMM with GA cutoffs, and DIAMOND with its bitscore cutoffs) on one split's positives, their hard negatives and the random background, and scores per-protein calls from `gene_coordinates.tsv`, per family (`summary.tsv`) and per paralog group (`summary_by_group.tsv`, with `within_group_swaps`), with `fp_all`/`f1_all` as in step 11. The calibration split (positive.calib against negative.train; `results/annotate_calib/`) decides `osmo_refdb.annotate_report_levels.tsv` for `--method hmm` by the report-level rule at annotate's own settings (`--annotate_*`), with bootstrap support over proteins (each its own source sequence; no cascade); its numbers are in-sample for the cutoffs, which were calibrated on the same sequences. The held-out test split (`results/annotate/`) scores it, and adds `average_precision.tsv`: average precision per family and method against the family's own hard negatives, ranked by the bit score of each protein's best hit (`ap_scores.<method>.tsv`, the proteins ranked; for hmm only hits above GA, as osmotool searches with `--cut_ga`; for diamond, hits below the per-family cutoffs too), and `verification.tsv`, those best hits against osmotool's own calls |
 | 11d | `modules/local/benchmark/catalogscore/templates/catalog_benchmark.py` | Catalog benchmark: `osmotool profile --catalog_dir` on the test reads with catalogs of the release's own back-translated sequences, indexed as the release's catalog is, with two catalogs: A, every sequence catalogued (upper bound); B, only what the benchmark does not score (no test read's own gene, but not a floor: conserved regions still settle reads). Scored per reporting unit against the translated calls, and checked against full `profile --catalog_dir` runs. Output in `results/catalog_benchmark/`; see `docs/validation_reports/catalog_benchmark.md` |
 
 | 12 | `MARKERS` (workflow) | Build the marker genes (`markers.yaml`, see below) apart from the osmo families: their own references, split and DIAMOND database, packaged as the release's `markers/` (`package_markers.py`): DIAMOND db, its source FASTA (for reference lengths), excluded decoy labels, a per-marker manifest |

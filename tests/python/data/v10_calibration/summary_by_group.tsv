@@ -1,0 +1,22 @@
+method	paralog_group	members	tp	fp	fn	precision	recall	f1	fp_cross	fp_other_negatives	precision_panel	f1_panel	fp_all	precision_all	f1_all	n_hard_negative_reads	hard_negative_fp_per_million	fp_background	background_fp_per_million	within_group_swaps
+diamond	opu_substrate_binding	proX,opuAC,opuBC,opuCC	1319	22769	282	0.055	0.824	0.103	0	8	0.055	0.103	22777	0.055	0.103	52280	435520.3			207
+diamond	opu_atpase	opuAA,opuBA,opuCA	771	5961	233	0.115	0.768	0.199	0	102	0.115	0.199	6063	0.113	0.197	99698	59790.6			97
+diamond	opu_permease	opuAB,opuBB,opuCB	430	421	215	0.505	0.667	0.575	6	275	0.502	0.573	702	0.38	0.484	54875	7672.0			81
+diamond	mrp_large_subunit	mrpA,mrpD	1543	6427	282	0.194	0.845	0.315	5	0	0.193	0.315	6432	0.193	0.315	32480	197875.6			29
+diamond	glutathione_step1	gshA,gshF	3435	1676	362	0.672	0.905	0.771	7	0	0.671	0.771	1683	0.671	0.771	4720	355084.7			21
+diamond	trk_ktr_regulatory	trkA,ktrA	3682	2474	548	0.598	0.87	0.709	0	3	0.598	0.709	2477	0.598	0.709	20220	122354.1			0
+diamond	trk_ktr_channel	trkH,ktrB,ktrD	1554	28070	302	0.052	0.837	0.099	0	0	0.052	0.099	28070	0.052	0.099	43980	638244.7			128
+hmm	opu_substrate_binding	proX,opuAC,opuBC,opuCC	1212	23841	389	0.048	0.757	0.091	2	19	0.048	0.091	23862	0.048	0.091	52280	456025.2			228
+hmm	opu_atpase	opuAA,opuBA,opuCA	676	1844	328	0.268	0.673	0.384	1	224	0.268	0.384	2069	0.246	0.361	99698	18495.9			182
+hmm	opu_permease	opuAB,opuBB,opuCB	447	3306	198	0.119	0.693	0.203	0	88	0.119	0.203	3394	0.116	0.199	54875	60246.0			65
+hmm	mrp_large_subunit	mrpA,mrpD	1339	14762	486	0.083	0.734	0.149	0	4	0.083	0.149	14766	0.083	0.149	32480	454495.1			23
+hmm	glutathione_step1	gshA,gshF	3315	2486	482	0.571	0.873	0.691	82	18	0.563	0.685	2586	0.562	0.684	4720	526694.9			48
+hmm	trk_ktr_regulatory	trkA,ktrA	3657	2006	573	0.646	0.865	0.739	1	59	0.646	0.739	2066	0.639	0.735	20220	99208.7			2
+hmm	trk_ktr_channel	trkH,ktrB,ktrD	1509	29775	347	0.048	0.813	0.091	0	27	0.048	0.091	29802	0.048	0.091	43980	677012.3			118
+diamond_cascade_all	opu_substrate_binding	proX,opuAC,opuBC,opuCC	647	2310	954	0.219	0.404	0.284	0	3	0.219	0.284	2313	0.219	0.284	52280	44185.2			15
+diamond_cascade_all	opu_atpase	opuAA,opuBA,opuCA	502	3563	502	0.123	0.5	0.198	0	52	0.123	0.198	3615	0.122	0.196	99698	35737.9			46
+diamond_cascade_all	opu_permease	opuAB,opuBB,opuCB	293	242	352	0.548	0.454	0.497	0	17	0.548	0.497	259	0.531	0.49	54875	4410.0			34
+diamond_cascade_all	mrp_large_subunit	mrpA,mrpD	597	2309	1228	0.205	0.327	0.252	0	0	0.205	0.252	2309	0.205	0.252	32480	71089.9			3
+diamond_cascade_all	glutathione_step1	gshA,gshF	2988	894	809	0.77	0.787	0.778	6	0	0.769	0.778	900	0.769	0.778	4720	189406.8			7
+diamond_cascade_all	trk_ktr_regulatory	trkA,ktrA	3386	820	844	0.805	0.8	0.803	0	2	0.805	0.803	822	0.805	0.803	20220	40553.9			0
+diamond_cascade_all	trk_ktr_channel	trkH,ktrB,ktrD	467	7194	1389	0.061	0.252	0.098	0	0	0.061	0.098	7194	0.061	0.098	43980	163574.4			27

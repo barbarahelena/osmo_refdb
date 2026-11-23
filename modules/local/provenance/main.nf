@@ -36,6 +36,12 @@ process PROVENANCE {
     SPLIT_MODE="${params.split_mode}" \\
     READ_LENGTHS="${params.read_lengths ?: ''}" BACKGROUND_R1="${params.background_r1 ?: ''}" BACKGROUND_R2="${params.background_r2 ?: ''}" \\
     DIAMOND_MIN_SUBJECT_COVER="${params.diamond_min_subject_cover}" \\
+    PROFILE_MIN_REPORT_F1="${params.profile_min_report_f1}" PROFILE_MIN_EVAL_POSITIVES="${params.profile_min_eval_positives}" \\
+    PROFILE_MIN_CASCADE_GAIN="${params.profile_min_cascade_gain}" PROFILE_DECISION_SUPPORT="${params.profile_decision_support}" \\
+    PROFILE_DECISION_BOOTSTRAP="${params.profile_decision_bootstrap}" \\
+    ANNOTATE_MIN_REPORT_F1="${params.annotate_min_report_f1}" ANNOTATE_MIN_EVAL_POSITIVES="${params.annotate_min_eval_positives}" \\
+    ANNOTATE_DECISION_SUPPORT="${params.annotate_decision_support}" ANNOTATE_DECISION_BOOTSTRAP="${params.annotate_decision_bootstrap}" \\
+    DECISION_BOOTSTRAP_SEED="${params.decision_bootstrap_seed}" \\
     python ${moduleDir}/templates/write_provenance.py --release-name ${release_name} \\
         --refs refs --alignments alignments --hmms ${hmms} --files files/* --catalogs ${catalog} \\
         --repo ${pipeline} --families ${families} --versions software_versions.yml --out PROVENANCE.json

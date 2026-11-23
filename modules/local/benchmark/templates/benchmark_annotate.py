@@ -26,8 +26,11 @@ by both the models and the cutoff calibration:
 negative.train instead: the calibration split, the same sequences the read
 benchmark's calibration reads are simulated from. It decides what annotate
 reports (--report-levels-out: osmo_refdb.annotate_report_levels.tsv), with
-the rule profile mode's levels are decided by (report_rule.py), so no
-report level rests on a test sequence. These are the sequences the GA and
+the report-level rule of report_rule.py at annotate's own settings
+(params.annotate_*: threshold, minimum evidence, support, bootstrap), so no
+report level rests on a test sequence. Each level needs bootstrap support
+(protein_bootstrap: the proteins resampled, each its own source sequence;
+--decision-bootstrap, --decision-support); annotate has no cascade. These are the sequences the GA and
 DIAMOND cutoffs were calibrated on, so its numbers are in-sample for the
 cutoffs and optimistic; the test split is the estimate to quote.
 
@@ -82,8 +85,10 @@ from __future__ import annotations
 
 import argparse
 import csv
+import random
 import subprocess
 import sys
+import time
 from collections import Counter, defaultdict
 from pathlib import Path
 
@@ -284,7 +289,80 @@ MANIFEST_COLUMNS = [
     "unit", "report_level", "members", "paralog_group", "method",
     "reason", "reason_detail", "rule_metric", "threshold", "n_eval_positives", "min_eval_positives",
     "tp", "fp_all", "fn", "precision_all", "recall", "f1_all", "f1_all_gene", "f1_all_group",
+    # the bootstrap behind the level (protein_bootstrap); annotate has no cascade, so those two are NA
+    "f1_all_p10", "f1_all_p90", "level_support", "cascade_gain", "cascade_gain_support",
 ]
+
+
+def protein_bootstrap(rows: list[dict], calls: dict[str, str], units: dict[tuple, set[str]],
+                      n_boot: int, seed: int) -> tuple[dict[tuple, list[float]], dict[tuple, tuple]]:
+    """f1_all of every unit in n_boot resamples of the evaluation proteins.
+
+    Each protein is its own source sequence, so the cluster bootstrap of the
+    read benchmark (compute_metrics.cluster_bootstrap) is a protein
+    bootstrap here: stratified by (source family, positive / hard
+    negative), each stratum drawn with replacement to its own size, one
+    draw for every unit. The background is left out, as from f1_all.
+    Standard library only (this scorer's container has no numpy).
+
+    A protein's effect on each unit (tp, fn or fp_all) is worked out once;
+    a resample only counts how often each protein is drawn, and a protein
+    that touches no unit (a hard negative nobody calls) is drawn but adds
+    nothing. Returns ({unit key: f1_all per resample}, {unit key: (tp, fn,
+    fp_all) over every protein once: the point counts, for a check against
+    summary.tsv})."""
+    keys = list(units)
+    strata: dict[tuple, list[list[int]]] = {}
+    for row in rows:
+        if row["kind"] not in ("positive", "negative"):
+            continue
+        called = calls.get(row["protein_id"])
+        effects = []
+        for u, key in enumerate(keys):
+            members = units[key]
+            called_in = called in members
+            if row["kind"] == "positive" and row["source_family"] in members:
+                effects.append(3 * u + (0 if called_in else 1))
+            elif called_in:
+                effects.append(3 * u + 2)
+        strata.setdefault((row["source_family"], row["kind"]), []).append(effects)
+    plan = []
+    for key in sorted(strata):
+        items = strata[key]
+        plan.append((len(items), [e for e in items if e]))   # proteins with an effect first: index < m
+
+    totals = [0] * (3 * len(keys))
+    for _, effectful in plan:
+        for effects in effectful:
+            for j in effects:
+                totals[j] += 1
+    point = {key: tuple(totals[3 * u:3 * u + 3]) for u, key in enumerate(keys)}
+
+    rnd = random.Random(seed).random
+    out: dict[tuple, list[float]] = {key: [] for key in keys}
+    for _ in range(n_boot):
+        counts = [0] * (3 * len(keys))
+        for n, effectful in plan:
+            m = len(effectful)
+            for _ in range(n):
+                i = int(rnd() * n)
+                if i < m:
+                    for j in effectful[i]:
+                        counts[j] += 1
+        for u, key in enumerate(keys):
+            tp, fn, fp_all = counts[3 * u:3 * u + 3]
+            den = 2 * tp + fn + fp_all
+            out[key].append(2 * tp / den if den else 0.0)
+    return out, point
+
+
+def percentile(values: list[float], q: float) -> float:
+    """numpy.percentile's default (linear interpolation), q in [0, 100]."""
+    xs = sorted(values)
+    pos = (len(xs) - 1) * q / 100
+    lo = int(pos)
+    hi = min(lo + 1, len(xs) - 1)
+    return xs[lo] + (xs[hi] - xs[lo]) * (pos - lo)
 
 
 def _value(row: dict | None, metric: str) -> float:
@@ -293,16 +371,36 @@ def _value(row: dict | None, metric: str) -> float:
 
 
 def decide_levels(fam_cfg: list[dict], gene_rows: dict[str, dict], group_rows: dict[str, dict],
-                  method: str, min_value: float, min_n: int, metric: str = "f1_all") -> list[dict]:
+                  method: str, min_value: float, min_n: int, metric: str = "f1_all",
+                  boot: dict[tuple, list[float]] | None = None, min_support: float = 0.0) -> list[dict]:
     """One manifest row per reporting unit (a paralog group reported as a
     group, else a family), by report_rule.rule_levels on the calibration
     split's rows of one method. families.yaml has no annotate report level
-    and no annotate scope, so every level here is the rule's."""
+    and no annotate scope, so every level here is the rule's.
+
+    boot: {("gene", family) | ("group", group): f1_all per resample}
+    (protein_bootstrap), or None: then the point estimates decide alone. A
+    level needs f1_all >= min_value on the point estimate and in >=
+    min_support of the resamples (report_rule.passes_level)."""
+    boot = boot or {}
+
     def cell(row, key):
         return "NA" if not row or row[key] == "" else str(row[key])
 
     def counts(row):
         return {k: (row or {}).get(k, "") for k in ("tp", "fp_all", "fn", "precision_all", "recall", "f1_all")}
+
+    def support(key):
+        xs = boot.get(key)
+        return None if xs is None else sum(x >= min_value for x in xs) / len(xs)
+
+    def robust(key):
+        xs = boot.get(key)
+        sup = support(key)
+        return {"f1_all_p10": round(percentile(xs, 10), 3) if xs else "",
+                "f1_all_p90": round(percentile(xs, 90), 3) if xs else "",
+                "level_support": "" if sup is None else round(sup, 3),
+                "cascade_gain": "NA", "cascade_gain_support": "NA"}
 
     blocks, seen = [], set()
     for fam in fam_cfg:
@@ -320,7 +418,9 @@ def decide_levels(fam_cfg: list[dict], gene_rows: dict[str, dict], group_rows: d
             members, group, {f: _value(gene_rows.get(f), metric) for f in members},
             {f: (gene_rows.get(f) or {}).get("n_positive", 0) for f in members},
             _value(grow, metric) if group else None, (grow or {}).get("n_positive", 0) if group else None,
-            min_value, min_n, metric)
+            min_value, min_n, metric,
+            gene_support={f: support(("gene", f)) for f in members},
+            group_support=support(("group", group)) if group else None, min_support=min_support)
         common = {"paralog_group": group, "method": method, "rule_metric": metric,
                   "threshold": min_value, "min_eval_positives": min_n,
                   "f1_all_group": cell(grow, "f1_all") if group else ""}
@@ -328,7 +428,8 @@ def decide_levels(fam_cfg: list[dict], gene_rows: dict[str, dict], group_rows: d
             rows.append({"unit": group, "report_level": "group", "members": ",".join(members),
                          "reason": levels[members[0]][1], "reason_detail": levels[members[0]][2],
                          "n_eval_positives": grow["n_positive"], **counts(grow), **common,
-                         "f1_all_gene": ",".join(cell(gene_rows.get(f), "f1_all") for f in members)})
+                         "f1_all_gene": ",".join(cell(gene_rows.get(f), "f1_all") for f in members),
+                         **robust(("group", group))})
             continue
         for f in members:
             level, reason, detail = levels[f]
@@ -337,26 +438,26 @@ def decide_levels(fam_cfg: list[dict], gene_rows: dict[str, dict], group_rows: d
                          "reason": reason, "reason_detail": detail,
                          "n_eval_positives": (row or {}).get("n_positive", 0),
                          **counts(row if level == "gene" else None), **common,
-                         "f1_all_gene": cell(row, "f1_all")})
+                         "f1_all_gene": cell(row, "f1_all"), **robust(("gene", f))})
     return rows
 
 
-def write_report_levels(path: Path, rows: list[dict], method: str, min_value: float, min_n: int) -> None:
+def write_report_levels(path: Path, rows: list[dict], method: str, min_value: float, min_n: int,
+                        n_boot: int = 0, seed: int = 0, min_support: float = 0.0) -> None:
     header = [
         f"osmo_refdb annotate report levels: one row per reporting unit, for osmotool annotate --method {method}.",
         "Decided on the calibration split (positive.calib against negative.train, full-length proteins; "
-        "results/annotate_calib/), never on the test split (results/annotate/).",
-        f"Rule (min_f1_all = {min_value}): gene if every member reaches f1_all >= min at gene level; else group "
-        "if the paralog group reaches it as one unit; else none. The rule of osmo_refdb.profile_report_levels.tsv "
-        "(report_rule.py).",
-        f"Minimum evidence (min_eval_positives = {min_n}): a level needs that many positive calibration "
-        "proteins (n_eval_positives; a group's summed over its members), else none for insufficient_evidence.",
-        "reason: meets_threshold | below_threshold | insufficient_evidence. out_of_scope and override do not "
-        "occur: families.yaml sets neither a scope nor a level for annotate. reason_detail: the numbers behind it.",
+        "results/annotate_calib/), never on the test split (results/annotate/). The rule of "
+        "osmo_refdb.profile_report_levels.tsv (report_rule.py), at annotate's own settings, without the cascade.",
+        *report_rule.rule_header_lines(min_value, min_n, n_boot, seed, min_support, "proteins",
+                                       mode="annotate"),
+        "reason: meets_threshold | below_threshold | unstable | insufficient_evidence. out_of_scope and override "
+        "do not occur: families.yaml sets neither a scope nor a level for annotate. reason_detail: the numbers "
+        "behind it.",
         "f1_all = F1 with every non-background protein called as the unit counted as a false positive (own hard "
         "negatives, other families' positives, other families' hard negatives); see benchmark_annotate.py.",
         "tp..f1_all are calibration counts at the reported level (empty for none). f1_all_gene: per member, in "
-        "members order. f1_all_group: the paralog group as one unit.",
+        "members order. f1_all_group: the paralog group as one unit. cascade_gain*: NA, annotate has no cascade.",
         "The HMM GA and DIAMOND cutoffs were calibrated on these same sequences, so the numbers are in-sample "
         "for the cutoffs (optimistic); the test split is the estimate to quote.",
     ]
@@ -474,10 +575,18 @@ def main() -> None:
     ap.add_argument("--levels-method", default="hmm", choices=["hmm", "diamond"],
                     help="the method the report levels are decided for (osmotool annotate's default: hmm)")
     ap.add_argument("--min-f1", type=float, default=0.5,
-                    help="the f1_all a unit must reach on the calibration split (report_rule.py)")
+                    help="the f1_all a unit must reach on the calibration split (report_rule.py; "
+                         "params.annotate_min_report_f1)")
+    ap.add_argument("--decision-support", type=float, default=0.9,
+                    help="the fraction of bootstrap resamples a level must hold in (params.annotate_decision_support)")
+    ap.add_argument("--decision-bootstrap", type=int, default=1000,
+                    help="protein-bootstrap resamples behind each level (params.annotate_decision_bootstrap; "
+                         "0: point estimates alone)")
+    ap.add_argument("--decision-bootstrap-seed", type=int, default=42,
+                    help="the bootstrap's seed (params.decision_bootstrap_seed)")
     ap.add_argument("--min-eval-positives", type=int, default=20,
                     help="the positive calibration proteins a unit needs before the rule decides on it; "
-                         "below it, none for insufficient_evidence. 0: off.")
+                         "below it, none for insufficient_evidence (params.annotate_min_eval_positives). 0: off.")
     args = ap.parse_args()
     if args.report_levels_out and args.split != "calib":
         ap.error("--report-levels-out needs --split calib: report levels are never decided on the test split")
@@ -510,6 +619,7 @@ def main() -> None:
 
     summary, group_summary, overall = [], [], []
     ap_rows, verification = [], []
+    calls_by_method: dict[str, dict[str, str]] = {}
     for method in args.methods:
         print(f"\n=== osmotool annotate --method {method} ===")
         if args.calls_from:
@@ -517,6 +627,7 @@ def main() -> None:
         else:
             calls = run_annotate(args.release, proteins, args.out / f"annotate_{method}",
                                  method, args.threads)
+        calls_by_method[method] = calls
         unknown = sorted(set(calls.values()) - set(families))
         if unknown:
             # e.g. fused-ORF labels (mrpA_mrpB_fused): reported by osmotool,
@@ -608,13 +719,29 @@ def main() -> None:
     if args.report_levels_out:
         if args.levels_method not in args.methods:
             sys.exit(f"ERROR: --levels-method {args.levels_method} was not scored (--methods)")
-        units = decide_levels(
-            fam_cfg, {r["family"]: r for r in summary if r["method"] == args.levels_method},
-            {r["group"]: r for r in group_summary if r["method"] == args.levels_method},
-            args.levels_method, args.min_f1, args.min_eval_positives)
+        gene_rows = {r["family"]: r for r in summary if r["method"] == args.levels_method}
+        group_rows = {r["group"]: r for r in group_summary if r["method"] == args.levels_method}
+        boot = None
+        if args.decision_bootstrap > 0:
+            units = {**{("gene", f): {f} for f in families},
+                     **{("group", g): ms for g, ms in groups.items()}}
+            t0 = time.perf_counter()
+            boot, point = protein_bootstrap(rows, calls_by_method[args.levels_method], units,
+                                            args.decision_bootstrap, args.decision_bootstrap_seed)
+            bad = [f"{key}: summary {r['tp']}/{r['fn']}/{r['fp_all']}, bootstrap {point[key]}"
+                   for key, r in ([(("gene", f), gene_rows.get(f)) for f in families]
+                                  + [(("group", g), group_rows.get(g)) for g in groups])
+                   if r is not None and (r["tp"], r["fn"], r["fp_all"]) != point[key]]
+            if bad:
+                sys.exit("ERROR: bootstrap proteins do not add up to summary.tsv:\n  " + "\n  ".join(bad))
+            print(f"Decision bootstrap: {args.decision_bootstrap} resamples of the proteins, seed "
+                  f"{args.decision_bootstrap_seed}, {len(units)} units, {time.perf_counter() - t0:.1f} s")
+        units = decide_levels(fam_cfg, gene_rows, group_rows, args.levels_method, args.min_f1,
+                              args.min_eval_positives, boot=boot, min_support=args.decision_support)
         args.report_levels_out.parent.mkdir(parents=True, exist_ok=True)
         write_report_levels(args.report_levels_out, units, args.levels_method,
-                            args.min_f1, args.min_eval_positives)
+                            args.min_f1, args.min_eval_positives, args.decision_bootstrap,
+                            args.decision_bootstrap_seed, args.decision_support)
         print(f"Annotate report levels ({args.levels_method}) written to {args.report_levels_out}")
         for level in ("gene", "group", "none"):
             picked = [u for u in units if u["report_level"] == level]
