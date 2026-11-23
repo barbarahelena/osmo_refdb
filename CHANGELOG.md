@@ -2335,3 +2335,12 @@ which profile cascades lose support and which units become `unstable` is still o
   there. These are edits to `description` only, but they change the `--refs_store` key of otsA, mscL,
   mazG, mrpB, mrpC, gshA, trkH and of the shared fetch, so those are fetched again on the next build.
 - `docs/validation_reports/` is no longer in the repository; references to it were removed.
+
+### osmotool 0.10.1.1 (branch `osmotool-0.10.1.1`)
+
+- Every osmotool step uses `docker.io/barbarahelena/osmotool:0.10.1.1` (was 0.10.0). Since 0.10.0 osmotool
+  changed only help texts, `download-db` (adds v10) and `predict-nacl` (reads the release name from
+  `PROVENANCE.json`); nothing the build runs behaves differently.
+- The two images carry the same tools (DIAMOND 2.2.9, HMMER 3.4, Prodigal 2.6.3, OrfM 2.1.1, bwa-mem3
+  0.18.0), so the database's own DIAMOND steps still match the version osmotool applies the cutoffs with.
+- The modules' `environment.yml` said bwa-mem3 0.17.0; both images have 0.18.0, and the files now say so.

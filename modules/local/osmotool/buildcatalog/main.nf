@@ -4,7 +4,7 @@ process OSMOTOOL_BUILDCATALOG {
     tag "${meta.id}"
     label 'process_high'
 
-    container 'docker.io/barbarahelena/osmotool:0.10.0'
+    container 'docker.io/barbarahelena/osmotool:0.10.1.1'
 
     input:
     tuple val(meta), path(genes)
