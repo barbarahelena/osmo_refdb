@@ -24,6 +24,7 @@ include { BENCHMARK_ANNOTATESCORE as BENCHMARK_ANNOTATESCORE_TEST  } from '../..
 include { BENCHMARK_CATALOGGENES } from '../../../modules/local/benchmark/cataloggenes/main'
 include { OSMOTOOL_BUILDCATALOG as OSMOTOOL_BUILDCATALOG_BENCHMARK } from '../../../modules/local/osmotool/buildcatalog/main'
 include { BENCHMARK_CATALOGMAP   } from '../../../modules/local/benchmark/catalogmap/main'
+include { BENCHMARK_CATALOGMAP as BENCHMARK_CATALOGMAP_CALIB } from '../../../modules/local/benchmark/catalogmap/main'
 include { BENCHMARK_CATALOGSCORE } from '../../../modules/local/benchmark/catalogscore/main'
 
 workflow RELEASE_BUILD {
@@ -54,16 +55,36 @@ workflow RELEASE_BUILD {
     db_calib = release_files.mix(hmms).collect()
     BENCHMARK_SIMULATE_CALIB(refs, families, 'calib', none)
     BENCHMARK_READS_CALIB(BENCHMARK_SIMULATE_CALIB.out.reads, db_calib, 'score')
-    BENCHMARK_METRICS_CALIB(BENCHMARK_SIMULATE_CALIB.out.reads, BENCHMARK_READS_CALIB.out.results, none, families, 'calib')
+    // a real metagenome as extra background (--background_r1/_r2), test reads only
+    background = params.background_r1 ? channel.value([file(params.background_r1, checkIfExists: true), file(params.background_r2, checkIfExists: true)]) : none
+    BENCHMARK_SIMULATE_TEST(refs, families, 'test', background)
+
+    // the catalog benchmark's two catalogs, with the index a release ships (ext.args): A, every sequence
+    // of the release is catalogued (upper bound); B, only what the test benchmark does not score (no test
+    // read's own gene, but not a lower bound: conserved regions still settle reads). Built before the
+    // calibration decision, because A holds every calibration gene as well: the calibration reads mapped to
+    // A, catalog calls only, decide whether each unit's catalog reads can be reported (catalog_reported)
+    BENCHMARK_CATALOGGENES(refs, families, BENCHMARK_SIMULATE_TEST.out.reads)
+    catalog_sets = BENCHMARK_CATALOGGENES.out.genes_a.mix(BENCHMARK_CATALOGGENES.out.genes_b)
+        .flatMap { scen, genes ->
+            scen == 'A'
+                ? [tuple([id: 'A', verify: ['opuAC.negative', 'proX.positive', 'trkH.negative']], genes)]
+                : [tuple([id: 'B', verify: []], genes)]
+        }
+    OSMOTOOL_BUILDCATALOG_BENCHMARK(catalog_sets, db_calib)
+    catalog_a = OSMOTOOL_BUILDCATALOG_BENCHMARK.out.catalog
+        .filter { meta, _catalog -> meta.id == 'A' }
+        .map { _meta, catalog -> tuple([id: 'A', verify: []], catalog) }
+    BENCHMARK_CATALOGMAP_CALIB(BENCHMARK_SIMULATE_CALIB.out.reads, db_calib, catalog_a)
+
+    BENCHMARK_METRICS_CALIB(BENCHMARK_SIMULATE_CALIB.out.reads, BENCHMARK_READS_CALIB.out.results, none, families, 'calib',
+        BENCHMARK_CATALOGMAP_CALIB.out.runs.map { _meta, d -> d })
     cascade = BENCHMARK_METRICS_CALIB.out.cascade
 
     // ... the release's database has them, and the held-out test reads score it
     db = release_files.mix(cascade, hmms).collect()
-    // a real metagenome as extra background (--background_r1/_r2), test reads only
-    background = params.background_r1 ? channel.value([file(params.background_r1, checkIfExists: true), file(params.background_r2, checkIfExists: true)]) : none
-    BENCHMARK_SIMULATE_TEST(refs, families, 'test', background)
     BENCHMARK_READS_TEST(BENCHMARK_SIMULATE_TEST.out.reads, db, 'on')
-    BENCHMARK_METRICS_TEST(BENCHMARK_SIMULATE_TEST.out.reads, BENCHMARK_READS_TEST.out.results, cascade, families, 'test')
+    BENCHMARK_METRICS_TEST(BENCHMARK_SIMULATE_TEST.out.reads, BENCHMARK_READS_TEST.out.results, cascade, families, 'test', none)
 
     // osmotool annotate on full-length proteins, once per method (ext.args: --method, --keep_aln), on the
     // two splits the reads use: the calibration split (positive.calib, negative.train) decides what annotate
@@ -85,18 +106,8 @@ workflow RELEASE_BUILD {
     BENCHMARK_ANNOTATESCORE_TEST(refs, families,
         OSMOTOOL_ANNOTATE_BENCHMARK_TEST.out.results.map { _meta, files -> files }.flatten().collect(), 'test')
 
-    // profile --catalog on the same test reads, with two catalogs: A, every sequence of the release is
-    // catalogued (upper bound); B, only what the benchmark does not score (no test read's own gene, but
-    // not a lower bound: conserved regions still settle reads). Both are indexed as the release's catalog
-    // is (ext.args); A is also run as profile --catalog in full on a few samples.
-    BENCHMARK_CATALOGGENES(refs, families, BENCHMARK_SIMULATE_TEST.out.reads)
-    catalog_sets = BENCHMARK_CATALOGGENES.out.genes_a.mix(BENCHMARK_CATALOGGENES.out.genes_b)
-        .flatMap { scen, genes ->
-            scen == 'A'
-                ? [tuple([id: 'A', verify: ['opuAC.negative', 'proX.positive', 'trkH.negative']], genes)]
-                : [tuple([id: 'B', verify: []], genes)]
-        }
-    OSMOTOOL_BUILDCATALOG_BENCHMARK(catalog_sets, db_calib)
+    // profile --catalog on the test reads, with catalogs A and B (built above); A is also run as
+    // profile --catalog in full on a few samples
     BENCHMARK_CATALOGMAP(BENCHMARK_SIMULATE_TEST.out.reads, db, OSMOTOOL_BUILDCATALOG_BENCHMARK.out.catalog)
     BENCHMARK_CATALOGSCORE(BENCHMARK_SIMULATE_TEST.out.reads, BENCHMARK_READS_TEST.out.results, cascade, families,
         BENCHMARK_CATALOGMAP.out.runs.map { _meta, d -> d }.collect())

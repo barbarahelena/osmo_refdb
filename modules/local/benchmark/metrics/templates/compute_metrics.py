@@ -78,6 +78,12 @@ f1_all a spread, and
 decision_sensitivity.tsv sets the decision on point estimates alone (the
 cascade at bare sign: the rule up to v10) next to the support rule's, per
 unit. --decision-bootstrap 0 with --min-cascade-gain 0 is the v10 rule.
+With --catalog-run (the same calibration reads mapped by osmotool profile
+--catalog_only to a catalog holding every sequence of the release), the
+manifest also says, per unit, whether the reads the gene catalog settles
+for it can be reported (catalog_reported): the level test and the evidence
+guard on the unit by itself, on those catalog calls alone, with the same
+bootstrap resamples. See decide_units.
 Benchmark mode (--cascade-config, --report-levels; the test reads) only
 scores those choices, adding summary_by_report_unit.tsv, and the
 threshold-free average precision per family and method
@@ -226,7 +232,41 @@ def load_hmm_calls(hmm_dir: Path) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-CASCADE_ORF_SUFFIX_RE = re.compile(r"^(.*)_\d+_\d+_\d+$")   # osmotool.functions.ORF_SUFFIX_RE
+def read_samples(reads_dir: Path) -> list[str]:
+    """The simulated samples in a reads directory (<sample>_R1.fastq)."""
+    return sorted(p.name[:-len("_R1.fastq")] for p in reads_dir.glob("*_R1.fastq"))
+
+
+def catalog_decisions(run_dir: Path, sample_names: list[str]) -> pd.DataFrame:
+    """Every read the gene catalog settled, from osmotool profile --keep_aln's
+    <sample>.catalog_hits.tsv: read_id (with /1, /2 as in read_truth.tsv),
+    sample, decision (call, drop or ambiguous) and label (the family of a
+    call)."""
+    frames = []
+    for s in sample_names:
+        f = run_dir / f"{s}.catalog_hits.tsv"
+        if not f.exists() or f.stat().st_size == 0:
+            continue
+        df = pd.read_csv(f, sep="\t", dtype=str, keep_default_na=False)
+        if df.empty:
+            continue
+        df["read_id"] = df["read"] + "/" + df["mate"]
+        df["sample"] = s
+        frames.append(df[["read_id", "sample", "decision", "label"]])
+    if not frames:
+        return pd.DataFrame(columns=["read_id", "sample", "decision", "label"])
+    return pd.concat(frames, ignore_index=True)
+
+
+def catalog_only_calls(settled: pd.DataFrame) -> pd.DataFrame:
+    """The calls of profile --catalog_only: one per read the catalog settled
+    with a unique call. A drop or an ambiguous read is no call, and nothing
+    falls through to translated search."""
+    calls = settled[settled["decision"] == "call"].rename(columns={"label": "family"})
+    return calls[["read_id", "sample", "family"]].assign(bitscore=1e9, evalue=0.0).reset_index(drop=True)
+
+
+CASCADE_ORF_SUFFIX_RE =re.compile(r"^(.*)_\d+_\d+_\d+$")   # osmotool.functions.ORF_SUFFIX_RE
 
 
 def load_cascade_config(path: Path) -> dict[str, float]:
@@ -753,11 +793,19 @@ def _r(x) -> str | float:
     return "" if x is None or x == "" else round(x, 3)
 
 
+CATALOG_COLUMNS = [
+    "catalog_reported", "catalog_reason", "catalog_tp", "catalog_fp_all", "catalog_fn",
+    "catalog_precision_all", "catalog_recall", "catalog_f1_all", "catalog_level_support",
+    "catalog_reason_detail",
+]
+
+
 def decide_units(meta: dict[str, dict], thresholds: dict[str, float],
                  gene_off: dict[str, dict], gene_on: dict[str, dict],
                  group_off: dict[str, dict], group_on: dict[str, dict],
                  min_f1: float, min_n: int = 0, boot: dict | None = None,
                  min_gain: float = 0.0, min_support: float = 0.0,
+                 gene_cat: dict[str, dict] | None = None, group_cat: dict[str, dict] | None = None,
                  ) -> tuple[list[dict], dict[str, dict], list[dict]]:
     """
     Decide report level and cascade together, per family or paralog group
@@ -794,6 +842,16 @@ def decide_units(meta: dict[str, dict], thresholds: dict[str, float],
     warning. The cascade follows the reported level (off for none).
     reason is report_rule's vocabulary, reason_detail the numbers.
 
+    gene_cat / group_cat: {family | group: summarize() / summarize_groups()
+    row} of the same calibration reads' catalog calls alone (profile
+    --catalog_only), with boot's "catalog" resamples; None without a
+    catalog run (the catalog columns are then NA). Each reporting unit, at
+    the level it is reported at (a group on group, a family otherwise, none
+    included), gets report_rule.unit_test on those calls: catalog_reported
+    yes if the reads the catalog settles for it can be reported. It is a
+    decision of its own, made whatever the unit's report_level, and changes
+    neither the level nor the cascade.
+
     Returns (manifest rows: one per reporting unit, i.e. a paralog group on
     "group" and a family otherwise; {family: cascade-config row};
     decision_sensitivity rows: per reporting unit, the decision the point
@@ -827,6 +885,22 @@ def decide_units(meta: dict[str, dict], thresholds: dict[str, float],
 
     def yes_no(flag: bool, has_on: bool) -> str:
         return ("yes" if flag else "no") if has_on else "NA"
+
+    def catalog(key: tuple, row: dict | None) -> tuple[dict, str]:
+        """The catalog columns of one reporting unit, and the point-estimate decision."""
+        if gene_cat is None:
+            return {c: "NA" for c in CATALOG_COLUMNS}, "NA"
+        value, n = _f1_value(row), _n_value(row)
+        samples = (boot.get(key) or {}).get("catalog")
+        support = None if samples is None else float(np.mean(samples >= min_f1))
+        ok, code, why = report_rule.unit_test(value, n, support, min_f1, min_n, min_support)
+        point_ok = report_rule.unit_test(value, n, None, min_f1, min_n, min_support)[0]
+        row = row or {}
+        cells = {"catalog_reported": "yes" if ok else "no", "catalog_reason": code,
+                 **{f"catalog_{k}": row.get(k, "") for k in ("tp", "fp_all", "fn", "precision_all",
+                                                              "recall", "f1_all")},
+                 "catalog_level_support": _r(support), "catalog_reason_detail": why}
+        return cells, "yes" if point_ok else "no"
 
     manifest: list[dict] = []
     cascade: dict[str, dict] = {}
@@ -890,7 +964,8 @@ def decide_units(meta: dict[str, dict], thresholds: dict[str, float],
                        "f1_all_group_on": (f1_cell(group_on, group) if group_has_on else "NA") if group else ""}
         if aggregated:
             f0 = members[0]
-            units = [(group, members, group_choice, group_has_on)]
+            cat_cells, cat_point = catalog(("group", group), (group_cat or {}).get(group))
+            units = [(group, members, group_choice, group_has_on, cat_cells, cat_point)]
             manifest.append({
                 "unit": group, "report_level": "group", "members": ",".join(members),
                 "paralog_group": group,
@@ -903,10 +978,12 @@ def decide_units(meta: dict[str, dict], thresholds: dict[str, float],
                 "reason_detail": reason[f0], **evidence,
                 "n_eval_positives": group_n,
                 **robust(group_choice, group_has_on),
+                **cat_cells,
             })
         else:
-            units = [(f, [f], gene_choice[f], f in thresholds) for f in members]
-            for f in members:
+            units = [(f, [f], gene_choice[f], f in thresholds,
+                      *catalog(("gene", f), (gene_cat or {}).get(f))) for f in members]
+            for f, *_, cat_cells, _point in units:
                 manifest.append({
                     "unit": f, "report_level": level[f], "members": f, "paralog_group": group,
                     "cascade_members": f if flags[f] else "",
@@ -918,9 +995,10 @@ def decide_units(meta: dict[str, dict], thresholds: dict[str, float],
                     "reason_detail": reason[f], **evidence,
                     "n_eval_positives": gene_n[f],
                     **robust(gene_choice[f], f in thresholds),
+                    **cat_cells,
                 })
 
-        for unit, unit_members, ch, has_on in units:
+        for unit, unit_members, ch, has_on, cat_cells, cat_point in units:
             f0 = unit_members[0]
             sensitivity.append({
                 "unit": unit, "report_level": level[f0], "members": ",".join(unit_members),
@@ -936,6 +1014,10 @@ def decide_units(meta: dict[str, dict], thresholds: dict[str, float],
                 "f1_all_point": ch["point_value"], "f1_all_rule": ch["value"],
                 "level_support": _r(ch["level_support"]),
                 "f1_all_p10": ch["p10"], "f1_all_p90": ch["p90"],
+                "catalog_point": cat_point, "catalog_rule": cat_cells["catalog_reported"],
+                "catalog_differs": ("NA" if cat_point == "NA" else
+                                    "yes" if cat_point != cat_cells["catalog_reported"] else "no"),
+                "catalog_level_support": cat_cells["catalog_level_support"],
             })
 
         for f in members:
@@ -972,6 +1054,8 @@ MANIFEST_COLUMNS = [
     "reason_detail", "rule_metric", "threshold", "n_eval_positives", "min_eval_positives",
     # added after v10: the bootstrap behind the decision (decide_units)
     "f1_all_p10", "f1_all_p90", "level_support", "cascade_gain", "cascade_gain_support",
+    # added after v10: the catalog decision (decide_units, report_rule.unit_test)
+    *CATALOG_COLUMNS,
 ]
 
 
@@ -996,6 +1080,21 @@ def write_report_levels(path: Path, rows: list[dict], min_f1: float, min_n: int 
         "f1_all_group_*: the paralog group as one unit. f1_all_p10..cascade_gain_support: the row's unit at the "
         "cascade option the rule judged it with.",
     ]
+    if rows and rows[0].get("catalog_reported", "NA") != "NA":
+        header += [
+            "catalog_*: whether the reads the gene catalog settles for a unit can be reported. The level test "
+            "and the minimum evidence above, on the unit by itself (no gene, group, none order), on the "
+            "calibration reads' catalog calls alone: osmotool profile --catalog_only, no translated fallback, "
+            "with a catalog holding every sequence of the release (the catalog benchmark's scenario A), indexed "
+            "as the release's catalog is. These are the full-length annotation's calls on short reads, for "
+            "strains in the catalog. The bootstrap is the one behind report_level, on the same resamples.",
+            "catalog_reported: yes or no, decided for every unit whatever its report_level: on none, whether its "
+            "catalog counts can be reported; on gene or group, whether the catalog part of its count can. "
+            "catalog_reason: the rule's vocabulary. catalog_tp..catalog_f1_all: the catalog calls' calibration "
+            "counts.",
+        ]
+    else:
+        header.append("catalog_*: NA, no catalog run on the calibration reads.")
     with open(path, "w", newline="") as fh:
         for line in header:
             fh.write(f"# {line}\n")
@@ -1188,6 +1287,11 @@ def main() -> None:
                     help="Calibration mode: the distinct positive calibration sequences a unit "
                          "needs before the rule decides on it; below it, none for "
                          "insufficient_evidence (see report_rule.py; params.profile_min_eval_positives). 0: off.")
+    ap.add_argument("--catalog-run", type=Path, default=None,
+                    help="Calibration mode: osmotool profile --catalog_only --keep_aln on these reads, with a "
+                         "catalog holding every sequence of the release (<sample>.catalog_hits.tsv, "
+                         "BENCHMARK_CATALOGMAP's runs/). Decides the manifest's catalog_* columns and adds "
+                         "method catalog_only to the tables; without it those columns are NA.")
     ap.add_argument("--cascade-config", type=Path, default=None,
                     help="Benchmark (test-read) mode: an existing "
                          "profile_cascade.tsv, written earlier from the "
@@ -1201,6 +1305,9 @@ def main() -> None:
     args = ap.parse_args()
 
     calibration = args.cascade_config is None
+    if args.catalog_run and not calibration:
+        ap.error("--catalog-run is for calibration mode; the test reads' catalog runs are scored by "
+                 "catalog_benchmark.py")
     meta = load_family_meta(args.families)
     families = list(meta)
     groups = {f: m["group"] for f, m in meta.items() if m["group"]}
@@ -1275,13 +1382,25 @@ def main() -> None:
                       for r in best_threshold_rows if r["method"] == "hmm"}
         all_on = label_reads(apply_profile_cascade(diamond_calls, diamond_dir, thresholds), truth)
         add_method(all_on, "diamond_cascade_all")
+        configs = {"off": diamond_merged, "on": all_on}
+        if args.catalog_run:
+            # the same reads' catalog calls alone: catalog_reported per unit
+            settled = catalog_decisions(args.catalog_run, read_samples(args.reads or args.results / "reads"))
+            if settled.empty:
+                print(f"WARNING: no read settled by the catalog in {args.catalog_run}")
+            configs["catalog"] = label_reads(catalog_only_calls(settled), truth)
+            add_method(configs["catalog"], "catalog_only")
+            print(f"Catalog calls: {int((settled['decision'] == 'call').sum())} of {len(settled)} "
+                  f"settled calibration reads")
 
         def by(rows, method, key):
             return {r[key]: r for r in rows if r["method"] == method}
         tables = {"gene_off": by(summary_rows, "diamond", "family"),
                   "gene_on": by(summary_rows, "diamond_cascade_all", "family"),
                   "group_off": by(group_rows, "diamond", "paralog_group"),
-                  "group_on": by(group_rows, "diamond_cascade_all", "paralog_group")}
+                  "group_on": by(group_rows, "diamond_cascade_all", "paralog_group"),
+                  "gene_catalog": by(summary_rows, "catalog_only", "family") if args.catalog_run else None,
+                  "group_catalog": by(group_rows, "catalog_only", "paralog_group") if args.catalog_run else None}
         boot = None
         if args.decision_bootstrap > 0:
             members_by_group: dict[str, set[str]] = {}
@@ -1289,16 +1408,18 @@ def main() -> None:
                 members_by_group.setdefault(g, set()).add(f)
             units = {**{("gene", f): {f} for f in families},
                      **{("group", g): ms for g, ms in members_by_group.items()}}
-            boot, point = cluster_bootstrap({"off": diamond_merged, "on": all_on}, units,
-                                            args.decision_bootstrap, args.decision_bootstrap_seed)
+            # the catalog calls are one more configuration of the same reads: the same clusters and
+            # draws, so adding them leaves the off/on resamples, and the level and cascade, as they are
+            boot, point = cluster_bootstrap(configs, units, args.decision_bootstrap, args.decision_bootstrap_seed)
             check_bootstrap_points(point, {
                 (key, c): tables[f"{key[0]}_{c}"].get(key[1])
-                for key in units for c in ("off", "on")})
+                for key in units for c in configs})
             print(f"Decision bootstrap: {args.decision_bootstrap} resamples of source sequences, "
                   f"seed {args.decision_bootstrap_seed}, {len(units)} units")
         manifest_rows, cascade, sensitivity_rows = decide_units(
             meta, thresholds, tables["gene_off"], tables["gene_on"], tables["group_off"], tables["group_on"],
-            args.min_f1, args.min_eval_positives, boot, args.min_cascade_gain, args.decision_support)
+            args.min_f1, args.min_eval_positives, boot, args.min_cascade_gain, args.decision_support,
+            tables["gene_catalog"], tables["group_catalog"])
         cascade_rows = list(cascade.values())
 
     unit_rows = []
@@ -1365,6 +1486,10 @@ def main() -> None:
         for level in REPORT_LEVELS:
             units = [r["unit"] for r in manifest_rows if r["report_level"] == level]
             print(f"  {level}: {len(units)} units: {', '.join(units)}")
+        if args.catalog_run:
+            for answer in ("yes", "no"):
+                units = [r["unit"] for r in manifest_rows if r["catalog_reported"] == answer]
+                print(f"  catalog_reported {answer}: {len(units)} units: {', '.join(units)}")
 
 
 if __name__ == "__main__":

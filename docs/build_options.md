@@ -37,7 +37,7 @@ nextflow run main.nf --outdir /data/osmo_refdb/v11 --release v11 --refs_store /p
 
 ## Report levels and cascade
 
-Decided on the calibration split, separately for each mode.
+Decided on the calibration split, separately for each mode. The profile settings also decide `catalog_reported`, whether the reads the gene catalog settles for a unit can be reported, on the calibration reads' catalog calls alone.
 
 | Option | Default | What it does |
 |---|---|---|

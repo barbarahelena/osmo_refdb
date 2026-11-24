@@ -28,6 +28,26 @@ class LevelTest(unittest.TestCase):
         self.assertFalse(rr.passes_level(0.499, None, 0.5, 0.9))
 
 
+class UnitTest(unittest.TestCase):
+    """The catalog test: one unit, no gene/group order."""
+    def test_meets(self):
+        self.assertEqual(rr.unit_test(0.845, 60, 0.99, 0.5, 20, 0.9)[:2], (True, rr.MEETS))
+
+    def test_unstable(self):
+        self.assertEqual(rr.unit_test(0.52, 60, 0.6, 0.5, 20, 0.9)[:2], (False, rr.UNSTABLE))
+
+    def test_below(self):
+        # trkH on v10's catalog benchmark, catalog only
+        self.assertEqual(rr.unit_test(0.11, 60, 0.0, 0.5, 20, 0.9)[:2], (False, rr.BELOW))
+
+    def test_insufficient_evidence_first(self):
+        self.assertEqual(rr.unit_test(0.97, 5, 1.0, 0.5, 20, 0.9)[:2], (False, rr.INSUFFICIENT))
+        self.assertEqual(rr.unit_test(0.97, None, None, 0.5, 20, 0.9)[:2], (False, rr.INSUFFICIENT))
+
+    def test_without_support_is_point_estimate(self):
+        self.assertTrue(rr.unit_test(0.5, 20, None, 0.5, 20, 0.9)[0])
+
+
 class CascadeTest(unittest.TestCase):
     def test_gain_above_minimum_and_supported(self):
         self.assertTrue(rr.cascade_supported(0.039, 0.97, 0.01, 0.9))
