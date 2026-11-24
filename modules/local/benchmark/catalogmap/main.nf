@@ -3,6 +3,10 @@
 // decision is in <sample>.catalog_hits.tsv. With meta.verify, also the full profile --catalog
 // (translated fallback, the release's cascade) on a few samples, which BENCHMARK_CATALOGSCORE checks
 // its per-read rebuild against. ext.args: the read benchmark's DIAMOND filters, for the verify runs.
+// The database decides whether catalog calls fall through: BENCHMARK_CATALOGMAP gets the release's db,
+// with profile_report_levels.tsv, so a unit with catalog_reported no has its reads left out of
+// catalog_hits.tsv (osmotool >= the release that reads the column). BENCHMARK_CATALOGMAP_CALIB gets
+// db_calib, made before the levels exist, so it sees every catalog call the decision is made on.
 process BENCHMARK_CATALOGMAP {
     // calls: osmotool profile (bwa-mem3, diamond, hmmsearch)
     container 'docker.io/barbarahelena/osmotool:0.10.1.1'

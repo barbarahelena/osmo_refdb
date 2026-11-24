@@ -43,7 +43,11 @@ Per read, the hybrid call is the catalog's decision when the catalog settles
 the read (a unique call counts, a drop or an ambiguous read is no call) and
 otherwise the read's translated call (DIAMOND + the release's cascade, from
 the test benchmark). That equals what profile --catalog reports, because
-every step decides each read on its own; BENCHMARK_CATALOGMAP's full
+every step decides each read on its own; this includes the fall-through: the
+release's profile_report_levels.tsv is staged in the database, and osmotool
+does not settle a read called as a member of a unit with catalog_reported
+no (or ambiguous with one), so it is missing from catalog_hits.tsv and gets
+its translated call here, as in profile; BENCHMARK_CATALOGMAP's full
 profile --catalog runs on a few samples check it (verification.tsv).
 Methods scored (summary_by_report_unit.tsv, same metrics and units as the
 read benchmark):
