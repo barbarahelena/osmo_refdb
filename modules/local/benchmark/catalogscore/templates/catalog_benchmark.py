@@ -85,50 +85,26 @@ def load_module(path: Path):
     return mod
 
 
-def samples(reads: Path) -> list[str]:
-    return sorted(p.name[:-len("_R1.fastq")] for p in reads.glob("*_R1.fastq"))
-
-
-def catalog_decisions(run_dir: Path, sample_names: list[str]) -> pd.DataFrame:
-    """Every settled read of every sample: read_id (with /1, /2 as in
-    read_truth.tsv), sample, decision, label."""
-    frames = []
-    for s in sample_names:
-        f = run_dir / f"{s}.catalog_hits.tsv"
-        if not f.exists() or f.stat().st_size == 0:
-            continue
-        df = pd.read_csv(f, sep="\t", dtype=str, keep_default_na=False)
-        if df.empty:
-            continue
-        df["read_id"] = df["read"] + "/" + df["mate"]
-        df["sample"] = s
-        frames.append(df[["read_id", "sample", "decision", "label"]])
-    if not frames:
-        return pd.DataFrame(columns=["read_id", "sample", "decision", "label"])
-    return pd.concat(frames, ignore_index=True)
-
-
-def hybrid_calls(translated: pd.DataFrame, settled: pd.DataFrame, *, fallback: bool) -> pd.DataFrame:
+def hybrid_calls(m11, translated: pd.DataFrame, settled: pd.DataFrame, *, fallback: bool) -> pd.DataFrame:
     """Per-read calls of profile --catalog: catalog calls for settled reads,
     translated calls for the rest (none if not fallback)."""
-    calls = settled[settled["decision"] == "call"].rename(columns={"label": "family"})
-    calls = calls[["read_id", "sample", "family"]].assign(bitscore=1e9, evalue=0.0)
+    calls = m11.catalog_only_calls(settled)
     if not fallback:
-        return calls.reset_index(drop=True)
+        return calls
     key = set(zip(settled["sample"], settled["read_id"]))
     keep = [k not in key for k in zip(translated["sample"], translated["read_id"])]
     rest = translated[keep][["read_id", "sample", "family", "bitscore", "evalue"]]
     return pd.concat([rest, calls], ignore_index=True)
 
 
-def verify(verify_dir: Path, translated: pd.DataFrame, settled: pd.DataFrame) -> list[dict]:
+def verify(m11, verify_dir: Path, translated: pd.DataFrame, settled: pd.DataFrame) -> list[dict]:
     """The full profile --catalog runs (with fallback, cascade on) versus
     the per-read rebuild."""
     rows = []
     for counts in sorted(verify_dir.glob("*.gene_counts.tsv")):
         s = counts.name[:-len(".gene_counts.tsv")]
         reported = pd.read_csv(counts, sep="\t", comment="#")
-        mine = hybrid_calls(translated[translated["sample"] == s], settled[settled["sample"] == s],
+        mine = hybrid_calls(m11, translated[translated["sample"] == s], settled[settled["sample"] == s],
                             fallback=True)
         rebuilt = (mine.groupby("family").size() * 0.5).to_dict()
         n_bad = 0
@@ -193,7 +169,7 @@ def main() -> None:
     families = list(meta)
     groups = {f: m["group"] for f, m in meta.items() if m["group"]}
     units = m11.load_report_levels(args.cascade / "osmo_refdb.profile_report_levels.tsv")
-    names = samples(args.reads)
+    names = m11.read_samples(args.reads)
 
     truth = m11.load_read_truth(args.reads)
     diamond = m11.load_diamond_calls(args.diamond)
@@ -214,11 +190,11 @@ def main() -> None:
     settled_by = {}
     t = truth.set_index("read_id")
     for name in SCENARIOS:
-        settled = catalog_decisions(args.runs / name / "runs", names)
+        settled = m11.catalog_decisions(args.runs / name / "runs", names)
         settled_by[name] = settled
-        score(hybrid_calls(translated, settled, fallback=True), f"catalog_{name}")
+        score(hybrid_calls(m11, translated, settled, fallback=True), f"catalog_{name}")
         if name != "B":
-            score(hybrid_calls(translated, settled, fallback=False), f"catalog_only_{name}")
+            score(hybrid_calls(m11, translated, settled, fallback=False), f"catalog_only_{name}")
         lab = settled.join(t[["family", "label"]], on="read_id", rsuffix="_true")
         for (fam_true, label), grp in lab.groupby(["family", "label_true"]):
             settled_rows.append({
@@ -233,7 +209,7 @@ def main() -> None:
     mix = mixture(m11, counts_of(by_method["catalog_A"]), counts_of(by_method["catalog_B"]), units)
 
     print("Verifying the per-read rebuild against the full profile --catalog runs", flush=True)
-    ver = verify(args.runs / "A" / "verify", translated, settled_by["A"])
+    ver = verify(m11, args.runs / "A" / "verify", translated, settled_by["A"])
 
     write_tsv(args.out / "summary_by_report_unit.tsv", unit_rows)
     write_tsv(args.out / "summary.tsv", family_rows)

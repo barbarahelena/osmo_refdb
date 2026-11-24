@@ -2344,3 +2344,14 @@ which profile cascades lose support and which units become `unstable` is still o
 - The two images carry the same tools (DIAMOND 2.2.9, HMMER 3.4, Prodigal 2.6.3, OrfM 2.1.1, bwa-mem3
   0.18.0), so the database's own DIAMOND steps still match the version osmotool applies the cutoffs with.
 - The modules' `environment.yml` said bwa-mem3 0.17.0; both images have 0.18.0, and the files now say so.
+
+### Catalog decision in the profile report levels (branch `catalog-report-levels`)
+
+- `osmo_refdb.profile_report_levels.tsv` has been decided on translated search alone, while `osmotool profile` settles reads with the gene catalog first. osmotool gave every `none` unit its catalog counts (status `catalog_only`). v10's catalog benchmark shows that this holds for some of them and not for others: murB, mrpA, otsA, mscS and mrpC reach 0.57 to 0.97 on catalog calls alone (scenario A), while the opu substrate-binding proteins and ATPases, mrpD and the trk/ktr channel have precision 0.01 to 0.29.
+- The calibration reads are now also mapped, catalog calls only (`BENCHMARK_CATALOGMAP_CALIB`: `osmotool profile --catalog_only`), to the catalog benchmark's catalog A. It holds every sequence of the release, the calibration genes included, and is indexed as the release's catalog is. `BENCHMARK_METRICS_CALIB` scores those calls as method `catalog_only` and decides, per reporting unit, whether the reads the catalog settles for it can be reported. It uses the level test and the minimum evidence on the unit by itself, with the `profile_*` settings and on the same bootstrap resamples as the report level.
+- New manifest columns: `catalog_reported` (`yes`, `no`; `NA` without a catalog run), `catalog_reason` (the rule's vocabulary), the catalog calls' `catalog_tp`, `catalog_fp_all`, `catalog_fn`, `catalog_precision_all`, `catalog_recall`, `catalog_f1_all`, `catalog_level_support`, and `catalog_reason_detail`. They are decided for every unit, whatever its `report_level`, and change neither the level nor the cascade. `decision_sensitivity.tsv` gets `catalog_point`, `catalog_rule`, `catalog_differs` and `catalog_level_support`.
+- The catalog calls are one more configuration of the same bootstrap draws, so the existing resamples, levels and cascade are unchanged (tested). The catalog A build now runs before the calibration decision, so the test read benchmark starts after it.
+- osmotool does not read the new columns yet. Its TODO (§5) lists what it needs: `catalog_only` only for `catalog_reported` `yes`, and a choice for `gene` and `group` units that fail.
+- `catalog_decisions` and `catalog_only_calls` moved from `catalog_benchmark.py` into `compute_metrics.py`, which both now use.
+
+Not run: the catalog decision on real calibration reads, so which units pass is not known for v11 until the build has run. v10's test-read numbers above are the expectation.

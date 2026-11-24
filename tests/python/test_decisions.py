@@ -125,6 +125,31 @@ def synthetic_reads(seed=7):
     return (cm.label_reads(pd.DataFrame(off), truth), cm.label_reads(pd.DataFrame(on), truth))
 
 
+def synthetic_catalog(merged, seed=9):
+    """Catalog-only calls on the same reads, as BENCHMARK_CATALOGMAP's
+    catalog_hits.tsv would give them: c's settled reads are called right, a
+    and b are called on their own hard negatives as often as on their
+    positives. Returns (catalog_hits rows, the truth table)."""
+    rng = np.random.default_rng(seed)
+    truth = merged[["read_id", "family_true", "label", "uniprot_id", "overlaps_cds", "read_length"]].rename(
+        columns={"family_true": "family"}).astype({"family": str})
+    hits = []
+    for r in truth.itertuples():
+        if r.family == "random_bg":
+            continue
+        genuine = r.label == "positive" and r.overlaps_cds
+        if r.family == "c":
+            call = genuine and rng.random() < 0.9
+        else:
+            call = rng.random() < (0.5 if genuine or r.label == "negative" else 0.0)
+        read, mate = r.read_id.rsplit("/", 1)
+        if call:
+            hits.append({"read": read, "mate": mate, "decision": "call", "label": r.family})
+        elif rng.random() < 0.1:
+            hits.append({"read": read, "mate": mate, "decision": "ambiguous", "label": "a,b"})
+    return hits, truth
+
+
 @unittest.skipIf(cm is None, "compute_metrics.py's packages are not installed")
 class ProfileBootstrap(unittest.TestCase):
     families = ["a", "b", "c"]
@@ -179,6 +204,47 @@ class ProfileBootstrap(unittest.TestCase):
             self.assertLessEqual(row["f1_all_p10"], row["f1_all_p90"])
         self.assertEqual({r["unit"] for r in sensitivity}, {r["unit"] for r in manifest})
         self.assertTrue(all(c["cascade_gain"] != "" for c in cascade.values()))
+
+    def catalog(self):
+        """The catalog calls, read back from a catalog_hits.tsv as the pipeline does."""
+        hits, truth = synthetic_catalog(self.off)
+        with tempfile.TemporaryDirectory() as d:
+            pd.DataFrame(hits).to_csv(Path(d) / "s1.catalog_hits.tsv", sep="\t", index=False)
+            settled = cm.catalog_decisions(Path(d), ["s1"])
+        self.assertEqual(len(settled), len(hits))
+        return cm.label_reads(cm.catalog_only_calls(settled), truth)
+
+    def test_catalog_leaves_level_and_cascade(self):
+        """The catalog is one more configuration of the same draws: the off/on resamples, and so
+        every level and cascade, are what they are without it."""
+        cat = self.catalog()
+        plain, _ = cm.cluster_bootstrap({"off": self.off, "on": self.on}, self.units, 100, 42)
+        both, _ = cm.cluster_bootstrap({"off": self.off, "on": self.on, "catalog": cat}, self.units, 100, 42)
+        for key in self.units:
+            for c in ("off", "on"):
+                self.assertTrue(np.array_equal(plain[key][c], both[key][c]), (key, c))
+        go, gn, ro, rn = self.tables()
+        gc = {r["family"]: r for r in cm.summarize(cat, "x", self.families, self.groups)}
+        rc = {r["paralog_group"]: r for r in cm.summarize_groups(cat, "x", self.families, self.groups)}
+        without, cascade0, _ = cm.decide_units(self.meta, self.thresholds, go, gn, ro, rn, 0.5, 20, plain, 0.01, 0.9)
+        with_cat, cascade1, sens = cm.decide_units(self.meta, self.thresholds, go, gn, ro, rn, 0.5, 20, both,
+                                                   0.01, 0.9, gc, rc)
+        self.assertEqual(cascade0, cascade1)
+        for a, b in zip(without, with_cat):
+            self.assertEqual({k: v for k, v in b.items() if k not in cm.CATALOG_COLUMNS},
+                             {k: v for k, v in a.items() if k not in cm.CATALOG_COLUMNS})
+            self.assertEqual(a["catalog_reported"], "NA")
+        by_unit = {r["unit"]: r for r in with_cat}
+        self.assertEqual(by_unit["c"]["catalog_reported"], "yes")
+        for row in with_cat:
+            self.assertIn(row["catalog_reported"], ("yes", "no"))
+            self.assertIn(row["catalog_reason"], cm.report_rule.REASONS)
+            self.assertNotEqual(row["catalog_level_support"], "")
+        self.assertTrue(all(r["catalog_differs"] in ("yes", "no") for r in sens))
+        with tempfile.TemporaryDirectory() as d:
+            cm.write_report_levels(Path(d) / "m.tsv", with_cat, 0.5, 20, 100, 42, 0.9, 0.01)
+            back = cm.load_report_levels(Path(d) / "m.tsv")
+        self.assertEqual([r["catalog_reported"] for r in back], [r["catalog_reported"] for r in with_cat])
 
     def test_paired_comparison(self):
         """An option identical to off has gain 0 in every resample: never supported."""

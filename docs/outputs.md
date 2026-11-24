@@ -13,7 +13,7 @@ Everything is published into the release folder, `--outdir`. The table lists eac
 | `HMM_CALIBRATE` | `hmms/` | One HMM per family and decoy, the pressed `osmo_refdb.hmm`, the GA cutoffs (`cutoff_manifest.tsv`) and the calibration scores |
 | `HMM_CALIBRATE` | `qc_scorecard.tsv` | Per-family QC flags: negative purity, length outliers, HMM cutoff overlap |
 | `BENCHMARK_METRICS_CALIB` | `osmo_refdb.profile_cascade.tsv` | Which units get the HMM cascade in `osmotool profile`, and at which threshold |
-| `BENCHMARK_METRICS_CALIB` | `osmo_refdb.profile_report_levels.tsv` | The level each unit is reported at in `osmotool profile`, with the calibration numbers behind it |
+| `BENCHMARK_METRICS_CALIB` | `osmo_refdb.profile_report_levels.tsv` | The level each unit is reported at in `osmotool profile`, with the calibration numbers behind it, and whether the reads the gene catalog settles for it can be reported (`catalog_reported`; osmotool does not read it yet) |
 | `BENCHMARK_ANNOTATESCORE_CALIB` | `osmo_refdb.annotate_report_levels.tsv` | The same for `osmotool annotate --method hmm` (osmotool does not read it yet) |
 | `MARKERS_PACKAGE` | `markers/` | The marker genes' DIAMOND database, its source FASTA, excluded labels and manifest |
 | `CATALOG_PACKAGE` | `catalogs/<name>/` | The gene catalog: annotation, bwa-mem3 index, hmmsearch domain table, `catalog.json`, `SHA256SUMS` |
@@ -33,7 +33,7 @@ Everything is published into the release folder, `--outdir`. The table lists eac
 
 | Process | Published to | What it is |
 |---|---|---|
-| `BENCHMARK_METRICS_CALIB` | `results/calib_metrics/` | Calibration reads: `summary.tsv`, `summary_by_group.tsv`, `best_threshold_summary.tsv`, `decision_sensitivity.tsv`, ROC/PR plots |
+| `BENCHMARK_METRICS_CALIB` | `results/calib_metrics/` | Calibration reads: `summary.tsv`, `summary_by_group.tsv` (DIAMOND, HMM, the cascade, and the catalog calls alone as `catalog_only`), `best_threshold_summary.tsv`, `decision_sensitivity.tsv`, ROC/PR plots |
 | `BENCHMARK_METRICS_TEST` | `results/metrics/` | Test reads: `summary.tsv`, `summary_by_group.tsv`, `summary_by_report_unit.tsv` (the numbers for the paper), `average_precision.tsv`, `verification.tsv`, `best_threshold_summary.tsv`, ROC/PR plots; with the options, `summary_by_read_length.tsv` and `background_fpr*.tsv` |
 | `BENCHMARK_ANNOTATESCORE_CALIB` | `results/annotate_calib/` | Calibration proteins: osmotool annotate's output and calls per method, `summary.tsv`, `summary_by_group.tsv` |
 | `BENCHMARK_ANNOTATESCORE_TEST` | `results/annotate/` | Test proteins: the same, plus `average_precision.tsv` and `verification.tsv` |

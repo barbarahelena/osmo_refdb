@@ -1,7 +1,9 @@
 // Precision / recall / F1 for DIAMOND, DIAMOND+cascade and HMM.
 // It imports ../../templates/report_rule.py (the report-level rule, shared with the annotate benchmark).
 // mode = calib: scores the calibration reads and WRITES the cascade config and report levels (cascade/),
-//               with metrics/decision_sensitivity.tsv: the decisions on point estimates alone vs the support rule
+//               with metrics/decision_sensitivity.tsv: the decisions on point estimates alone vs the support rule;
+//               catalog_run (BENCHMARK_CATALOGMAP_CALIB: the same reads, catalog calls only) decides the
+//               report levels' catalog_* columns
 //      | test:  scores the test reads with those (cascade_in)
 process BENCHMARK_METRICS {
     // calls: python + numpy, pandas, matplotlib, pyyaml
@@ -17,6 +19,7 @@ process BENCHMARK_METRICS {
     path(cascade_in, stageAs: 'cascade_in/*')   // mode test: the calibration's cascade files
     path(families)
     val(mode)
+    path(catalog_run, stageAs: 'catalog_run')   // mode calib: <id>/runs/<sample>.catalog_hits.tsv; test: []
 
     output:
     path('metrics'),                     emit: metrics
@@ -29,7 +32,7 @@ process BENCHMARK_METRICS {
 
     script:
     def args = mode == 'calib'
-        ? '--cascade-out cascade/osmo_refdb.profile_cascade.tsv --report-levels-out cascade/osmo_refdb.profile_report_levels.tsv'
+        ? '--cascade-out cascade/osmo_refdb.profile_cascade.tsv --report-levels-out cascade/osmo_refdb.profile_report_levels.tsv --catalog-run catalog_run/runs'
         : '--cascade-config cascade_in/osmo_refdb.profile_cascade.tsv --report-levels cascade_in/osmo_refdb.profile_report_levels.tsv'
     def extra = task.ext.args ?: ''   // e.g. --min-eval-positives (conf/modules.config)
     """

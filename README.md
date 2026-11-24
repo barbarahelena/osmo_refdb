@@ -21,7 +21,7 @@ Read the catalog screen (`<outdir>/catalogs/<catalog>/screen.tsv`, printed at th
 
 1. **References.** Per family, positives and hard negatives from UniProt (plus RefSeq where a family opts in), cleaned of mislabelled sequences and length outliers, clustered at 90% identity, and split into train, calib and test.
 2. **Databases.** From the train split: one HMM per family and one DIAMOND database, with decoy and fused-ORF references. The cutoffs of both are calibrated on the calib split.
-3. **Benchmark.** Reads simulated from the calib split decide the cascade and the report levels. Reads and proteins from the test split score the release, for `osmotool profile` and `osmotool annotate`.
+3. **Benchmark.** Reads simulated from the calib split decide the cascade, the report levels, and whether the reads the gene catalog settles for each unit can be reported. Reads and proteins from the test split score the release, for `osmotool profile` and `osmotool annotate`.
 4. **Gene catalog.** The catalog (GMGC human gut by default) is annotated with the release's HMMs, indexed for `osmotool profile`, and screened for families that claim genes that look like something else.
 5. **Marker genes.** Ten single-copy marker genes in a DIAMOND database of their own, for copies per genome.
 6. **Validation on the finished release.** The BacDive phenotype analysis (and with `--bacdive_full` the NaCl model) and the real-genome checks.

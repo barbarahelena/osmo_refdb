@@ -37,6 +37,11 @@ positive in at least min_support of the resamples (cascade_gain_support).
 With min_gain 0 and no bootstrap it is the bare sign of the gain, the rule of
 releases up to v10.
 
+The catalog test (unit_test, profile mode only): the level test and the
+evidence guard on one reporting unit by itself, on the calibration reads'
+catalog calls alone. It decides whether the reads the gene catalog settles
+for that unit can be reported, whatever the unit's report level.
+
 The resampling itself (a cluster bootstrap over source sequences) is the
 caller's: compute_metrics.py (numpy) for reads, benchmark_annotate.py for
 proteins. This module only takes the numbers it produces.
@@ -157,6 +162,20 @@ def rule_levels(members: list[str], group: str,
         else:
             out[f] = ("none", BELOW, f"{metric} {v:.3f} < {min_value}{_support_text(s)} at gene level{tail}")
     return out
+
+
+def unit_test(value: float, n: int | None, support: float | None, min_value: float, min_n: int,
+              min_support: float, metric: str = "f1_all") -> tuple[bool, str, str]:
+    """The level test and the evidence guard on one unit by itself, without
+    the gene, group, none order: (passes, reason, detail). The profile
+    manifest's catalog columns use it, one decision per reporting unit."""
+    if n is None or n < min_n:
+        return False, INSUFFICIENT, f"n_eval_positives {n or 0} < {min_n} ({metric} {value:.3f})"
+    if passes_level(value, support, min_value, min_support):
+        return True, MEETS, f"{metric} {value:.3f} >= {min_value}{_support_text(support)}"
+    if value >= min_value:
+        return False, UNSTABLE, f"{metric} {value:.3f} >= {min_value} but support {support:.3f} < {min_support}"
+    return False, BELOW, f"{metric} {value:.3f} < {min_value}{_support_text(support)}"
 
 
 def rule_header_lines(min_f1: float, min_n: int, n_boot: int, seed: int, min_support: float,
