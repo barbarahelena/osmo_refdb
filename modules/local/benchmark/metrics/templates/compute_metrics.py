@@ -260,8 +260,8 @@ def catalog_decisions(run_dir: Path, sample_names: list[str]) -> pd.DataFrame:
 
 def catalog_only_calls(settled: pd.DataFrame) -> pd.DataFrame:
     """The calls of profile --catalog_only: one per read the catalog settled
-    with a unique call. A drop or an ambiguous read is no call, and nothing
-    falls through to translated search."""
+    with a unique call. A drop or an ambiguous read is no call, and no read
+    goes on to translated search."""
     calls = settled[settled["decision"] == "call"].rename(columns={"label": "family"})
     return calls[["read_id", "sample", "family"]].assign(bitscore=1e9, evalue=0.0).reset_index(drop=True)
 
