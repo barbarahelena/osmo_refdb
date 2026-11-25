@@ -896,8 +896,12 @@ def decide_units(meta: dict[str, dict], thresholds: dict[str, float],
     def yes_no(flag: bool, has_on: bool) -> str:
         return ("yes" if flag else "no") if has_on else "NA"
 
-    def catalog(key: tuple, row: dict | None) -> tuple[dict, str]:
-        """The catalog columns of one reporting unit, and the point-estimate decision."""
+    def catalog(key: tuple, row: dict | None, scoped: bool = False) -> tuple[dict, str]:
+        """The catalog columns of one reporting unit, and the point-estimate decision. A unit out of
+        scope keeps its catalog numbers but gets catalog_reported NA: osmotool profile reports none of
+        its reads (its family is on profile_excluded_families.txt, so its catalog count there is 0),
+        and on NA osmotool lists the unit as excluded; on yes it would list a count of 0, which reads
+        as the gene being absent."""
         if gene_cat is None:
             return {c: "NA" for c in CATALOG_COLUMNS}, "NA"
         value, n = _f1_value(row), _n_value(row)
@@ -910,6 +914,11 @@ def decide_units(meta: dict[str, dict], thresholds: dict[str, float],
                  **{f"catalog_{k}": row.get(k, "") for k in ("tp", "fp_all", "fn", "precision_all",
                                                               "recall", "f1_all")},
                  "catalog_level_support": _r(support), "catalog_reason_detail": why}
+        if scoped:
+            cells.update(catalog_reported="NA", catalog_reason=report_rule.OUT_OF_SCOPE,
+                         catalog_reason_detail=f"scope: annotate_only, so no catalog count; the catalog "
+                                               f"calls alone: {why}")
+            return cells, "NA"
         return cells, "yes" if point_ok else "no"
 
     manifest: list[dict] = []
@@ -992,7 +1001,8 @@ def decide_units(meta: dict[str, dict], thresholds: dict[str, float],
             })
         else:
             units = [(f, [f], gene_choice[f], f in thresholds,
-                      *catalog(("gene", f), (gene_cat or {}).get(f))) for f in members]
+                      *catalog(("gene", f), (gene_cat or {}).get(f), meta[f]["scope"] == "annotate_only"))
+                     for f in members]
             for f, *_, cat_cells, _point in units:
                 manifest.append({
                     "unit": f, "report_level": level[f], "members": f, "paralog_group": group,
@@ -1090,7 +1100,7 @@ def write_report_levels(path: Path, rows: list[dict], min_f1: float, min_n: int 
         "f1_all_group_*: the paralog group as one unit. f1_all_p10..cascade_gain_support: the row's unit at the "
         "cascade option the rule judged it with.",
     ]
-    if rows and rows[0].get("catalog_reported", "NA") != "NA":
+    if any(r.get("catalog_reported") in ("yes", "no") for r in rows):
         header += [
             "catalog_*: whether the reads the gene catalog settles for a unit can be reported. The level test "
             "and the minimum evidence above, on the unit by itself (no gene, group, none order), on the "
@@ -1100,6 +1110,8 @@ def write_report_levels(path: Path, rows: list[dict], min_f1: float, min_n: int 
             "strains in the catalog. The bootstrap is the one behind report_level, on the same resamples.",
             "catalog_reported: yes or no, decided for every unit whatever its report_level: on none, whether its "
             "catalog counts can be reported; on gene or group, whether the catalog part of its count can. "
+            "NA with catalog_reason out_of_scope for a family on scope: annotate_only, which osmotool profile "
+            "does not report (the catalog numbers are still given). "
             "catalog_reason: the rule's vocabulary. catalog_tp..catalog_f1_all: the catalog calls' calibration "
             "counts.",
         ]

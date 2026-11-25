@@ -74,7 +74,7 @@ REASONS = ("meets_threshold", "below_threshold", "unstable", "insufficient_evide
 ROBUST_COLUMNS = ("f1_all_p10", "f1_all_p90", "level_support", "cascade_gain", "cascade_gain_support")
 # the catalog decision, profile manifest only: a build always runs it, so NA is a failure here
 CATALOG_LEVEL_FILE = "osmo_refdb.profile_report_levels.tsv"
-CATALOG_REASONS = ("meets_threshold", "below_threshold", "unstable", "insufficient_evidence")
+CATALOG_REASONS = ("meets_threshold", "below_threshold", "unstable", "insufficient_evidence", "out_of_scope")
 DECISION_PARAMS = ("profile_min_report_f1", "profile_min_eval_positives", "profile_min_cascade_gain",
                    "profile_decision_support", "profile_decision_bootstrap",
                    "annotate_min_report_f1", "annotate_min_eval_positives", "annotate_decision_support",
@@ -160,9 +160,11 @@ def build_checks(rel: Path, families: list[str], markers: list[str], c: Checks) 
             c.require(r.get("reason") in REASONS,
                       f"{levels}: unit {r.get('unit')}: reason {r.get('reason')!r} is not one of {', '.join(REASONS)}")
             if levels == CATALOG_LEVEL_FILE:
-                c.require(r.get("catalog_reported") in ("yes", "no"),
+                scoped = r.get("reason") == "out_of_scope"
+                c.require(r.get("catalog_reported") == "NA" if scoped else r.get("catalog_reported") in ("yes", "no"),
                           f"{levels}: unit {r.get('unit')}: catalog_reported {r.get('catalog_reported')!r} "
-                          "is not yes or no (no catalog run on the calibration reads?)")
+                          + ("is not NA for a unit out of scope" if scoped else
+                             "is not yes or no (no catalog run on the calibration reads?)"))
                 c.require(r.get("catalog_reason") in CATALOG_REASONS,
                           f"{levels}: unit {r.get('unit')}: catalog_reason {r.get('catalog_reason')!r}")
         for fam in families:
