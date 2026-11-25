@@ -80,6 +80,14 @@ class V10Replay(unittest.TestCase):
             for k in o:
                 self.assertEqual(str(cascade[o["family"]][k]), o[k], f"{o['family']} {k}")
 
+    def test_unexplained_overrides(self):
+        # v10's families.yaml held levels the rule no longer gave on v10's own tables, with no reason
+        manifest, _, _ = self.decide(0.0)
+        meta = cm.load_family_meta(DATA / "families.yaml")
+        self.assertEqual(sorted(cm.unexplained_overrides(manifest, meta)), ["betB", "opuAB", "opuBB", "opuCB"])
+        meta["betB"]["report_level_reason"] = "kept for the test"
+        self.assertEqual(sorted(cm.unexplained_overrides(manifest, meta)), ["opuAB", "opuBB", "opuCB"])
+
     def test_min_cascade_gain_on_v10(self):
         _, cascade, sensitivity = self.decide(0.01)
         switched = sorted(r["unit"] for r in sensitivity if r["cascade_differs"] == "yes")
@@ -245,6 +253,36 @@ class ProfileBootstrap(unittest.TestCase):
             cm.write_report_levels(Path(d) / "m.tsv", with_cat, 0.5, 20, 100, 42, 0.9, 0.01)
             back = cm.load_report_levels(Path(d) / "m.tsv")
         self.assertEqual([r["catalog_reported"] for r in back], [r["catalog_reported"] for r in with_cat])
+
+    def test_catalog_out_of_scope(self):
+        """A family out of scope gets catalog_reported NA (osmotool lists it as excluded, not as a
+        catalog count of 0), keeping its catalog numbers; its level and the other units are unchanged."""
+        cat = self.catalog()
+        both, _ = cm.cluster_bootstrap({"off": self.off, "on": self.on, "catalog": cat}, self.units, 100, 42)
+        go, gn, ro, rn = self.tables()
+        gc = {r["family"]: r for r in cm.summarize(cat, "x", self.families, self.groups)}
+        rc = {r["paralog_group"]: r for r in cm.summarize_groups(cat, "x", self.families, self.groups)}
+        meta = {f: dict(m) for f, m in self.meta.items()}
+        meta["c"]["scope"] = "annotate_only"
+        plain = {r["unit"]: r for r in cm.decide_units(self.meta, self.thresholds, go, gn, ro, rn, 0.5, 20,
+                                                       both, 0.01, 0.9, gc, rc)[0]}
+        manifest, _, sens = cm.decide_units(meta, self.thresholds, go, gn, ro, rn, 0.5, 20, both, 0.01, 0.9, gc, rc)
+        by_unit = {r["unit"]: r for r in manifest}
+        self.assertEqual(plain["c"]["catalog_reported"], "yes")
+        c = by_unit["c"]
+        self.assertEqual((c["report_level"], c["reason"]), ("none", cm.report_rule.OUT_OF_SCOPE))
+        self.assertEqual((c["catalog_reported"], c["catalog_reason"]), ("NA", cm.report_rule.OUT_OF_SCOPE))
+        self.assertEqual(c["catalog_f1_all"], plain["c"]["catalog_f1_all"])
+        self.assertEqual({r["unit"]: r["catalog_differs"] for r in sens}["c"], "NA")
+        for unit, row in by_unit.items():
+            if unit != "c":
+                self.assertEqual(row, plain[unit])
+        with tempfile.TemporaryDirectory() as d:
+            cm.write_report_levels(Path(d) / "m.tsv", manifest, 0.5, 20, 100, 42, 0.9, 0.01)
+            text = (Path(d) / "m.tsv").read_text()
+            back = {r["unit"]: r for r in cm.load_report_levels(Path(d) / "m.tsv")}
+        self.assertIn("out_of_scope for a family on scope", text)
+        self.assertEqual(back["c"]["catalog_reported"], "NA")
 
     def test_paired_comparison(self):
         """An option identical to off has gain 0 in every resample: never supported."""

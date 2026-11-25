@@ -606,8 +606,9 @@ def load_family_meta(path: Path) -> dict[str, dict]:
     excluded from profile output whatever calibration says). A group's
     members either all say "group" (reported as one unit) or each say gene
     or none on their own. An unset
-    report_level means "take the calibration rule's level" (markers.yaml,
-    subset files)."""
+    report_level means "take the calibration rule's level" (every family
+    in families.yaml, markers.yaml, subset files); a set one that differs
+    from the rule needs report_level_reason (checked in main)."""
     with open(path) as fh:
         data = yaml.safe_load(fh)
     meta: dict[str, dict] = {}
@@ -635,6 +636,15 @@ def load_family_meta(path: Path) -> dict[str, dict]:
     if errors:
         raise SystemExit("families.yaml report_level:\n  " + "\n  ".join(errors))
     return meta
+
+
+def unexplained_overrides(manifest_rows: list[dict], meta: dict[str, dict]) -> list[str]:
+    """The families whose families.yaml report_level differs from the rule's level, with no
+    report_level_reason. Unexplained, such a value is one the rule has since moved away from (a
+    level copied from an earlier calibration), and main stops the build rather than ship it."""
+    return [f for r in manifest_rows if r["reason"] == report_rule.OVERRIDE
+            for f in r["members"].split(",")
+            if meta[f]["report_level"] and not meta[f]["report_level_reason"]]
 
 
 def _f1_value(row: dict | None) -> float:
@@ -886,8 +896,12 @@ def decide_units(meta: dict[str, dict], thresholds: dict[str, float],
     def yes_no(flag: bool, has_on: bool) -> str:
         return ("yes" if flag else "no") if has_on else "NA"
 
-    def catalog(key: tuple, row: dict | None) -> tuple[dict, str]:
-        """The catalog columns of one reporting unit, and the point-estimate decision."""
+    def catalog(key: tuple, row: dict | None, scoped: bool = False) -> tuple[dict, str]:
+        """The catalog columns of one reporting unit, and the point-estimate decision. A unit out of
+        scope keeps its catalog numbers but gets catalog_reported NA: osmotool profile reports none of
+        its reads (its family is on profile_excluded_families.txt, so its catalog count there is 0),
+        and on NA osmotool lists the unit as excluded; on yes it would list a count of 0, which reads
+        as the gene being absent."""
         if gene_cat is None:
             return {c: "NA" for c in CATALOG_COLUMNS}, "NA"
         value, n = _f1_value(row), _n_value(row)
@@ -900,6 +914,11 @@ def decide_units(meta: dict[str, dict], thresholds: dict[str, float],
                  **{f"catalog_{k}": row.get(k, "") for k in ("tp", "fp_all", "fn", "precision_all",
                                                               "recall", "f1_all")},
                  "catalog_level_support": _r(support), "catalog_reason_detail": why}
+        if scoped:
+            cells.update(catalog_reported="NA", catalog_reason=report_rule.OUT_OF_SCOPE,
+                         catalog_reason_detail=f"scope: annotate_only, so no catalog count; the catalog "
+                                               f"calls alone: {why}")
+            return cells, "NA"
         return cells, "yes" if point_ok else "no"
 
     manifest: list[dict] = []
@@ -982,7 +1001,8 @@ def decide_units(meta: dict[str, dict], thresholds: dict[str, float],
             })
         else:
             units = [(f, [f], gene_choice[f], f in thresholds,
-                      *catalog(("gene", f), (gene_cat or {}).get(f))) for f in members]
+                      *catalog(("gene", f), (gene_cat or {}).get(f), meta[f]["scope"] == "annotate_only"))
+                     for f in members]
             for f, *_, cat_cells, _point in units:
                 manifest.append({
                     "unit": f, "report_level": level[f], "members": f, "paralog_group": group,
@@ -1080,7 +1100,7 @@ def write_report_levels(path: Path, rows: list[dict], min_f1: float, min_n: int 
         "f1_all_group_*: the paralog group as one unit. f1_all_p10..cascade_gain_support: the row's unit at the "
         "cascade option the rule judged it with.",
     ]
-    if rows and rows[0].get("catalog_reported", "NA") != "NA":
+    if any(r.get("catalog_reported") in ("yes", "no") for r in rows):
         header += [
             "catalog_*: whether the reads the gene catalog settles for a unit can be reported. The level test "
             "and the minimum evidence above, on the unit by itself (no gene, group, none order), on the "
@@ -1090,6 +1110,8 @@ def write_report_levels(path: Path, rows: list[dict], min_f1: float, min_n: int 
             "strains in the catalog. The bootstrap is the one behind report_level, on the same resamples.",
             "catalog_reported: yes or no, decided for every unit whatever its report_level: on none, whether its "
             "catalog counts can be reported; on gene or group, whether the catalog part of its count can. "
+            "NA with catalog_reason out_of_scope for a family on scope: annotate_only, which osmotool profile "
+            "does not report (the catalog numbers are still given). "
             "catalog_reason: the rule's vocabulary. catalog_tp..catalog_f1_all: the catalog calls' calibration "
             "counts.",
         ]
@@ -1283,7 +1305,7 @@ def main() -> None:
                          "(params.profile_decision_bootstrap; 0: point estimates alone).")
     ap.add_argument("--decision-bootstrap-seed", type=int, default=42,
                     help="Calibration mode: the bootstrap's seed (params.decision_bootstrap_seed).")
-    ap.add_argument("--min-eval-positives", type=int, default=20,
+    ap.add_argument("--min-eval-positives", type=int, default=5,
                     help="Calibration mode: the distinct positive calibration sequences a unit "
                          "needs before the rule decides on it; below it, none for "
                          "insufficient_evidence (see report_rule.py; params.profile_min_eval_positives). 0: off.")
@@ -1421,6 +1443,11 @@ def main() -> None:
             args.min_f1, args.min_eval_positives, boot, args.min_cascade_gain, args.decision_support,
             tables["gene_catalog"], tables["group_catalog"])
         cascade_rows = list(cascade.values())
+        unexplained = unexplained_overrides(manifest_rows, meta)
+        if unexplained:
+            raise SystemExit("families.yaml report_level differs from the calibration rule's level, with no "
+                             f"report_level_reason: {', '.join(unexplained)}. Remove report_level to take the "
+                             "rule's level, or add report_level_reason (see the WARNING lines above).")
 
     unit_rows = []
     for method, merged in merged_by_method.items():
