@@ -5,7 +5,6 @@
 # change (assets/test/README.md).
 families:
 - name: betL
-  report_level: gene
   description: 'Glycine betaine transporter (BCCT family; compatible solute import). betL/betP/opuD/betS
     are independently-named orthologs discovered in different organisms (Listeria/Corynebacterium/Bacillus/Sinorhizobium)
     that all specifically import glycine betaine -- treated as one positive class here rather than by
@@ -41,7 +40,6 @@ families:
   negative_pfam: PF02028
   decoy_from_negatives: true
 - name: nhaA
-  report_level: gene
   description: 'Na+/H+ antiporter A (Na+ extrusion under osmotic stress). Also includes nhaA1/nhaA2 --
     the largest numbered-paralog population found in this panel''s systematic sweep (304/389 UniProt members
     respectively, e.g. Campylobacter jejuni, Mycobacterium spp., Salinispora arenicola), same class of
@@ -53,7 +51,6 @@ families:
   negative_query: xref:pfam-PF06450 NOT (gene:nhaA OR gene:nhaA1 OR gene:nhaA2) AND taxonomy_id:2
   negative_pfam: PF06450
 - name: gor
-  report_level: gene
   description: 'Glutathione reductase (closes the gamma-glutamyl/glutathione redox cycle with gshA/gshB;
     Task 1c). PF07992 (Pyr_redox_2) is broad -- shared with thioredoxin reductase (trxB) and other FAD-dependent
     pyridine-nucleotide disulfide oxidoreductases -- rejected for pfam_model. Negative set anchored on
@@ -69,7 +66,6 @@ families:
   negative_pfam: PF07992
 - name: trkA
   paralog_group: trk_ktr_regulatory
-  report_level: gene
   description: 'Regulatory/NAD-binding subunit of constitutive K+ uptake (Trk system; Task 1d, "Kdp backup/disambiguation"
     -- an alternative K+ uptake route to the inducible Kdp system already in this panel via kdpA, useful
     for telling "no Kdp signal" apart from "no K+ uptake capability at all"). Proteobacteria-type naming
@@ -116,7 +112,6 @@ families:
   negative_pfam: PF02080
 - name: ktrA
   paralog_group: trk_ktr_regulatory
-  report_level: gene
   description: 'Regulatory/NAD-binding subunit of constitutive K+ uptake (Ktr system -- the Firmicutes-named
     counterpart to trkA above; Task 1d, and the actual Bacillota-relevant half of this gap-fill -- see
     trkA''s entry above for the full naming-trap explanation and why this is its own family rather than

@@ -80,6 +80,14 @@ class V10Replay(unittest.TestCase):
             for k in o:
                 self.assertEqual(str(cascade[o["family"]][k]), o[k], f"{o['family']} {k}")
 
+    def test_unexplained_overrides(self):
+        # v10's families.yaml held levels the rule no longer gave on v10's own tables, with no reason
+        manifest, _, _ = self.decide(0.0)
+        meta = cm.load_family_meta(DATA / "families.yaml")
+        self.assertEqual(sorted(cm.unexplained_overrides(manifest, meta)), ["betB", "opuAB", "opuBB", "opuCB"])
+        meta["betB"]["report_level_reason"] = "kept for the test"
+        self.assertEqual(sorted(cm.unexplained_overrides(manifest, meta)), ["opuAB", "opuBB", "opuCB"])
+
     def test_min_cascade_gain_on_v10(self):
         _, cascade, sensitivity = self.decide(0.01)
         switched = sorted(r["unit"] for r in sensitivity if r["cascade_differs"] == "yes")

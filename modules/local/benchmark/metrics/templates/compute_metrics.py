@@ -606,8 +606,9 @@ def load_family_meta(path: Path) -> dict[str, dict]:
     excluded from profile output whatever calibration says). A group's
     members either all say "group" (reported as one unit) or each say gene
     or none on their own. An unset
-    report_level means "take the calibration rule's level" (markers.yaml,
-    subset files)."""
+    report_level means "take the calibration rule's level" (every family
+    in families.yaml, markers.yaml, subset files); a set one that differs
+    from the rule needs report_level_reason (checked in main)."""
     with open(path) as fh:
         data = yaml.safe_load(fh)
     meta: dict[str, dict] = {}
@@ -635,6 +636,15 @@ def load_family_meta(path: Path) -> dict[str, dict]:
     if errors:
         raise SystemExit("families.yaml report_level:\n  " + "\n  ".join(errors))
     return meta
+
+
+def unexplained_overrides(manifest_rows: list[dict], meta: dict[str, dict]) -> list[str]:
+    """The families whose families.yaml report_level differs from the rule's level, with no
+    report_level_reason. Unexplained, such a value is one the rule has since moved away from (a
+    level copied from an earlier calibration), and main stops the build rather than ship it."""
+    return [f for r in manifest_rows if r["reason"] == report_rule.OVERRIDE
+            for f in r["members"].split(",")
+            if meta[f]["report_level"] and not meta[f]["report_level_reason"]]
 
 
 def _f1_value(row: dict | None) -> float:
@@ -1283,7 +1293,7 @@ def main() -> None:
                          "(params.profile_decision_bootstrap; 0: point estimates alone).")
     ap.add_argument("--decision-bootstrap-seed", type=int, default=42,
                     help="Calibration mode: the bootstrap's seed (params.decision_bootstrap_seed).")
-    ap.add_argument("--min-eval-positives", type=int, default=20,
+    ap.add_argument("--min-eval-positives", type=int, default=5,
                     help="Calibration mode: the distinct positive calibration sequences a unit "
                          "needs before the rule decides on it; below it, none for "
                          "insufficient_evidence (see report_rule.py; params.profile_min_eval_positives). 0: off.")
@@ -1421,6 +1431,11 @@ def main() -> None:
             args.min_f1, args.min_eval_positives, boot, args.min_cascade_gain, args.decision_support,
             tables["gene_catalog"], tables["group_catalog"])
         cascade_rows = list(cascade.values())
+        unexplained = unexplained_overrides(manifest_rows, meta)
+        if unexplained:
+            raise SystemExit("families.yaml report_level differs from the calibration rule's level, with no "
+                             f"report_level_reason: {', '.join(unexplained)}. Remove report_level to take the "
+                             "rule's level, or add report_level_reason (see the WARNING lines above).")
 
     unit_rows = []
     for method, merged in merged_by_method.items():

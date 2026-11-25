@@ -20,8 +20,13 @@
 #   negative_pfam     Pfam accession used in negative_query, for documentation
 #   scope             optional; "annotate_only" excludes a family from
 #                     `osmotool profile`'s reported output while still
-#                     building/searching it (e.g. murB, a housekeeping gene
-#                     with no read-level osmoadaptation signal). Omit for a
+#                     building/searching it. For a family whose abundance in
+#                     a read profile says nothing about osmoadaptation,
+#                     never for how well it is detected (the report-level
+#                     rule decides that): the Culligan et al. 2012 locus
+#                     (galE, mazG, murB), whose evidence is the three genes
+#                     together in one genome, which a read profile cannot
+#                     see, and cspA, in nearly every genome. Omit for a
 #                     normal family available in both modes.
 #   decoy_from_negatives  optional bool; when true, that family's own
 #                     (QC'd) negative set is added to the DIAMOND reference
@@ -67,29 +72,23 @@
 #                     compute_metrics.py adds summary_by_group.tsv, where a
 #                     read called as any member of its true family's group
 #                     counts as correct, next to the per-gene numbers.
-#   report_level      gene | group | none: how `osmotool profile`'s unit
-#                     table reports this family. gene: its own row. group:
-#                     summed with its paralog_group siblings into one row
-#                     (every member must then say group). none: listed as
-#                     excluded, with no count, so it never reads as absent.
-#                     This is the decision table; the numbers behind it are
-#                     in the release's osmo_refdb.profile_report_levels.tsv.
-#                     It was set from the calibration reads (positive.calib +
-#                     negative.train), never the test reads, by
-#                     compute_metrics.py's rule (decide_units): a family
-#                     without a group is gene if its f1_all >= 0.5, else
-#                     none; a group is gene if every member reaches 0.5,
-#                     else group if the group as one unit does, else each
-#                     member gene or none on its own. f1_all counts every
-#                     non-background read called as the unit as a false
-#                     positive, so gene and group are scored on the same
-#                     denominator, and each level takes the better of
-#                     cascade off/on (the cascade follows this level).
-#                     11c prints a warning, and the manifest a reason, when
-#                     this value and the rule disagree. scope:
-#                     annotate_only requires none. Unset: the rule's level.
-#   report_level_reason  optional free text: why report_level differs from
-#                     the rule's level. Copied into the manifest's
+#   report_level      optional override: gene | group | none, how
+#                     `osmotool profile`'s unit table reports this family.
+#                     gene: its own row. group: summed with its
+#                     paralog_group siblings into one row (every member must
+#                     then say group). none: listed as excluded, with no
+#                     count, so it never reads as absent. Unset (every
+#                     family in this file): the report-level rule decides
+#                     on the calibration reads at each build (decide_units
+#                     in compute_metrics.py, described in
+#                     docs/FAMILIES_SUMMARY.md), and the release's
+#                     osmo_refdb.profile_report_levels.tsv records the
+#                     level with the numbers behind it. A value that
+#                     differs from the rule stops the build unless
+#                     report_level_reason says why. scope: annotate_only
+#                     requires none or unset.
+#   report_level_reason  free text: why report_level differs from the
+#                     rule's level. Copied into the manifest's
 #                     reason_detail on that unit's override row.
 #   refseq_gene_symbols  optional list of gene symbols; when set,
 #                     add_refseq_positives.py additionally pulls NCBI
@@ -128,7 +127,6 @@
 
 families:
   - name: ectA
-    report_level: gene
     description: >
       L-2,4-diaminobutyric acid acetyltransferase (ectoine synthesis step 2,
       after EctB).
@@ -157,7 +155,6 @@ families:
     trim_gt: 0.6
 
   - name: ectB
-    report_level: gene
     description: >
       Diaminobutyric acid aminotransferase (ectoine synthesis step 1, before
       EctA). Also
@@ -188,7 +185,6 @@ families:
     # problem (the reverted trim_gt regression above) remains open.
 
   - name: ectC
-    report_level: gene
     description: >
       Ectoine synthase (ectoine synthesis step 3). Also includes ectC1/ectC2
       (real, reviewed numbered-paralog gene symbols, same class of gap as
@@ -198,7 +194,6 @@ families:
     negative_pfam: PF07883   # Cupin_2 domain
 
   - name: teaA
-    report_level: gene
     description: >
       Ectoine/hydroxyectoine-binding periplasmic protein of a TRAP
       transporter: the substrate-binding subunit, and the only subunit
@@ -244,7 +239,6 @@ families:
     negative_pfam: PF03480   # DctP, TRAP transporter solute receptor
 
   - name: betL
-    report_level: gene
     description: >
       Glycine betaine transporter (BCCT family; compatible solute import).
       betL/betP/opuD/betS are independently-named orthologs discovered in
@@ -296,7 +290,6 @@ families:
     decoy_from_negatives: true
 
   - name: kdpA
-    report_level: gene
     description: >
       K+-translocating ATPase subunit A (high-affinity K+ uptake). Also
       includes kdpA1/kdpA2 (real, reviewed numbered-paralog gene symbols,
@@ -306,7 +299,6 @@ families:
     negative_pfam: PF02705   # KUP/HAK/KT K+ transporter domain
 
   - name: nhaA
-    report_level: gene
     description: >
       Na+/H+ antiporter A (Na+ extrusion under osmotic stress). Also
       includes nhaA1/nhaA2 -- the largest numbered-paralog population found
@@ -321,7 +313,6 @@ families:
 
   - name: proX
     paralog_group: opu_substrate_binding
-    report_level: gene
     description: >
       Glycine betaine/proline betaine ABC transporter substrate-binding
       protein (proU system uptake). Species-specific synonyms (B. subtilis
@@ -367,7 +358,6 @@ families:
     negative_query: "xref:pfam-PF04069 NOT (gene:proX OR gene:proX1 OR gene:proX2 OR gene:opuAC OR gene:opuAC1 OR gene:opuAC2 OR gene:opuBC OR gene:opuBC1 OR gene:opuBC2 OR gene:opuCC OR gene:opuCC1 OR gene:opuCC2) AND taxonomy_id:2"
     negative_pfam: PF04069   # OpuAC-like ABC transporter substrate-binding domain
   - name: proP
-    report_level: gene
     description: >
       Proline/glycine betaine MFS transporter (proU system alternative
       uptake route to proVWX/BCCT). Positive set is gene-symbol based
@@ -402,11 +392,6 @@ families:
     negative_pfam: PF00083   # Sugar_tr, generic MFS transporter domain
 
   - name: otsA
-    # none because of scope: annotate_only below, which was set from the
-    # 0.543 DIAMOND precision of old (test-read) benchmarks. On v10's
-    # calibration reads the report-level rule alone gives gene (f1_all
-    # 0.573, no cascade); revisit the scope, not this field.
-    report_level: none
     description: >
       Trehalose-6-phosphate synthase (trehalose synthesis step 1;
       compatible solute pathway parallel to ectoine synthesis). Also
@@ -418,12 +403,13 @@ families:
       UniProt never assigned a curated symbol to, not a synonym gap), and
       there's no pfam_model fallback to route around it -- profile_cascade
       .tsv's HMM fallback is calibrated against the same contaminated pool,
-      so it doesn't rescue DIAMOND precision here (0.543, the lowest of
-      this cluster along with mrpC). scope: annotate_only set: still built
-      and searchable for osmotool annotate co-occurrence checks, excluded
-      from osmotool profile's reported output where 0.543 precision would
-      be misleading. See docs/FAMILIES_SUMMARY.md's "Structural negative-pool
-      contamination" section.
+      so it doesn't rescue DIAMOND precision here (0.543 on the test reads
+      of the v6/v7 benchmarks, the lowest of this cluster along with mrpC).
+      That precision kept otsA out of osmotool profile (scope:
+      annotate_only) up to v11; the report-level rule now decides on the
+      calibration reads (v11: f1_all 0.568, support 0.976, gene). See
+      docs/FAMILIES_SUMMARY.md's "Structural negative-pool contamination"
+      section.
 
       Specific mechanism confirmed (2026-07-29), same bug as mrpA/mrpB's:
       both otsA's and otsB's negative pools are contaminated by genuine
@@ -459,13 +445,11 @@ families:
     # genuinely novel at 90% identity, 94% correctly annotated
     # "alpha,alpha-trehalose-phosphate synthase (UDP-forming)".
     refseq_gene_symbols: [otsA, otsA1, otsA2]
-    scope: annotate_only
     negative_pfam: PF00982   # Glyco_transf_20, GT20/trehalose synthase family
     fusion_partner: otsB
     fusion_marker_pfam: PF02358
 
   - name: otsB
-    report_level: gene
     description: >
       Trehalose-6-phosphate phosphatase (trehalose synthesis step 2). Also
       includes otsB1/otsB2 (real, reviewed numbered-paralog gene symbols,
@@ -510,7 +494,6 @@ families:
     negative_pfam: PF02358   # Trehalose_PPase
 
   - name: mscL
-    report_level: gene
     description: >
       Large-conductance mechanosensitive channel (emergency osmolyte
       release valve during hypoosmotic downshock). Also includes
@@ -536,7 +519,6 @@ families:
     negative_pfam: PF01741
 
   - name: mscS
-    report_level: none
     description: >
       Small-conductance mechanosensitive channel (hypoosmotic downshock
       protection). PF00924 is broader than PF01741/mscL: many bacteria
@@ -614,7 +596,6 @@ families:
     negative_pfam: PF00924   # MS_channel, broad MscS-like channel family
 
   - name: galE
-    report_level: gene
     description: >
       UDP-glucose 4-epimerase. Not a classical osmotic-stress-response
       gene on its own, but UDP-glucose (which galE interconverts with
@@ -637,9 +618,16 @@ families:
     positive_query: "(gene:galE OR gene:galE1 OR gene:galE2) AND taxonomy_id:2"
     negative_query: "xref:pfam-PF01370 NOT (gene:galE OR gene:galE1 OR gene:galE2) AND taxonomy_id:2"
     negative_pfam: PF01370   # NAD_epimerase/dehydratase, broad NDP-sugar enzyme family
+    # Out of osmotool profile, as murB and mazG: Culligan et al.'s evidence
+    # is the three genes together in one genome, which annotate checks and
+    # a read profile cannot see. On its own galE is in 90% of the v11 NaCl
+    # model's training genomes (6,334 BacDive genomes with a NaCl maximum),
+    # 93% of those growing at no more than 3% NaCl and 82% of those growing
+    # at 10% or more, so its read abundance says nothing about salt
+    # tolerance. Calibration reads are not the reason: f1_all 0.849 (v11).
+    scope: annotate_only
 
   - name: mazG
-    report_level: gene
     description: >
       Nucleoside triphosphate pyrophosphohydrolase ("house-cleaning"
       enzyme, sanitizes non-canonical NTPs before they're incorporated
@@ -659,10 +647,7 @@ families:
       with gshB) is the same structural pattern as mrpB/otsA/gshA/mscL,
       and profile_cascade.tsv's HMM fallback doesn't rescue it (no
       pfam_model, same reason as otsA/mrpC/gshA). DIAMOND precision
-      (0.870) is borderline but kept in profile mode rather than scoped
-      out, since this family's own description already carries a
-      biological-confidence caveat above -- a second, structural caveat on
-      top would be redundant. See docs/FAMILIES_SUMMARY.md's "Structural
+      (0.870) is borderline. See docs/FAMILIES_SUMMARY.md's "Structural
       negative-pool contamination" section.
 
       Also, unlike every other family in this panel (confirmed via a
@@ -700,9 +685,15 @@ families:
     # at the old 3000-fetch size.
     max_negative_override: 6000
     negative_median_override: 116
+    # Out of osmotool profile, as murB and galE: Culligan et al.'s evidence
+    # is the three genes together in one genome, which annotate checks and
+    # a read profile cannot see. On its own mazG is in 73% of the v11 NaCl
+    # model's training genomes, 74% both of those growing at no more than
+    # 3% NaCl and of those growing at 10% or more. Calibration reads are
+    # not the reason: f1_all 0.902 (v11).
+    scope: annotate_only
 
   - name: murB
-    report_level: none
     description: >
       UDP-N-acetylenolpyruvoylglucosamine reductase (peptidoglycan
       biosynthesis). The third gene, with galE and mazG, from the
@@ -713,8 +704,11 @@ families:
       signal in short-read community profiling -- included specifically
       to let `osmotool annotate` check whether all three Culligan loci
       genes co-occur in a given genome, not for `osmotool profile`.
-      scope: annotate_only below is what encodes that distinction; see
-      write_scope_manifest.py. Also includes murB1/murB2 (some
+      scope: annotate_only below encodes that, as on galE and mazG (the
+      list osmotool reads is written by DIAMOND_SCOPE). In 98% of the v11
+      NaCl model's training genomes (6,334 BacDive genomes with a NaCl
+      maximum): 99% of those growing at no more than 3% NaCl, 95% of those
+      growing at 10% or more. Also includes murB1/murB2 (some
       organisms, e.g. Bacillus cereus/thuringiensis, Symbiobacterium
       thermophilum, carry two real, reviewed, distinctly-named paralogs
       rather than a single plain "murB") -- confirmed via UniProt (11
@@ -754,7 +748,6 @@ families:
 
   - name: opuAA
     paralog_group: opu_atpase
-    report_level: none
     description: >
       ATP-binding subunit of the Firmicutes-type glycine betaine/carnitine/
       choline ABC transporter (Bacillus subtilis OpuA system; Task 1a).
@@ -797,7 +790,6 @@ families:
 
   - name: opuBA
     paralog_group: opu_atpase
-    report_level: none
     description: >
       ATP-binding subunit of the OpuB system (choline-specific relative of
       OpuA; Task 1a). Same domain architecture and negative-query caveats
@@ -865,7 +857,6 @@ families:
 
   - name: opuCA
     paralog_group: opu_atpase
-    report_level: none
     description: >
       ATP-binding subunit of the OpuC system (carnitine/choline/betaine
       relative of OpuA; Task 1a). Same domain architecture and
@@ -891,7 +882,6 @@ families:
 
   - name: opuAB
     paralog_group: opu_permease
-    report_level: group
     description: >
       Permease subunit of the OpuA system (Task 1a). Single domain PF00528
       (BPD_transp_1) -- the same generic ABC-transporter permease fold
@@ -916,7 +906,6 @@ families:
 
   - name: opuBB
     paralog_group: opu_permease
-    report_level: group
     description: >
       Permease subunit of the OpuB system (Task 1a). Same domain and
       caveats as opuAB above. Also includes opuBB1/opuBB2 (real, reviewed
@@ -948,7 +937,6 @@ families:
 
   - name: opuCB
     paralog_group: opu_permease
-    report_level: group
     description: >
       Permease subunit of the OpuC system (Task 1a). Same domain and
       caveats as opuAB above. Also includes opuCB1/opuCB2 (real, reviewed
@@ -967,7 +955,6 @@ families:
 
   - name: opuAC
     paralog_group: opu_substrate_binding
-    report_level: none
     description: >
       Substrate-binding subunit of the OpuA system (Task 1a). Same Pfam
       family (PF04069) as proX, already in this panel -- proX/opuAC/opuBC/
@@ -998,7 +985,6 @@ families:
 
   - name: opuBC
     paralog_group: opu_substrate_binding
-    report_level: none
     description: >
       Substrate-binding subunit of the OpuB system (Task 1a). Same Pfam
       family and caveats as opuAC above. Also includes opuBC1/opuBC2
@@ -1019,7 +1005,6 @@ families:
 
   - name: opuCC
     paralog_group: opu_substrate_binding
-    report_level: none
     description: >
       Substrate-binding subunit of the OpuC system (Task 1a). Same Pfam
       family and caveats as opuAC above. Also includes opuCC1/opuCC2
@@ -1086,7 +1071,6 @@ families:
 
   - name: mrpA
     paralog_group: mrp_large_subunit
-    report_level: none
     description: >
       Subunit A of the Firmicutes-type Mrp/Mnh Na+/H+ antiporter complex
       (Task 1b; fills the nhaA false-negative gap for Bacillota -- see this
@@ -1189,7 +1173,6 @@ families:
     fusion_marker_pfam: PF13244
 
   - name: mrpB
-    report_level: gene
     description: >
       Subunit B of the Mrp/Mnh complex (Task 1b). mrpB/mnhB synonym pair,
       same reasoning as mrpA above. PF04039 ("MnhB" in Pfam's own naming)
@@ -1329,7 +1312,6 @@ families:
     negative_pfam: PF04039   # documents the family's own domain; no longer the negative-pool anchor -- see REDESIGNED note above
 
   - name: mrpC
-    report_level: none
     description: >
       Subunit C of the Mrp/Mnh complex (Task 1b). mrpC/mnhC synonym pair.
       PF00420 ("Oxidored_q2") checked and rejected for pfam_model: broad
@@ -1347,19 +1329,17 @@ families:
       fallback to route around it -- DIAMOND precision here (0.479) has no
       independent rescue mechanism either, since profile_cascade.tsv's HMM
       fallback is calibrated against the same contaminated pool. Worse
-      precision than otsA (0.543), which got the same treatment for this
-      exact reason -- scope: annotate_only set here too: still built and
-      searchable for osmotool annotate co-occurrence checks, excluded from
-      osmotool profile's reported output. See docs/FAMILIES_SUMMARY.md's
-      "Structural negative-pool contamination" section.
+      precision than otsA (0.543). Both were kept out of osmotool profile
+      (scope: annotate_only) on these numbers up to v11; the report-level
+      rule now decides on the calibration reads (v11: f1_all 0.476,
+      support 0.311, none). See docs/FAMILIES_SUMMARY.md's "Structural
+      negative-pool contamination" section.
     positive_query: "(gene:mrpC OR gene:mrpC1 OR gene:mrpC2 OR gene:mnhC OR gene:mnhC1 OR gene:mnhC2) AND taxonomy_id:2"
     negative_query: "xref:pfam-PF00420 NOT (gene:mrpC OR gene:mrpC1 OR gene:mrpC2 OR gene:mnhC OR gene:mnhC1 OR gene:mnhC2) AND taxonomy_id:2"
     negative_pfam: PF00420   # Oxidored_q2, broad Complex-I-type subunit 4L family, also covers nuoK/ndhK
-    scope: annotate_only
 
   - name: mrpD
     paralog_group: mrp_large_subunit
-    report_level: none
     description: >
       Subunit D of the Mrp/Mnh complex (Task 1b). mrpD/mnhD synonym pair.
       Single domain PF00361, but that domain is itself broad (shared with
@@ -1376,7 +1356,6 @@ families:
     negative_pfam: PF00361
 
   - name: mrpE
-    report_level: gene
     description: >
       Subunit E of the Mrp/Mnh complex (Task 1b). mrpE/mnhE synonym pair.
       PF01899 ("MNHE" in Pfam's own naming): 9 domain architectures, 10745
@@ -1425,7 +1404,6 @@ families:
     negative_pfam: PF01899   # documents the family's own domain; no longer the negative-pool anchor -- see REDESIGNED note above
 
   - name: mrpF
-    report_level: gene
     description: >
       Subunit F of the Mrp/Mnh complex (Task 1b). mrpF/mnhF/PhaF synonym
       trio (Pfam documents PhaF as a third alias, from yet another
@@ -1468,7 +1446,6 @@ families:
     negative_pfam: PF04066   # documents the family's own domain; no longer the negative-pool anchor -- see REDESIGNED note above
 
   - name: mrpG
-    report_level: gene
     description: >
       Subunit G of the Mrp/Mnh complex (Task 1b). mrpG/mnhG/yufB synonym
       trio (Pfam documents yufB, B. subtilis's own locus-tag-derived
@@ -1521,7 +1498,6 @@ families:
 # genomic-co-occurrence-only support.
 
   - name: betA
-    report_level: gene
     description: >
       Choline dehydrogenase (choline -> glycine betaine oxidation, step 1
       of 2 with betB; Task 1c). Basis: Ng et al. 2023 (mBio), in vivo
@@ -1539,7 +1515,6 @@ families:
     negative_pfam: PF00732   # GMC_oxred_C, broad GMC oxidoreductase family (glucose oxidase, other choline/alcohol oxidoreductases)
 
   - name: betB
-    report_level: gene
     description: >
       Betaine aldehyde dehydrogenase (choline -> glycine betaine oxidation,
       step 2 of 2 with betA; Task 1c). Same Ng et al. 2023 in vivo basis as
@@ -1560,7 +1535,6 @@ families:
 
   - name: gshA
     paralog_group: glutathione_step1
-    report_level: gene
     description: >
       Glutamate-cysteine ligase (glutathione biosynthesis step 1 of 2, with
       gshB; Task 1c). PF04262 ("Glu_cys_ligase") checked: 19 domain
@@ -1609,7 +1583,6 @@ families:
 
   - name: gshF
     paralog_group: glutathione_step1
-    report_level: gene
     description: >
       Bifunctional glutamate-cysteine ligase/glutathione synthetase (Task
       1c gap-fill, added after reviewing gshA/gshB's coverage): several
@@ -1660,7 +1633,6 @@ families:
     negative_pfam: PF04262
 
   - name: gshB
-    report_level: gene
     description: >
       Glutathione synthetase (glutathione biosynthesis step 2 of 2, with
       gshA; Task 1c). Anchored on PF02951 (GSH-S_N, the substrate-binding
@@ -1714,7 +1686,6 @@ families:
     negative_pfam: PF02951   # GSH-S_N, glutathione-synthetase-specific substrate-binding domain (not the generic PF02955 ATP-grasp fold)
 
   - name: gor
-    report_level: gene
     description: >
       Glutathione reductase (closes the gamma-glutamyl/glutathione redox
       cycle with gshA/gshB; Task 1c). PF07992 (Pyr_redox_2) is broad --
@@ -1749,7 +1720,6 @@ families:
     decoy_from_negatives: true
 
   - name: cspA
-    report_level: gene
     description: >
       Cold-shock domain family (Task 1c: "cspA-family cold shock proteins
       -- use a curated Pfam cold-shock domain model; expect multiple
@@ -1796,10 +1766,16 @@ families:
     negative_query: "xref:pfam-PF00436 NOT xref:pfam-PF00313 AND taxonomy_id:2"
     negative_pfam: PF00436   # SSB, single-stranded DNA-binding protein (related OB-fold, functionally distinct)
     max_positive_override: 5000
+    # Out of osmotool profile: cold-shock domain proteins are in 97% of the
+    # v11 NaCl model's training genomes (6,334 BacDive genomes with a NaCl
+    # maximum; median 4 copies), 95% of those growing at no more than 3%
+    # NaCl and 99% of those growing at 10% or more, so their read abundance
+    # follows bacterial load, not salt tolerance. Calibration reads are not
+    # the reason: f1_all 0.804 (v11).
+    scope: annotate_only
 
   - name: trkA
     paralog_group: trk_ktr_regulatory
-    report_level: gene
     description: >
       Regulatory/NAD-binding subunit of constitutive K+ uptake (Trk system;
       Task 1d, "Kdp backup/disambiguation" -- an alternative K+ uptake
@@ -1863,7 +1839,6 @@ families:
 
   - name: trkH
     paralog_group: trk_ktr_channel
-    report_level: none
     description: >
       Pore-forming subunit of the Trk system, paired with trkA above (Task
       1d). Proteobacteria-type naming (E. coli TrkH); see trkA's entry
@@ -1910,18 +1885,16 @@ families:
       fix for the byte-identical-HMM bug above), so both DIAMOND (0.293)
       and HMM (0.288) precision are low with no independent rescue via
       profile_cascade.tsv (hmm_status=overlapping_distributions_f1_calibrated,
-      same contaminated pool). scope: annotate_only set, same criteria and
-      treatment as otsA/mrpC: still built and searchable for osmotool
-      annotate co-occurrence checks, excluded from osmotool profile's
-      reported output where this precision would be misleading.
+      same contaminated pool). This precision kept trkH out of osmotool
+      profile (scope: annotate_only) up to v11, as for otsA/mrpC; the
+      report-level rule now decides on the calibration reads (v11: f1_all
+      0.105, support 0, none).
     positive_query: "(gene:trkH OR gene:trkH1 OR gene:trkH2) AND taxonomy_id:2"
     negative_query: "xref:pfam-PF02386 NOT (gene:trkH OR gene:trkH1 OR gene:trkH2 OR gene:ktrB OR gene:ktrB1 OR gene:ktrB2 OR gene:ktrD OR gene:ktrD1 OR gene:ktrD2) AND taxonomy_id:2"
     negative_pfam: PF02386   # TrkH cation transport family
-    scope: annotate_only
 
   - name: ktrA
     paralog_group: trk_ktr_regulatory
-    report_level: gene
     description: >
       Regulatory/NAD-binding subunit of constitutive K+ uptake (Ktr system
       -- the Firmicutes-named counterpart to trkA above; Task 1d, and the
@@ -1946,7 +1919,6 @@ families:
 
   - name: ktrB
     paralog_group: trk_ktr_channel
-    report_level: none
     description: >
       Pore-forming subunit of the Ktr system, paired with ktrA above (Task
       1d) -- the Firmicutes-named counterpart to trkH. B. subtilis carries
@@ -1969,16 +1941,15 @@ families:
       numbered-paralog fix; decoy_from_negatives ruled out by Phase 4's
       finding on the same PF02386 clique shape; no pfam_model fallback
       possible; DIAMOND 0.265/HMM 0.247 precision, neither rescued by
-      profile_cascade.tsv). scope: annotate_only set, same criteria as
-      otsA/mrpC/trkH.
+      profile_cascade.tsv). Kept out of osmotool profile (scope:
+      annotate_only) on this up to v11, as for trkH; the report-level rule
+      now decides (v11 calibration reads: f1_all 0.077, support 0, none).
     positive_query: "(gene:ktrB OR gene:ktrB1 OR gene:ktrB2) AND taxonomy_id:2"
     negative_query: "xref:pfam-PF02386 NOT (gene:trkH OR gene:trkH1 OR gene:trkH2 OR gene:ktrB OR gene:ktrB1 OR gene:ktrB2 OR gene:ktrD OR gene:ktrD1 OR gene:ktrD2) AND taxonomy_id:2"
     negative_pfam: PF02386
-    scope: annotate_only
 
   - name: ktrD
     paralog_group: trk_ktr_channel
-    report_level: none
     description: >
       Second paralogous pore-forming subunit of the Ktr system, alongside
       ktrB above (Task 1d) -- see ktrB's entry for why these two are kept
@@ -2003,12 +1974,12 @@ families:
       worst in this cluster (0.121, with very high recall 0.904 -- calling
       almost everything positive, consistent with the small-n calibration
       risk already noted above), DIAMOND 0.287, neither rescued by
-      profile_cascade.tsv. scope: annotate_only set, same criteria as
-      otsA/mrpC/trkH/ktrB.
+      profile_cascade.tsv. Kept out of osmotool profile (scope:
+      annotate_only) on this up to v11, as for trkH/ktrB; the report-level
+      rule now decides (v11: 4 positive calibration sequences, none).
     positive_query: "(gene:ktrD OR gene:ktrD1 OR gene:ktrD2) AND taxonomy_id:2"
     negative_query: "xref:pfam-PF02386 NOT (gene:trkH OR gene:trkH1 OR gene:trkH2 OR gene:ktrB OR gene:ktrB1 OR gene:ktrB2 OR gene:ktrD OR gene:ktrD1 OR gene:ktrD2) AND taxonomy_id:2"
     negative_pfam: PF02386
-    scope: annotate_only
 
 # Considered and deferred (2026-07-16): proV, proW, gbsA, gbsB
 #

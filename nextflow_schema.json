@@ -153,7 +153,7 @@
         },
         "profile_min_eval_positives": {
           "type": "integer",
-          "default": 20,
+          "default": 5,
           "minimum": 0,
           "description": "Profile report levels: the distinct positive calibration sequences a reporting unit needs before the rule decides on it; below it the unit is none with reason insufficient_evidence (0: off)"
         },
@@ -185,7 +185,7 @@
         },
         "annotate_min_eval_positives": {
           "type": "integer",
-          "default": 20,
+          "default": 5,
           "minimum": 0,
           "description": "Annotate report levels: the positive calibration proteins a reporting unit needs before the rule decides on it; below it the unit is none with reason insufficient_evidence (0: off)"
         },

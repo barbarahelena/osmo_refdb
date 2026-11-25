@@ -584,7 +584,7 @@ def main() -> None:
                          "0: point estimates alone)")
     ap.add_argument("--decision-bootstrap-seed", type=int, default=42,
                     help="the bootstrap's seed (params.decision_bootstrap_seed)")
-    ap.add_argument("--min-eval-positives", type=int, default=20,
+    ap.add_argument("--min-eval-positives", type=int, default=5,
                     help="the positive calibration proteins a unit needs before the rule decides on it; "
                          "below it, none for insufficient_evidence (params.annotate_min_eval_positives). 0: off.")
     args = ap.parse_args()

@@ -42,12 +42,12 @@ Decided on the calibration split, separately for each mode. The profile settings
 | Option | Default | What it does |
 |---|---|---|
 | `profile_min_report_f1` | 0.5 | The `f1_all` a profile unit must reach on the calibration reads |
-| `profile_min_eval_positives` | 20 | Distinct positive calibration sequences a profile unit needs before it is judged; below it, `insufficient_evidence` (0: off) |
+| `profile_min_eval_positives` | 5 | Distinct positive calibration sequences a profile unit needs before it is judged; below it, `insufficient_evidence` (0: off) |
 | `profile_min_cascade_gain` | 0.01 | The smallest calibration gain in `f1_all` that switches the HMM cascade on for a unit |
 | `profile_decision_support` | 0.9 | The fraction of bootstrap resamples a level, and the cascade's gain, must hold in |
 | `profile_decision_bootstrap` | 1000 | Bootstrap resamples of the calibration source sequences (0: point estimates only; with `profile_min_cascade_gain 0`, the rule up to v10) |
 | `annotate_min_report_f1` | 0.5 | The `f1_all` an annotate unit (`--method hmm`) must reach on the calibration proteins |
-| `annotate_min_eval_positives` | 20 | Positive calibration proteins an annotate unit needs before it is judged (0: off) |
+| `annotate_min_eval_positives` | 5 | Positive calibration proteins an annotate unit needs before it is judged (0: off) |
 | `annotate_decision_support` | 0.9 | The fraction of bootstrap resamples an annotate level must hold in |
 | `annotate_decision_bootstrap` | 1000 | Bootstrap resamples of the calibration proteins (0: point estimates only) |
 | `decision_bootstrap_seed` | 42 | The bootstrap's seed, both modes |

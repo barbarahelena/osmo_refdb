@@ -28,7 +28,13 @@ distinct positive sequences the unit was measured on (summed over a group's
 members at group level). A unit below it is none with reason
 insufficient_evidence, never below_threshold, whatever its score: a score
 measured on a handful of sequences cannot tell a family that works from one
-that does not.
+that does not. The bootstrap does not cover this case: when every one of a
+few positives is called correctly, every resample is perfect too, and the
+support is 1.0 however few there are. The default minimum, 5, is where a
+perfect score stops being likely by chance: with all n positives found, the
+one-sided 95% lower bound on recall is 0.05 ** (1 / n), 0.55 at n = 5
+(f1_all at least 0.71 at perfect precision) and 0.37 at n = 3, close to the
+recall of 1/3 at which f1_all at perfect precision falls to 0.5.
 
 The cascade test (cascade_supported, profile mode only): the HMM second
 opinion is switched on for a unit only if its point gain in f1_all is
@@ -53,8 +59,10 @@ reason, the controlled vocabulary of both manifests:
                          bootstrap support does not (reason_detail: both)
   insufficient_evidence  too few positives to decide (min_eval_positives)
   out_of_scope           excluded by families.yaml (scope), not by performance
-  override               families.yaml sets another level than the rule's;
-                         reason_detail records the rule's level and why
+  override               families.yaml sets another level than the rule's,
+                         with report_level_reason (compute_metrics.py stops
+                         the build on one without); reason_detail records
+                         that reason, the rule's level and why
 reason_detail is free text: the numbers each choice rests on.
 """
 
