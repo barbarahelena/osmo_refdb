@@ -66,7 +66,8 @@ workflow REAL_GENOME_VALIDATION {
         reads.join(VALIDATION_TARGETCOORDS.out.regions)
              .join(OSMOTOOL_PROFILE_RECALL.out.alignments)
              .join(HMMER_HMMSCAN.out.tblout)
-             .join(catalog_calls))
+             .join(catalog_calls)
+             .join(curated))   // the genome the reads came from: the truth places each mate with it
 
     emit:
     report   = VALIDATION_CHECKSYSTEMS.out.report
