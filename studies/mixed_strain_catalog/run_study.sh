@@ -4,9 +4,10 @@
 # group for DIAMOND alone and for the catalog path under several settle rules.
 #
 #   bash run_study.sh [step ...]     steps: genomes annotate reads truth diamond map score verify
-#                                    (no argument: all, skipping steps whose output exists)
+#                                    (no argument: all, skipping steps whose output exists),
+#                                    and index (only when named: the full catalog index)
 #
-# Environment (defaults are this machine's; on the HPC point them at Apptainer images):
+# Environment (defaults are this machine's; hpc/env.sh sets them for SLURM + Apptainer):
 #   RELEASE       osmo_refdb release directory (default ../../releases/v11)
 #   CATALOG       the release's catalog directory: catalog.annotation.tsv, the hmmsearch
 #                 domtblout and its own (small) index (default $RELEASE/catalogs/gmgc_gut)
@@ -15,12 +16,18 @@
 #                 catalog_index.json); genes it holds without an annotation row are background.
 #   CATALOG_TAG   name for this index's outputs, work/<CATALOG_TAG>/ (default: the index
 #                 directory's name), so runs with different indexes sit side by side
+#   CATALOG_GENES the gene file the catalog was annotated from (index step only; checked
+#                 against catalog.json's genes_sha256)
 #   COVERAGE      read coverage per genome (default 2)
 #   WGSIM_ERR     wgsim base error rate (default 0.02, wgsim's default, as the release's
 #                 real-genome validation)
 #   THREADS       default 8
 #   OSMOTOOL_RUN  how to run osmotool 0.11.1 (default: its Docker image, linux/amd64)
-#   NATIVE_RUN    how to run wgsim / bwa-mem3 (default: the osmo_refdb:bwa Docker image)
+#   NATIVE_RUN    how to run wgsim / bwa-mem3 (default: the osmo_refdb:bwa Docker image);
+#                 WGSIM_RUN and BWA_RUN set them apart (default: NATIVE_RUN)
+#   PYTHON_RUN    how to run truth.py, score.py and verify's check (default: python3)
+#   TIME_CMD      prefix for the index step that records its peak memory (default: GNU
+#                 /usr/bin/time -v into work/<CATALOG_TAG>/index.time when there is one)
 set -euo pipefail
 cd "$(dirname "$0")"
 HERE=$PWD
@@ -34,8 +41,15 @@ WGSIM_ERR=${WGSIM_ERR:-0.02}
 THREADS=${THREADS:-8}
 W=$HERE/work
 MOUNTS="-v $ROOT:$ROOT -v $CATALOG:$CATALOG -v $CATALOG_INDEX:$CATALOG_INDEX"
+[ -n "${CATALOG_GENES:-}" ] && MOUNTS="$MOUNTS -v $(dirname "$CATALOG_GENES"):$(dirname "$CATALOG_GENES")"
 OSMOTOOL_RUN=${OSMOTOOL_RUN:-"docker run --rm --platform linux/amd64 $MOUNTS -w $W --entrypoint bash docker.io/barbarahelena/osmotool:0.11.1 -c"}
 NATIVE_RUN=${NATIVE_RUN:-"docker run --rm $MOUNTS -w $W --entrypoint bash osmo_refdb:bwa -c"}
+WGSIM_RUN=${WGSIM_RUN:-$NATIVE_RUN}
+BWA_RUN=${BWA_RUN:-$NATIVE_RUN}
+PYTHON_RUN=${PYTHON_RUN:-python3}
+if [ -z "${TIME_CMD+x}" ]; then
+    TIME_CMD=""; /usr/bin/time -v true > /dev/null 2>&1 && TIME_CMD="/usr/bin/time -v -o $W/$CATALOG_TAG/index.time"
+fi
 STEPS=${*:-genomes annotate reads truth diamond map score verify}
 mkdir -p "$W"/{genomes,annotate,reads}
 
@@ -65,23 +79,43 @@ reads)     # wgsim per genome (seed = row number), COVERAGE x, pooled into one s
         i=$((i + 1)); bp=$(grep -v '>' "$W/genomes/$g.fna" | tr -d '\n' | wc -c)
         n=$(( bp * COVERAGE / 300 )); printf '%s\t%s\t%s\n' "$g" "$i" "$n" >> "$W/reads/pairs.tsv"
     done
-    $NATIVE_RUN "cd reads && while IFS=\$'\t' read g s n; do
+    $WGSIM_RUN "cd reads && while IFS=\$'\t' read g s n; do
         wgsim -S \$s -N \$n -1 150 -2 150 -e $WGSIM_ERR ../genomes/\$g.fna \$g.R1.fq \$g.R2.fq > /dev/null; done < pairs.tsv;
         cat \$(cut -f1 pairs.tsv | sed 's/\$/.R1.fq/') > sample_R1.fq; cat \$(cut -f1 pairs.tsv | sed 's/\$/.R2.fq/') > sample_R2.fq" ;;
 truth)     # read truth: overlap >= 20 bp with an annotated panel gene (real_read_truth.py's rule)
-    python3 -I "$HERE/truth.py" "$W" ;;
+    $PYTHON_RUN -I "$HERE/truth.py" "$W" ;;
 diamond)   # DIAMOND for every read: osmotool profile without a catalog, the validation's options
     [ -s "$W/diamond/sample.blastx.tsv" ] && continue
     mkdir -p "$W/diamond"
     $OSMOTOOL_RUN "cd diamond && osmotool profile $RELEASE -1 ../reads/sample_R1.fq -2 ../reads/sample_R2.fq \
         --out_prefix sample --threads $THREADS --min_identity 0.40 --min_query_cover 0.50 \
         --keep_aln --no_markers --translated_only > sample.stdout 2>&1" ;;
+index)     # the full index of every catalog gene (osmotool index-catalog), from the gene file the
+           # catalog was annotated from; reused when CATALOG_INDEX already holds one
+    mkdir -p "$W/$CATALOG_TAG"; [ -s "$CATALOG_INDEX/catalog_index.json" ] && continue
+    [ "$CATALOG_INDEX" != "$CATALOG" ] || { echo "index: set CATALOG_INDEX to a directory for the full index" >&2; exit 1; }
+    [ -s "${CATALOG_GENES:-}" ] || { echo "index: set CATALOG_GENES to the gene file $CATALOG was annotated from" >&2; exit 1; }
+    $PYTHON_RUN -I - "$CATALOG/catalog.json" "$CATALOG_GENES" <<'EOF'
+import hashlib, json, sys
+want = json.load(open(sys.argv[1]))["genes_sha256"]
+h = hashlib.sha256()
+with open(sys.argv[2], "rb") as fh:
+    for block in iter(lambda: fh.read(1 << 24), b""):
+        h.update(block)
+if h.hexdigest() != want:
+    sys.exit(f"index: {sys.argv[2]} (sha256 {h.hexdigest()}) is not the gene file the catalog was annotated from ({want})")
+print("index: gene file checksum matches catalog.json")
+EOF
+    mkdir -p "$CATALOG_INDEX"
+    $TIME_CMD $OSMOTOOL_RUN "osmotool index-catalog --genes $CATALOG_GENES -o $CATALOG_INDEX \
+        > $W/$CATALOG_TAG/index.log 2>&1"
+    du -sh "$CATALOG_INDEX" | tee -a "$W/$CATALOG_TAG/index.log" ;;
 map)       # the catalog's placements (primary + XA), as osmotool profile --catalog maps them
     mkdir -p "$W/$CATALOG_TAG"; [ -s "$W/$CATALOG_TAG/sample.sam" ] && continue
-    $NATIVE_RUN "bwa-mem3 mem -v 1 -t $THREADS -h 50 $CATALOG_INDEX/catalog.fna reads/sample_R1.fq reads/sample_R2.fq \
+    $BWA_RUN "bwa-mem3 mem -v 1 -t $THREADS -h 50 $CATALOG_INDEX/catalog.fna reads/sample_R1.fq reads/sample_R2.fq \
         > $CATALOG_TAG/sample.sam 2> $CATALOG_TAG/bwa.log" ;;
 score)     # settle rules x groups
-    python3 -I "$HERE/score.py" --work "$W" --release "$RELEASE" --catalog "$CATALOG" --tag "$CATALOG_TAG" \
+    $PYTHON_RUN -I "$HERE/score.py" --work "$W" --release "$RELEASE" --catalog "$CATALOG" --tag "$CATALOG_TAG" \
         --compare "$ROOT/modules/local/validation/readrecall/templates/real_genome_validation/compare_real_recall.py" ;;
 verify)    # osmotool profile --catalog itself on the sample: its settled mates must equal score.py's current rule
     mkdir -p "$W/$CATALOG_TAG/osmotool"
@@ -90,7 +124,7 @@ verify)    # osmotool profile --catalog itself on the sample: its settled mates 
     $OSMOTOOL_RUN "cd $CATALOG_TAG/osmotool && osmotool profile $RELEASE -1 ../../reads/sample_R1.fq -2 ../../reads/sample_R2.fq \
         --out_prefix sample --threads $THREADS --min_identity 0.40 --min_query_cover 0.50 --keep_aln --no_markers \
         --catalog_dir $CATALOG $idx > sample.stdout 2>&1"
-    python3 -I - "$W/$CATALOG_TAG" <<'EOF'
+    $PYTHON_RUN -I - "$W/$CATALOG_TAG" <<'EOF'
 import csv, sys
 d = sys.argv[1]
 key = lambda r, rid: (rid, r["decision"], r["label"] if r["decision"] == "call" else "")
