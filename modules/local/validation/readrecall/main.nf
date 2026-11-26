@@ -1,6 +1,7 @@
 // Read-level recall and precision on one genome's simulated reads: the coordinate-based truth
-// (from wgsim's read names and the target genes' regions) against DIAMOND (osmotool profile's
-// alignments) and HMM (hmmscan on the reads' ORFs), per target family.
+// (from wgsim's fragment coordinates, each mate placed at its end with the genome sequence, and
+// the target genes' regions) against DIAMOND (osmotool profile's alignments) and HMM (hmmscan
+// on the reads' ORFs), per target family.
 process VALIDATION_READRECALL {
     tag "${meta.id}"
     label 'process_single'
@@ -10,7 +11,7 @@ process VALIDATION_READRECALL {
         'biocontainers/python:3.11' }"
 
     input:
-    tuple val(meta), path(reads), path(regions), path(blastx), path(tblout), path(catalog_hits), path(catalog_blastx)   // the last two: the run with the catalog, or []
+    tuple val(meta), path(reads), path(regions), path(blastx), path(tblout), path(catalog_hits), path(catalog_blastx), path(genome)   // catalog_hits/catalog_blastx: the run with the catalog, or []; genome: the FASTA the reads were simulated from
 
     output:
     tuple val(meta), path("${meta.id}.read_truth.tsv"), path("${meta.id}.real_recall_comparison.tsv"), emit: results
@@ -20,7 +21,7 @@ process VALIDATION_READRECALL {
     def T = "${moduleDir}/templates/real_genome_validation"
     """
     python ${T}/real_read_truth.py \\
-        --r1 ${reads[0]} --r2 ${reads[1]} --regions ${regions} --read-length 150 --out ${meta.id}.read_truth.tsv
+        --r1 ${reads[0]} --r2 ${reads[1]} --genome ${genome} --regions ${regions} --out ${meta.id}.read_truth.tsv
     python ${T}/compare_real_recall.py \\
         --truth ${meta.id}.read_truth.tsv --diamond-blastx ${blastx} \\
         --hmm-tblout ${tblout} ${catalog_hits ? "--catalog-hits ${catalog_hits}" : ''} \\
