@@ -40,9 +40,13 @@ would give. It is also why only these two catalogs are scored, not a "related
 strain" scenario.
 
 Per read, the hybrid call is the catalog's decision when the catalog settles
-the read (a unique call counts, a drop or an ambiguous read is no call) and
-otherwise the read's translated call (DIAMOND + the release's cascade, from
-the test benchmark). That equals what profile --catalog reports, because
+the read (a unique call counts, a drop is no call) and otherwise the read's
+translated call (DIAMOND + the release's cascade, from the test benchmark).
+An ambiguous read (valid placements that disagree) is not settled when
+translated search runs (osmotool >= 0.12.0): it takes its translated call
+too. The catalog runs are --catalog_only, where osmotool does settle it as
+ambiguous (no call), so hybrid_calls hands those reads to translated search
+itself. That equals what profile --catalog reports, because
 every step decides each read on its own. That holds for the reads osmotool
 does not accept from the catalog as well: the release's
 profile_report_levels.tsv is staged in the database, and osmotool sends a
@@ -93,11 +97,15 @@ def load_module(path: Path):
 
 def hybrid_calls(m11, translated: pd.DataFrame, settled: pd.DataFrame, *, fallback: bool) -> pd.DataFrame:
     """Per-read calls of profile --catalog: catalog calls for settled reads,
-    translated calls for the rest (none if not fallback)."""
+    translated calls for the rest (none if not fallback). *settled* comes
+    from --catalog_only runs, where osmotool settles an ambiguous read (no
+    call); with translated search osmotool (>= 0.12.0) does not settle it, so
+    with fallback an ambiguous read takes its translated call."""
     calls = m11.catalog_only_calls(settled)
     if not fallback:
         return calls
-    key = set(zip(settled["sample"], settled["read_id"]))
+    taken = settled[settled["decision"] != "ambiguous"]
+    key = set(zip(taken["sample"], taken["read_id"]))
     keep = [k not in key for k in zip(translated["sample"], translated["read_id"])]
     rest = translated[keep][["read_id", "sample", "family", "bitscore", "evalue"]]
     return pd.concat([rest, calls], ignore_index=True)

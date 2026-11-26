@@ -94,12 +94,13 @@ CATALOG_INDEX=/path/to/full_index CATALOG_TAG=gmgc_full bash run_study.sh map sc
 
 ## Follow-ups
 
-- The ambiguous-to-DIAMOND rule is implemented in osmotool (barbarahelena/osmotool#24,
-  for 0.12.0): `profile --catalog` passes ambiguous reads to translated search, and
-  `--catalog_only` keeps them as `catalog_ambiguous`. With that build, `profile --catalog`
-  on this sample gives the ambiguous-to-DIAMOND column above in every group. When the
-  build moves to that image, `catalog_benchmark.py`'s `hybrid_calls` must give ambiguous
-  reads their translated call too.
+- The ambiguous-to-DIAMOND rule is in osmotool 0.12.0 (barbarahelena/osmotool#24):
+  `profile --catalog` passes ambiguous reads to translated search, and `--catalog_only`
+  keeps them as `catalog_ambiguous`. With that build, `profile --catalog` on this sample
+  gives the ambiguous-to-DIAMOND column above in every group. The pipeline uses 0.12.0
+  since barbarahelena/osmo_refdb#35, where `catalog_benchmark.py`'s `hybrid_calls` gives
+  ambiguous reads their translated call too. This study stays on 0.11.1: its current-rule
+  column and `verify` step are 0.11.1's settle rule.
 - The fragment rule is not implemented.
 - The full GMGC catalogue (13.8 M genes) against the shipped neighbours index: on the
   HPC, with `CATALOG_INDEX` set to the full index (second command at the top).
