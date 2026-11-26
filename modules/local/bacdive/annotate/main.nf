@@ -6,7 +6,7 @@ process BACDIVE_ANNOTATE {
     label 'process_low'
 
     // calls: osmotool annotate (hmmsearch, diamond)
-    container 'docker.io/barbarahelena/osmotool:0.11.1'
+    container 'docker.io/barbarahelena/osmotool:0.12.0'
 
     input:
     tuple val(chunk), path(strains), path(control_strains)   // BACDIVE_PROTEINS, the same chunk

@@ -8,9 +8,11 @@ UniProt-derived benchmark reads.
 With --catalog-hits (and --catalog-blastx), also the catalog method: the
 same reads profiled with the release's gene catalog, as osmotool profile
 does by default. A read the catalog settles takes its decision (a call
-counts for its family; a drop or an ambiguous read is no call); every other
-read takes its DIAMOND best hit from the catalog run's own blastx (the
-fallback reads only).
+counts for its family; a drop is no call); every other read takes its
+DIAMOND best hit from the catalog run's own blastx (the fallback reads
+only). With translated search osmotool (>= 0.12.0) does not settle an
+ambiguous read: it is missing from catalog_hits.tsv and in the blastx, so it
+takes its DIAMOND hit here as in profile.
 
 Usage:
   python compare_real_recall.py --truth real_read_truth.tsv \\

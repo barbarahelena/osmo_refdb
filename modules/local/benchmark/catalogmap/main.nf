@@ -10,7 +10,7 @@
 // it sees every catalog call the decision is made on.
 process BENCHMARK_CATALOGMAP {
     // calls: osmotool profile (bwa-mem3, diamond, hmmsearch)
-    container 'docker.io/barbarahelena/osmotool:0.11.1'
+    container 'docker.io/barbarahelena/osmotool:0.12.0'
     label 'process_medium'
     tag "${meta.id}"
     input:
