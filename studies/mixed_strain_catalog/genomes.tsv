@@ -1,0 +1,13 @@
+genome	group	species	source
+ecoli_k12	in	Escherichia coli K-12	assets/test_genomes/ecoli_k12.fna
+bd24747	in	Christensenella minuta	bacdive:24747
+bd5270	in	Enterococcus avium	bacdive:5270
+bd17827	in	Sutterella wadsworthensis	bacdive:17827
+bd2138	in	Campylobacter hominis	bacdive:2138
+bd133060	partial	Citrobacter europaeus	bacdive:133060
+bd158883	partial	Bacteroides faecalis	bacdive:158883
+bd5168	partial	Serratia nematodiphila	bacdive:5168
+bd5338	out_related	Enterococcus pallens	bacdive:5338
+bd14804	out_related	Streptococcus thoraltensis	bacdive:14804
+bd13095	out_distant	Pseudomonas proteolytica	bacdive:13095
+bd16031	out_distant	Streptomyces sulphureus	bacdive:16031
