@@ -41,13 +41,18 @@ mkdir -p "$W"/{genomes,annotate,reads}
 
 for step in $STEPS; do
 case $step in
-genomes)   # genome FASTAs, contig names prefixed "<genome>__" so every read names its genome
-    tail -n +2 genomes.tsv | while IFS=$'\t' read -r g _grp _sp src; do
+genomes)   # genome FASTAs, contig names prefixed "<genome>__" so every read names its genome;
+           # ncbi:<accession> is fetched from the NCBI Datasets API (needs internet), a path is in the repo
+    tail -n +2 genomes.tsv | while IFS=$'\t' read -r g _grp _sp _bd src; do
         out=$W/genomes/$g.fna; [ -s "$out" ] && continue
         case $src in
-            bacdive:*) gunzip -c "$ROOT"/releases/v8/phenotype_validation_full/genomes/"${src#bacdive:}"_*.fna.gz ;;
-            *)         cat "$ROOT/$src" ;;
-        esac | sed "s/^>/>${g}__/" > "$out"
+            ncbi:*) curl -sSfL -o "$W/genomes/$g.zip" \
+                        "https://api.ncbi.nlm.nih.gov/datasets/v2/genome/accession/${src#ncbi:}/download?include_annotation_type=GENOME_FASTA"
+                    python3 -I -c 'import sys, zipfile; z = zipfile.ZipFile(sys.argv[1]);
+sys.stdout.buffer.write(z.read(next(n for n in z.namelist() if n.endswith(".fna"))))' "$W/genomes/$g.zip"
+                    rm -f "$W/genomes/$g.zip" ;;
+            *)      cat "$ROOT/$src" ;;
+        esac | sed "s/^>/>${g}__/" > "$out.tmp" && mv "$out.tmp" "$out"
     done ;;
 annotate)  # truth genes: osmotool annotate (hmm) with the release, on each genome
     $OSMOTOOL_RUN "cd annotate && for f in ../genomes/*.fna; do g=\$(basename \$f .fna);

@@ -22,6 +22,11 @@ CATALOG_INDEX=/path/to/full_index CATALOG_TAG=gmgc_full bash run_study.sh map sc
   (< 0.02, same genus as a catalogued strain: Enterococcus pallens, Streptococcus
   thoraltensis) and `out_distant` (< 0.02: Pseudomonas proteolytica, Streptomyces
   sulphureus).
+  The BacDive genomes are the NCBI assemblies in `genomes.tsv` (`source`), fetched by the
+  `genomes` step from the NCBI Datasets API; they are byte-identical to the copies the
+  results below were computed from (BacDive phenotype validation, osmo_refdb v8). On a
+  cluster whose compute nodes have no internet, run `bash run_study.sh genomes` on a
+  login node first.
 - **Reads**: wgsim, 150 bp pairs, 2x coverage per genome, seed = row number, default
   error rate 0.02 (`WGSIM_ERR`), as the release's real-genome validation. 362,292 pairs.
 - **Truth** (`truth.py`): the panel family of the gene a mate overlaps by >= 20 bp, genes
