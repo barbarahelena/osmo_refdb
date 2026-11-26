@@ -1,0 +1,13 @@
+genome	group	species	bacdive_id	source
+ecoli_k12	in	Escherichia coli K-12	NA	assets/test_genomes/ecoli_k12.fna
+bd24747	in	Christensenella minuta	24747	ncbi:GCA_003628755.1
+bd5270	in	Enterococcus avium	5270	ncbi:GCA_000407245.1
+bd17827	in	Sutterella wadsworthensis	17827	ncbi:GCA_016724805.1
+bd2138	in	Campylobacter hominis	2138	ncbi:GCA_019930945.1
+bd133060	partial	Citrobacter europaeus	133060	ncbi:GCA_020099315.1
+bd158883	partial	Bacteroides faecalis	158883	ncbi:GCA_003865075.1
+bd5168	partial	Serratia nematodiphila	5168	ncbi:GCA_900101535.1
+bd5338	out_related	Enterococcus pallens	5338	ncbi:GCA_000393975.1
+bd14804	out_related	Streptococcus thoraltensis	14804	ncbi:GCA_000380145.1
+bd13095	out_distant	Pseudomonas proteolytica	13095	ncbi:GCA_007858275.1
+bd16031	out_distant	Streptomyces sulphureus	16031	ncbi:GCA_000381025.1
