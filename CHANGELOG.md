@@ -2404,6 +2404,13 @@ Not run: the catalog decision on real calibration reads, so which units pass is 
 - In the build this changes the runs with the catalog and translated search: the real-genome read recall with the catalog (`OSMOTOOL_PROFILE_RECALL_CATALOG`; `compare_real_recall.py` already takes an unsettled read's DIAMOND hit from the run's blastx) and the catalog benchmark's `catalog_A`/`catalog_B` methods. The calibration catalog runs are `--catalog_only`, so `catalog_reported` and the report levels are decided as before, as are the `catalog_only_*` methods.
 - `catalog_benchmark.py`'s `hybrid_calls` rebuilds profile --catalog from `--catalog_only` runs, which still list ambiguous reads as settled. With fallback it now gives them their translated call. Checked on wgsim reads from three catalogued genomes (E. coli K-12, Christensenella minuta, Enterococcus avium; 231 ambiguous mates) with the 0.12.0 image: the old rebuild disagrees with `profile --catalog`'s `raw_count` in 22 of 117 sample x family cells, the new one in none. `tests/python/test_catalog_benchmark.py` covers it.
 
+### Mixed-strain study: the full catalog index on a SLURM cluster (branch `study-full-catalog`)
+
+- `studies/mixed_strain_catalog/hpc/` runs the study twice on a SLURM cluster with Apptainer, on the same reads: with v11's shipped neighbours index (1,460,140 genes) and with a full index of all 13,788,251 GMGC genes. `prepare.sh` (login node) pulls the images, fetches the gene file if missing and the genomes; `submit.sh` submits `study.sbatch` (shipped index) and `full.sbatch` (full index, after it); `compare_indexes.py` writes the two side by side.
+- `run_study.sh` gains an `index` step (`osmotool index-catalog`, after checking the gene file's sha256 against the catalog's `catalog.json`; peak memory recorded with GNU time) and `WGSIM_RUN`, `BWA_RUN` and `PYTHON_RUN` for running each tool in its own container. `expected.md5` holds the checksums of the reads and truth the README's results come from.
+- The full index's memory (240 GB requested) and time are not measured at this size; the job records them. Checked locally with Docker on the 6,531-gene test slice and by rerunning `truth`, `score` and `verify` in the osmotool image (byte-identical outputs); the SLURM and Apptainer parts have not run.
+- The study README is no longer hard-wrapped.
+
 ### osmotool 0.12.5: OpuB and OpuC as one system (branch `osmotool-0.12.5`)
 
 - Every osmotool step uses `docker.io/barbarahelena/osmotool:0.12.5` (was 0.12.0). 0.12.5 changes only osmotool's own code (`systems.py`, the output notes, docs and tests; barbarahelena/osmotool#25), so the `environment.yml` tool versions are carried over from 0.12.0, not read again from the image.
