@@ -1,6 +1,6 @@
 ---
 # yaml-language-server: $schema=https://raw.githubusercontent.com/nf-core/modules/master/modules/environment-schema.json
-# Image: docker.io/barbarahelena/osmotool:0.12.0. osmotool is not on conda: it is pip-installed from its git tag into this environment (versions read from the image)
+# Image: docker.io/barbarahelena/osmotool:0.12.5. osmotool is not on conda: it is pip-installed from its git tag into this environment (tool versions as in 0.12.0: 0.12.5 changes only osmotool's own code)
 channels:
   - conda-forge
   - bioconda
@@ -16,4 +16,4 @@ dependencies:
   - conda-forge::xgboost=3.4.2   # annotate --predict_nacl
   - conda-forge::pip
   - pip:
-      - git+https://github.com/barbarahelena/osmotool.git@v0.12.0
+      - git+https://github.com/barbarahelena/osmotool.git@v0.12.5

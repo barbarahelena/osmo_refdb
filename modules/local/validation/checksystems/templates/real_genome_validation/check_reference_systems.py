@@ -7,7 +7,7 @@ expected_systems.tsv, for one or more releases.
 Reads <release>/real_genome_validation/reference_genomes/<genome>/<genome>.systems.tsv
 (run_reference_genomes.sh) and prints, per expectation, the call in each
 release, then every remaining system call and the per-genome family counts.
-Writes reference_systems_check.tsv next to the first release's output.
+Writes reference_systems_check.tsv next to the last release's output.
 Exit status 1 if any expectation fails in the LAST release given.
 """
 from __future__ import annotations

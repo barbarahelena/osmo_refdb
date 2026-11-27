@@ -7,24 +7,26 @@
 # basis: operon = characterised operon in that organism; control = negative
 # control (system not expected there); specificity = the wide-window system
 # must not fire outside its source organism.
+# OpuB and OpuC are one system, opuB_opuC (osmotool >= 0.12.5: either label in
+# each slot), because the HMMs can't tell their subunits apart; opuB_opuC rows
+# expect an OpuB/OpuC-type operon, not a particular paralogue or copy number.
 genome	system	expected	basis	note
 bsubtilis_168	mrp	present	operon	mrpA-G, characterised in B. subtilis
 bsubtilis_168	opuA	present	operon	opuAA-AB-AC
-bsubtilis_168	opuC	present	operon	opuCA-CB-CC-CD
+bsubtilis_168	opuB_opuC	present	operon	carries both opuBA-BD and opuCA-CD; the system reports presence, not copy number
 saureus	mrp	present	operon	mnhA-G
-saureus	opuC	present	operon	opuCABCD
+saureus	opuB_opuC	present	operon	opuCABCD
 lmonocytogenes	mrp	present	operon	
 lmonocytogenes	opuA	present	operon	gbuABC
-lmonocytogenes	opuC	present	operon	opuCABCD
-efaecalis	opuC	present	operon	
+lmonocytogenes	opuB_opuC	present	operon	opuCABCD
+efaecalis	opuB_opuC	present	operon	ORFs 830-833 on NC_004668.1
 helongata	mrp	present	operon	
 helongata	ect	present	operon	ectABC, the ectoine discovery organism
 ecoli_k12	ots	present	operon	otsBA
 ecoli_k12	trk	absent	control	trkA and trkH both present, hundreds of genes apart
 ecoli_k12	mrp	absent	control	Firmicutes-type system
 ecoli_k12	opuA	absent	control	ProU (proVWX) must not be reattributed to opuA
-ecoli_k12	opuB	info	homolog	yehWXYZ/osmF (b2128-b2131): RefSeq-annotated glycine betaine ABC transporter, an OpuB/OpuC-type homologue. Low affinity and not osmoprotective (Lang et al. 2015), so a call here is a true family member, not an OpuB-like osmoprotectant system
-ecoli_k12	opuC	absent	control	
+ecoli_k12	opuB_opuC	info	homolog	yehWXYZ/osmF (b2128-b2131): RefSeq-annotated glycine betaine ABC transporter, a true OpuB/OpuC-type homologue. Low affinity and not osmoprotective (Lang et al. 2015), so a call here is a true family member, not an osmoprotectant system. With v11 (osmotool 0.12.5) it is absent with 2 subunits (opuBA, opuBB; no binding protein)
 ecoli_k12	ect	absent	control	
 collinsella	galE_murB_mazG	present	operon	Culligan et al. 2012 locus
 bsubtilis_168	galE_murB_mazG	absent	specificity	

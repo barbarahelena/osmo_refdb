@@ -3,7 +3,7 @@
 //      | on:    test run, with the cascade config decided on the calibration reads (cascade_in)
 process BENCHMARK_READS {
     // calls: osmotool profile (diamond, hmmsearch), orfm, hmmscan
-    container 'docker.io/barbarahelena/osmotool:0.12.0'
+    container 'docker.io/barbarahelena/osmotool:0.12.5'
     label 'process_medium'
     tag "${mode}"
     input:
