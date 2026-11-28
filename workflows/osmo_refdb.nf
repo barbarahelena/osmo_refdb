@@ -29,8 +29,13 @@ workflow OSMO_REFDB {
 
     // on the finished release: BacDive (and with --bacdive_full the NaCl model), the real-genome checks
     data = BACDIVE_DATA.out
+    // annotate's report levels decide which families the NaCl model reads
+    annotate_levels = RELEASE_CATALOG.out.cascade.flatten()
+        .filter { f -> f.name == 'osmo_refdb.annotate_report_levels.tsv' }
+        .first()
     BACDIVE_ANALYSIS(db, data.chunks, data.genomes, data.control_genomes, data.pilot, data.classes,
-                     data.control_pilot, data.strains, data.control_strains, data.pool_families)
+                     data.control_pilot, data.strains, data.control_strains, data.pool_families,
+                     annotate_levels)
     REAL_GENOME_VALIDATION(db, RELEASE_CATALOG.out.hmms, RELEASE_CATALOG.out.catalog)
     done = RELEASE_CATALOG.out.done
         .mix(MARKERS.out.markers, BACDIVE_ANALYSIS.out.done, REAL_GENOME_VALIDATION.out.report)

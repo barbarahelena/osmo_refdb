@@ -139,7 +139,8 @@ def main():
     feats, gnames = [], []
     for p in args.prefixes:
         g = os.path.basename(p)
-        feats.append(F.features_from_annotate(p, schema['families'], schema['systems'], gstats.get(g)))
+        feats.append(F.features_from_annotate(p, schema['families'], schema['systems'], gstats.get(g),
+                                              schema.get('family_groups')))
         gnames.append(g)
     res = predict(schema, booster, feats)
 

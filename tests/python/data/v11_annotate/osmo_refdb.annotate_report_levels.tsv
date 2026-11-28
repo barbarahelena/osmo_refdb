@@ -1,0 +1,52 @@
+# osmo_refdb annotate report levels: one row per reporting unit, for osmotool annotate --method hmm.
+# Decided on the calibration split (positive.calib against negative.train, full-length proteins; results/annotate_calib/), never on the test split (results/annotate/). The rule of osmo_refdb.profile_report_levels.tsv (report_rule.py), at annotate's own settings, without the cascade.
+# Rule: gene if every member passes the level test at gene level; else group if the paralog group passes it as one unit; else, member by member, gene if it passes, else none.
+# Level test: f1_all >= 0.5 on the point estimate AND in >= 0.9 of 1000 bootstrap resamples (level_support), resampling source proteins (not reads) within each family's positives and hard negatives, seed 42; f1_all_p10/p90: the resamples' 10th and 90th percentiles. Clearing on the point estimate only gives none for unstable.
+# Minimum evidence (annotate_min_eval_positives = 5): a level needs that many distinct positive calibration proteins (n_eval_positives; a group's summed over its members), else the rule gives none for insufficient_evidence.
+# reason: meets_threshold | below_threshold | unstable | insufficient_evidence. out_of_scope and override do not occur: families.yaml sets neither a scope nor a level for annotate. reason_detail: the numbers behind it.
+# f1_all = F1 with every non-background protein called as the unit counted as a false positive (own hard negatives, other families' positives, other families' hard negatives); see benchmark_annotate.py.
+# tp..f1_all are calibration counts at the reported level (empty for none). f1_all_gene: per member, in members order. f1_all_group: the paralog group as one unit. cascade_gain*: NA, annotate has no cascade.
+# The HMM GA and DIAMOND cutoffs were calibrated on these same sequences, so the numbers are in-sample for the cutoffs (optimistic); the test split is the estimate to quote.
+unit	report_level	members	paralog_group	method	reason	reason_detail	rule_metric	threshold	n_eval_positives	min_eval_positives	tp	fp_all	fn	precision_all	recall	f1_all	f1_all_gene	f1_all_group	f1_all_p10	f1_all_p90	level_support	cascade_gain	cascade_gain_support
+ectA	gene	ectA		hmm	meets_threshold	f1_all 1.000 >= 0.5, support 1.000	f1_all	0.5	213	5	213	0	0	1.0	1.0	1.0	1.0		1.0	1.0	1.0	NA	NA
+ectB	gene	ectB		hmm	meets_threshold	f1_all 0.989 >= 0.5, support 1.000	f1_all	0.5	138	5	137	2	1	0.986	0.993	0.989	0.989		0.982	0.996	1.0	NA	NA
+ectC	gene	ectC		hmm	meets_threshold	f1_all 1.000 >= 0.5, support 1.000	f1_all	0.5	137	5	137	0	0	1.0	1.0	1.0	1.0		1.0	1.0	1.0	NA	NA
+teaA	gene	teaA		hmm	meets_threshold	f1_all 1.000 >= 0.5, support 1.000	f1_all	0.5	15	5	15	0	0	1.0	1.0	1.0	1.0		1.0	1.0	1.0	NA	NA
+betL	gene	betL		hmm	meets_threshold	f1_all 0.815 >= 0.5, support 1.000	f1_all	0.5	73	5	55	7	18	0.887	0.753	0.815	0.815		0.769	0.86	1.0	NA	NA
+kdpA	gene	kdpA		hmm	meets_threshold	f1_all 1.000 >= 0.5, support 1.000	f1_all	0.5	424	5	424	0	0	1.0	1.0	1.0	1.0		1.0	1.0	1.0	NA	NA
+nhaA	gene	nhaA		hmm	meets_threshold	f1_all 0.997 >= 0.5, support 1.000	f1_all	0.5	790	5	785	0	5	1.0	0.994	0.997	0.997		0.995	0.999	1.0	NA	NA
+proX	gene	proX	opu_substrate_binding	hmm	meets_threshold	f1_all 0.645 >= 0.5, support 1.000 at gene level; group opu_substrate_binding f1_all 0.298 < 0.5	f1_all	0.5	74	5	60	52	14	0.536	0.811	0.645	0.645	0.298	0.6	0.69	1.0	NA	NA
+opuAC	none	opuAC	opu_substrate_binding	hmm	below_threshold	f1_all 0.070 < 0.5, support 0.000 at gene level; group opu_substrate_binding f1_all 0.298 < 0.5	f1_all	0.5	15	5							0.07	0.298	0.048	0.094	0.0	NA	NA
+opuBC	none	opuBC	opu_substrate_binding	hmm	below_threshold	f1_all 0.000 < 0.5, support 0.000 at gene level; group opu_substrate_binding f1_all 0.298 < 0.5	f1_all	0.5	6	5							NA	0.298	0.0	0.0	0.0	NA	NA
+opuCC	none	opuCC	opu_substrate_binding	hmm	below_threshold	f1_all 0.112 < 0.5, support 0.000 at gene level; group opu_substrate_binding f1_all 0.298 < 0.5	f1_all	0.5	13	5							0.112	0.298	0.074	0.15	0.0	NA	NA
+proP	gene	proP		hmm	meets_threshold	f1_all 0.632 >= 0.5, support 1.000	f1_all	0.5	129	5	79	42	50	0.653	0.612	0.632	0.632		0.587	0.677	1.0	NA	NA
+otsA	gene	otsA		hmm	meets_threshold	f1_all 0.772 >= 0.5, support 1.000	f1_all	0.5	114	5	93	34	21	0.732	0.816	0.772	0.772		0.736	0.805	1.0	NA	NA
+otsB	gene	otsB		hmm	meets_threshold	f1_all 0.909 >= 0.5, support 1.000	f1_all	0.5	342	5	309	29	33	0.914	0.904	0.909	0.909		0.894	0.924	1.0	NA	NA
+mscL	gene	mscL		hmm	meets_threshold	f1_all 0.978 >= 0.5, support 1.000	f1_all	0.5	946	5	928	23	18	0.976	0.981	0.978	0.978		0.974	0.983	1.0	NA	NA
+mscS	gene	mscS		hmm	meets_threshold	f1_all 0.664 >= 0.5, support 1.000	f1_all	0.5	115	5	90	66	25	0.577	0.783	0.664	0.664		0.627	0.699	1.0	NA	NA
+galE	gene	galE		hmm	meets_threshold	f1_all 0.956 >= 0.5, support 1.000	f1_all	0.5	911	5	840	7	71	0.992	0.922	0.956	0.956		0.949	0.962	1.0	NA	NA
+mazG	gene	mazG		hmm	meets_threshold	f1_all 0.985 >= 0.5, support 1.000	f1_all	0.5	375	5	368	4	7	0.989	0.981	0.985	0.985		0.98	0.991	1.0	NA	NA
+murB	gene	murB		hmm	meets_threshold	f1_all 1.000 >= 0.5, support 1.000	f1_all	0.5	1281	5	1281	0	0	1.0	1.0	1.0	1.0		1.0	1.0	1.0	NA	NA
+opuAA	none	opuAA	opu_atpase	hmm	below_threshold	f1_all 0.388 < 0.5, support 0.000 at gene level; group opu_atpase f1_all 0.430 < 0.5	f1_all	0.5	26	5							0.388	0.43	0.354	0.427	0.0	NA	NA
+opuBA	none	opuBA	opu_atpase	hmm	below_threshold	f1_all 0.286 < 0.5, support 0.000 at gene level; group opu_atpase f1_all 0.430 < 0.5	f1_all	0.5	11	5							0.286	0.43	0.214	0.355	0.0	NA	NA
+opuCA	none	opuCA	opu_atpase	hmm	below_threshold	f1_all 0.338 < 0.5, support 0.010 at gene level; group opu_atpase f1_all 0.430 < 0.5	f1_all	0.5	27	5							0.338	0.43	0.25	0.424	0.01	NA	NA
+opu_permease	group	opuAB,opuBB,opuCB	opu_permease	hmm	meets_threshold	opuBB 0.333, support 0.006 on 11 positives, opuCB 0.531, support 0.704 on 20 positives at gene level (needs f1_all >= 0.5 in >= 0.9 of resamples on >= 5); group f1_all 0.667, support 1.000 >= 0.5 on 51 positives	f1_all	0.5	51	5	51	51	0	0.5	1.0	0.667	0.714,0.333,0.531	0.667	0.63	0.708	1.0	NA	NA
+mrpA	gene	mrpA	mrp_large_subunit	hmm	meets_threshold	f1_all 0.716 >= 0.5, support 1.000 at gene level; group mrp_large_subunit f1_all 0.451 < 0.5	f1_all	0.5	45	5	39	25	6	0.609	0.867	0.716	0.716	0.451	0.661	0.768	1.0	NA	NA
+mrpD	none	mrpD	mrp_large_subunit	hmm	below_threshold	f1_all 0.343 < 0.5, support 0.000 at gene level; group mrp_large_subunit f1_all 0.451 < 0.5	f1_all	0.5	59	5							0.343	0.451	0.309	0.377	0.0	NA	NA
+mrpB	gene	mrpB		hmm	meets_threshold	f1_all 0.980 >= 0.5, support 1.000	f1_all	0.5	26	5	25	0	1	1.0	0.962	0.98	0.98		0.96	1.0	1.0	NA	NA
+mrpC	none	mrpC		hmm	unstable	f1_all 0.548 >= 0.5 but support 0.893 < 0.9 at gene level	f1_all	0.5	48	5							0.548		0.496	0.602	0.893	NA	NA
+mrpE	gene	mrpE		hmm	meets_threshold	f1_all 1.000 >= 0.5, support 1.000	f1_all	0.5	45	5	45	0	0	1.0	1.0	1.0	1.0		1.0	1.0	1.0	NA	NA
+mrpF	gene	mrpF		hmm	meets_threshold	f1_all 1.000 >= 0.5, support 1.000	f1_all	0.5	51	5	51	0	0	1.0	1.0	1.0	1.0		1.0	1.0	1.0	NA	NA
+mrpG	gene	mrpG		hmm	meets_threshold	f1_all 1.000 >= 0.5, support 1.000	f1_all	0.5	263	5	263	0	0	1.0	1.0	1.0	1.0		1.0	1.0	1.0	NA	NA
+betA	gene	betA		hmm	meets_threshold	f1_all 0.883 >= 0.5, support 1.000	f1_all	0.5	170	5	136	2	34	0.986	0.8	0.883	0.883		0.856	0.908	1.0	NA	NA
+betB	gene	betB		hmm	meets_threshold	f1_all 0.829 >= 0.5, support 1.000	f1_all	0.5	155	5	116	9	39	0.928	0.748	0.829	0.829		0.796	0.859	1.0	NA	NA
+gshA	gene	gshA	glutathione_step1	hmm	meets_threshold	every member of glutathione_step1 reaches f1_all 0.5 at gene level (gshA 0.986, support 1.000)	f1_all	0.5	180	5	178	3	2	0.983	0.989	0.986	0.986	0.986	0.978	0.994	1.0	NA	NA
+gshF	gene	gshF	glutathione_step1	hmm	meets_threshold	every member of glutathione_step1 reaches f1_all 0.5 at gene level (gshF 0.988, support 1.000)	f1_all	0.5	41	5	41	1	0	0.976	1.0	0.988	0.988	0.986	0.976	1.0	1.0	NA	NA
+gshB	gene	gshB		hmm	meets_threshold	f1_all 0.986 >= 0.5, support 1.000	f1_all	0.5	385	5	377	3	8	0.992	0.979	0.986	0.986		0.98	0.991	1.0	NA	NA
+gor	gene	gor		hmm	meets_threshold	f1_all 0.987 >= 0.5, support 1.000	f1_all	0.5	115	5	113	1	2	0.991	0.983	0.987	0.987		0.978	0.996	1.0	NA	NA
+cspA	gene	cspA		hmm	meets_threshold	f1_all 1.000 >= 0.5, support 1.000	f1_all	0.5	218	5	218	0	0	1.0	1.0	1.0	1.0		1.0	1.0	1.0	NA	NA
+trkA	gene	trkA	trk_ktr_regulatory	hmm	meets_threshold	every member of trk_ktr_regulatory reaches f1_all 0.5 at gene level (trkA 0.893, support 1.000)	f1_all	0.5	230	5	226	50	4	0.819	0.983	0.893	0.893	0.905	0.875	0.91	1.0	NA	NA
+ktrA	gene	ktrA	trk_ktr_regulatory	hmm	meets_threshold	every member of trk_ktr_regulatory reaches f1_all 0.5 at gene level (ktrA 0.987, support 1.000)	f1_all	0.5	37	5	37	1	0	0.974	1.0	0.987	0.987	0.905	0.974	1.0	1.0	NA	NA
+trkH	none	trkH	trk_ktr_channel	hmm	below_threshold	f1_all 0.114 < 0.5, support 0.000 at gene level; group trk_ktr_channel f1_all 0.129 < 0.5	f1_all	0.5	59	5							0.114	0.129	0.094	0.136	0.0	NA	NA
+ktrB	none	ktrB	trk_ktr_channel	hmm	below_threshold	f1_all 0.138 < 0.5, support 0.000 at gene level; group trk_ktr_channel f1_all 0.129 < 0.5	f1_all	0.5	47	5							0.138	0.129	0.098	0.176	0.0	NA	NA
+ktrD	none	ktrD	trk_ktr_channel	hmm	insufficient_evidence	n_eval_positives 4 < 5 at gene level (f1_all 0.250); group trk_ktr_channel f1_all 0.129 < 0.5	f1_all	0.5	4	5							0.25	0.129	0.159	0.353	0.005	NA	NA

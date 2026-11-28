@@ -39,11 +39,22 @@ On macOS, set `MPLCONFIGDIR` to a writable directory if `~/.matplotlib` is not w
 
 ## Design
 
-**Features** (46). Everything comes from the annotate output, with no taxonomy:
+**Features.** Everything comes from the annotate output, with no taxonomy. The model reads only what
+`osmotool annotate` reports, as the release's `osmo_refdb.annotate_report_levels.tsv` decides it
+(`train.py --annotate-report-levels`; the pipeline passes it):
 
 - `total_proteins`, `gc`, `n_contigs`;
-- the `raw_count` of the 43 osmo families that occur in the training set (`mrpA_mrpB_fused` and
-  `opuBC` are zero in every Set A strain).
+- the `raw_count` of each family at report level `gene`;
+- one summed `raw_count` per unit at level `group`: on v11, `opu_permease` = opuAB + opuBB + opuCB.
+  These are `family_groups` in `feature_schema.json`, which is then schema version 2. osmotool needs
+  schema-2 support to apply such a model, and an older osmotool refuses it;
+- nothing for a family at level `none`. On v11 there are 11: opuAA, opuAC, opuBA, opuBC, opuCA, opuCC,
+  mrpC, mrpD, trkH, ktrB and ktrD. Their labels can't be called reliably, so a SHAP value on them
+  can't be read as the gene. `feature_schema.json` lists them under `families_not_reported`.
+
+On v11 that is 34 features: the three genome features, 30 families and `opu_permease`. A family that
+is zero in every Set A strain is left out too. The v10 and v11 models built before this change read
+every family present in the training set (47 features on v11).
 
 Tested and left out, because they add nothing in genus- or family-blocked CV (`cv_results.tsv`):
 

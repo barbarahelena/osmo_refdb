@@ -18,10 +18,14 @@ Feature groups (names as they appear in feature_schema.json):
   families   one column per osmo family: the raw_count (number of proteins
              whose best hit is that family). A family absent from
              gene_counts.tsv counts as 0 (osmotool <= 0.8 writes teaA only
-             when it is non-zero).
+             when it is non-zero). Then one column per family group
+             (schema 2, 'family_groups'): the sum of its members' raw_count.
+             train.py takes both from annotate's report levels: a unit at
+             level gene is a family column, a unit at level group a family
+             group, a unit at level none is left out (read_report_levels).
   summary    n_families_present (families with raw_count > 0) and
              total_osmo_copies (sum of raw_count), both over the families
-             listed in the schema -- the 'breadth' of
+             the schema reads, group members included -- the 'breadth' of
              bin/phenotype_validation/build_matrix.py.
   systems    sys_<name>_present (0/1) and sys_<name>_subunits.
 
@@ -59,6 +63,37 @@ def read_gene_counts(path):
     return header, counts
 
 
+def read_report_levels(path):
+    """osmo_refdb.annotate_report_levels.tsv -> (families, family_groups, excluded)
+
+    families       units at report_level gene (one family each), in file order
+    family_groups  {unit: [members]} for units at report_level group
+    excluded       {family: report_level} for every other unit's members (none,
+                   insufficient_evidence, ...): annotate does not report them
+    """
+    families, groups, excluded = [], {}, {}
+    with open(path) as fh:
+        for r in csv.DictReader((l for l in fh if not l.startswith('#')), delimiter='\t'):
+            members = [m for m in r['members'].split(',') if m]
+            if r['report_level'] == 'gene' and members == [r['unit']]:
+                families.append(r['unit'])
+            elif r['report_level'] == 'group':
+                groups[r['unit']] = members
+            else:
+                for m in members:
+                    excluded[m] = r['report_level']
+    clash = set(families) & set(groups)
+    if clash:
+        raise ValueError(f'{path}: unit names both a family and a group: {sorted(clash)}')
+    return families, groups, excluded
+
+
+def group_features(counts, family_groups):
+    """{group: sum of its members' raw_count} (members absent from counts are 0)"""
+    return {g: float(sum(counts.get(m, 0.0) for m in members))
+            for g, members in (family_groups or {}).items()}
+
+
 def read_systems(path):
     """-> {system: (present 0/1, subunit_count, fragmented 0/1)}"""
     out = {}
@@ -78,12 +113,14 @@ def _num(x):
     return float(x)
 
 
-def features_from_annotate(prefix, families, systems, genome_stats=None):
+def features_from_annotate(prefix, families, systems, genome_stats=None, family_groups=None):
     """Raw feature dict for one genome.
 
     prefix        annotate --out_prefix (files are <prefix>.gene_counts.tsv ...)
     families      the family columns to emit (from the schema)
     systems       the system names to emit (from the schema)
+    family_groups optional {group: [members]} (schema 2): one feature per
+                  group, the sum of its members' raw_count
     genome_stats  optional {genome_bp, gc, n_contigs}; overrides the
                   gene_counts.tsv header (the BacDive training set predates
                   the osmotool 0.8.0 header and supplies them separately)
@@ -105,8 +142,10 @@ def features_from_annotate(prefix, families, systems, genome_stats=None):
     }
     for f in families:
         feat[f] = counts.get(f, 0.0)
-    feat['n_families_present'] = float(sum(1 for f in families if counts.get(f, 0) > 0))
-    feat['total_osmo_copies'] = float(sum(counts.get(f, 0.0) for f in families))
+    feat.update(group_features(counts, family_groups))
+    read = list(families) + [m for ms in (family_groups or {}).values() for m in ms]
+    feat['n_families_present'] = float(sum(1 for f in read if counts.get(f, 0) > 0))
+    feat['total_osmo_copies'] = float(sum(counts.get(f, 0.0) for f in read))
     for s in systems:
         p, n, _ = sysd.get(s, (0, 0, 0))
         feat[f'sys_{s}_present'] = float(p)
@@ -115,12 +154,13 @@ def features_from_annotate(prefix, families, systems, genome_stats=None):
     return feat
 
 
-def feature_names(families, systems, groups=('base', 'families', 'summary', 'systems')):
+def feature_names(families, systems, groups=('base', 'families', 'summary', 'systems'),
+                  family_groups=None):
     out = []
     if 'base' in groups:
         out += ['total_proteins', 'gc', 'n_contigs', 'genome_mb']
     if 'families' in groups:
-        out += list(families)
+        out += list(families) + list(family_groups or {})
     if 'summary' in groups:
         out += ['n_families_present', 'total_osmo_copies']
     if 'systems' in groups:

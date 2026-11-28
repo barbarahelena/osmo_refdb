@@ -4,7 +4,12 @@
 Steps, all written to --out:
 
   1. Training table     features.build_training_table() on --pv-dir;
-                        training_table.tsv.
+                        training_table.tsv. With --annotate-report-levels
+                        the model reads only what annotate reports: units at
+                        level gene as family columns, units at level group
+                        as one summed column each (schema 2), nothing at
+                        level none; the breadth summaries are recounted
+                        over those families.
   2. Hyperparameters    random search over XGBoost settings, scored by
                         genus-blocked 5-fold CV RMSE on all of Set A;
                         hparam_search.tsv. The winner is used for steps 4-5
@@ -68,6 +73,9 @@ INTERVAL_EDGES = [3.0, 6.0, 10.0]
 ALPHA_LO, ALPHA_HI = 0.10, 0.90
 # the 'baseline' model: genome size and GC, no osmo genes
 BASELINE_FEATURES = ['total_proteins', 'gc']
+# the first osmotool that reads schema 2 (family_groups): barbarahelena/osmotool
+# branch nacl-family-groups. Set to the version it is released as.
+MIN_OSMOTOOL_GROUPS = '0.13.0'
 
 
 def nacl_bin(v):
@@ -234,6 +242,9 @@ def main():
     ap.add_argument('--strains', default=None, help='default: <pv-dir>/random_panel/strains')
     ap.add_argument('--release', required=True, help='release dir the annotate output was made with')
     ap.add_argument('--release-name', default=None, help="default: the --release directory's name")
+    ap.add_argument('--annotate-report-levels', default=None,
+                    help="the release's osmo_refdb.annotate_report_levels.tsv: train on the units annotate "
+                         "reports (default: every family)")
     ap.add_argument('--osmotool-version', required=True,
                     help='osmotool version the training genomes were annotated with (recorded in the schema)')
     ap.add_argument('--out', required=True)
@@ -271,12 +282,32 @@ def main():
         df.to_csv(tpath, sep='\t', index=False)
         json.dump({'families': families, 'systems': systems},
                   open(os.path.join(args.out, 'training_table.meta.json'), 'w'), indent=1)
+    # what annotate reports: gene units as families, group units summed, none left out
+    family_groups, not_reported = {}, {}
+    if args.annotate_report_levels:
+        rep_families, family_groups, not_reported = F.read_report_levels(args.annotate_report_levels)
+        members = [m for ms in family_groups.values() for m in ms]
+        for f in rep_families + members:
+            if f not in df.columns:
+                df[f] = 0.0       # reported, but never called in the training genomes
+        not_reported.update({f: 'not in the report levels' for f in families
+                             if f not in rep_families and f not in members and f not in not_reported})
+        families = rep_families
+        for g, ms in family_groups.items():
+            df[g] = df[ms].sum(axis=1)
+        read = families + members
+        df['n_families_present'] = (df[read] > 0).sum(axis=1).astype(float)
+        df['total_osmo_copies'] = df[read].sum(axis=1).astype(float)
+        df.to_csv(tpath, sep='\t', index=False)
+        log(f'annotate report levels: {len(families)} families, groups {family_groups}; '
+            f'not reported: {sorted(not_reported)}')
     A = df[(df['strategy'] == 'salt_out') & df['nacl_max_pct'].notna()].reset_index(drop=True)
-    # families never seen in Set A carry no information
-    dead = [f for f in families if (A[f] > 0).sum() == 0]
+    # families (and groups) never seen in Set A carry no information
+    dead = [f for f in families + list(family_groups) if (A[f] > 0).sum() == 0]
     families = [f for f in families if f not in dead]
-    all_names = F.feature_names(families, systems)
-    names = [n for n in F.feature_names(families, systems, args.groups) if n not in args.drop]
+    family_groups = {g: ms for g, ms in family_groups.items() if g not in dead}
+    all_names = F.feature_names(families, systems, family_groups=family_groups)
+    names = [n for n in F.feature_names(families, systems, args.groups, family_groups) if n not in args.drop]
     log(f'Set A: {len(A)} strains, {A["genus"].nunique()} genera, {A["family"].nunique()} families; '
         f'{len(names)} features (dropped all-zero: {dead}; --drop {args.drop})')
 
@@ -344,14 +375,14 @@ def main():
     # 4. ablations / sensitivities / baselines (fixed params) --------------------
     log('step 4: ablations')
     exps = {
-        'base': F.feature_names(families, systems, ['base']),
-        'base+families': F.feature_names(families, systems, ['base', 'families']),
-        'base+families+summary': F.feature_names(families, systems, ['base', 'families', 'summary']),
+        'base': F.feature_names(families, systems, ['base'], family_groups),
+        'base+families': F.feature_names(families, systems, ['base', 'families'], family_groups),
+        'base+families+summary': F.feature_names(families, systems, ['base', 'families', 'summary'], family_groups),
         'full': all_names,
         'full-genome_mb': [n for n in all_names if n != 'genome_mb'],
         'full-summary': [n for n in all_names if n not in ('n_families_present', 'total_osmo_copies')],
-        'full-systems': F.feature_names(families, systems, ['base', 'families', 'summary']),
-        'families+summary+systems (no base)': F.feature_names(families, systems, ['families', 'summary', 'systems']),
+        'full-systems': F.feature_names(families, systems, ['base', 'families', 'summary'], family_groups),
+        'families+summary+systems (no base)': F.feature_names(families, systems, ['families', 'summary', 'systems'], family_groups),
         'selected': names,
     }
     rows = []
@@ -473,24 +504,32 @@ def main():
     mt_g = metrics(y, oof_df['oof_genus'])
     mt_f = metrics(y, oof_df['oof_family'])
     schema = {
-        'model': 'nacl_max', 'schema_version': 1,
+        # schema 2: family_groups (an osmotool that reads only schema 1 refuses the model)
+        'model': 'nacl_max', 'schema_version': 2 if family_groups else 1,
         'description': 'Predicts the highest NaCl concentration (% w/v) at which a salt-out '
                        'prokaryote grows, from osmotool annotate output. Trained on BacDive.',
         'model_file': 'nacl_max.xgb.json',
         'created': time.strftime('%Y-%m-%d'),
         'refdb_release': rel_name,
         'annotate': {'method': 'hmm', 'prodigal': '-p meta', 'osmotool_version_training': args.osmotool_version,
-                     'min_osmotool_version_inference': '0.8.0'},
+                     'min_osmotool_version_inference': MIN_OSMOTOOL_GROUPS if family_groups else '0.8.0'},
         'features': names,
         'families': families, 'systems': systems,
+        **({'family_groups': family_groups} if family_groups else {}),
+        'families_not_reported': not_reported,
+        'annotate_report_levels': (
+            {'file': os.path.basename(args.annotate_report_levels),
+             'sha256': hashlib.sha256(open(args.annotate_report_levels, 'rb').read()).hexdigest()}
+            if args.annotate_report_levels else None),
         'feature_definitions': {
             'total_proteins': "gene_counts.tsv header '# total_proteins'",
             'gc': "gene_counts.tsv header '# gc'",
             'n_contigs': "gene_counts.tsv header '# n_contigs'",
             'genome_mb': "gene_counts.tsv header '# genome_bp' / 1e6",
             '<family>': 'gene_counts.tsv raw_count; 0 when the family is absent',
-            'n_families_present': 'number of schema families with raw_count > 0',
-            'total_osmo_copies': 'sum of raw_count over schema families',
+            '<family_group>': "sum of raw_count over the group's members (family_groups)",
+            'n_families_present': 'number of schema families and group members with raw_count > 0',
+            'total_osmo_copies': 'sum of raw_count over schema families and group members',
             'sys_<s>_present': 'systems.tsv present (True=1)',
             'sys_<s>_subunits': 'systems.tsv subunit_count',
         },

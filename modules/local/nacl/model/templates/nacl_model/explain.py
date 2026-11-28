@@ -49,7 +49,7 @@ GROUPS = {
     'genome size / composition': ['total_proteins', 'gc', 'n_contigs', 'genome_mb'],
     'compatible-solute synthesis': ['ectA', 'ectB', 'ectC', 'otsA', 'otsB', 'betA', 'betB'],
     'compatible-solute uptake': ['betL', 'opuAA', 'opuAB', 'opuAC', 'opuBA', 'opuBB', 'opuBC',
-                                 'opuCA', 'opuCB', 'opuCC', 'proP', 'proX', 'teaA'],
+                                 'opuCA', 'opuCB', 'opuCC', 'opu_permease', 'proP', 'proX', 'teaA'],
     'K+ uptake': ['trkA', 'trkH', 'ktrA', 'ktrB', 'ktrD', 'kdpA'],
     'Na+/H+ antiport': ['mrpA', 'mrpA_mrpB_fused', 'mrpB', 'mrpC', 'mrpD', 'mrpE', 'mrpF',
                         'mrpG', 'nhaA'],
@@ -340,6 +340,18 @@ def main():
     it_lines = '\n'.join(f'| `{r.feature_a}` × `{r.feature_b}` | {r.mean_abs_interaction:.3f} |'
                          for r in it.head(8).itertuples())
 
+    fgroups = schema.get('family_groups') or {}
+    not_rep = schema.get('families_not_reported') or {}
+    if schema.get('annotate_report_levels'):
+        fam_line = (f"the copy number of each of {len(schema['families'])} osmo families that "
+                    "`osmotool annotate` reports per gene")
+        fam_line += ''.join(f";\n  - `{g}`, the summed copy number of {'/'.join(ms)}, which annotate reports "
+                            "only as this group" for g, ms in fgroups.items())
+        fam_line += (f".\n\n  Families annotate does not report ({len(not_rep)}: "
+                     f"{', '.join(sorted(not_rep))}) are left out: their labels can't be called reliably, "
+                     "so the model doesn't read them")
+    else:
+        fam_line = f"the copy number of each of {len(schema['families'])} osmo families"
     card = f"""# osmo_refdb NaCl-max predictor ({schema['refdb_release']})
 
 ## What it predicts
@@ -357,7 +369,7 @@ osmo_refdb **{schema['refdb_release']}**. The model uses no taxonomy.
   the sum of all trees: a weighted vote over thresholds such as "ectC ≥ 1" or "kdpA = 0".
 - **Inputs.** {len(names)} features:
   - genome size and composition (`total_proteins`, `gc`, `n_contigs`);
-  - the copy number of each of {len(schema['families'])} osmo families.
+  - {fam_line}.
 
   Breadth summaries, operon-level "systems" calls and `genome_mb` were tested and dropped: they add
   nothing over the family counts (see the ablations below).

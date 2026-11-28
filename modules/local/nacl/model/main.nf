@@ -19,6 +19,7 @@ process NACL_MODEL {
     path(annotate, stageAs: 'annotate/*')      // BACDIVE_ANNOTATE: <bid>/ per strain
     path(strains, stageAs: 'strains/*')        // BACDIVE_PROTEINS: genome stats per strain
     path(family_ranking)                       // BACDIVE_ANALYZE
+    path(annotate_levels)                      // osmo_refdb.annotate_report_levels.tsv: the model reads only the units annotate reports
 
     output:
     path('nacl_model_build'), emit: build
@@ -35,6 +36,7 @@ process NACL_MODEL {
     """
     python ${T}/nacl_model/train.py --matrix ${matrix} --annotate annotate --strains strains \\
         --release db --release-name ${release_name} --osmotool-version ${osmotool_version} \\
+        --annotate-report-levels ${annotate_levels} \\
         --out nacl_model_build --threads ${task.cpus}
     python ${T}/nacl_model/explain.py --build nacl_model_build --family-ranking ${family_ranking}
     python ${T}/package_nacl_model.py --build nacl_model_build --release db --release-name ${release_name} --out nacl_model
