@@ -2427,4 +2427,4 @@ Not run: the catalog decision on real calibration reads, so which units pass is 
 - B. subtilis `ktr` `present`, `operon`: KtrAB is encoded as one operon (Holtmann et al. 2003, J Bacteriol 185:1289). KtrCD's genes sit apart, so the call can only be KtrAB.
 - H. elongata `trk` `present`, `operon`: trkA and trkH are neighbouring and cotranscribed (Kraegeloh et al. 2005, J Bacteriol 187:1036). The main K+ uptake system in adapted cells, TrkI, is encoded elsewhere and is not what the call finds.
 - H. volcanii `mrp` `info`: Mrp is widespread in archaea, but no characterised H. volcanii mrp operon was found, so the row explains the call and isn't scored.
-- 34 scored expectations (was 32) and two `info`. On v11 the two new scored rows are met (both calls present), so the check gives 34/34. Not rerun; read from v11's `systems.tsv`.
+- 34 scored expectations (was 32) and two `info`. `check_reference_systems.py` on v11's own `systems.tsv` (the build's annotate outputs, osmotool 0.12.5) gives 34/34 met, and no call is left without an expectation.
