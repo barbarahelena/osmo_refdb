@@ -14,6 +14,7 @@ genome	system	expected	basis	note
 bsubtilis_168	mrp	present	operon	mrpA-G, characterised in B. subtilis
 bsubtilis_168	opuA	present	operon	opuAA-AB-AC
 bsubtilis_168	opuB_opuC	present	operon	carries both opuBA-BD and opuCA-CD; the system reports presence, not copy number
+bsubtilis_168	ktr	present	operon	ktrAB, one operon (Holtmann et al. 2003, J Bacteriol 185:1289); ktrC and ktrD sit apart, so the call is KtrAB
 saureus	mrp	present	operon	mnhA-G
 saureus	opuB_opuC	present	operon	opuCABCD
 lmonocytogenes	mrp	present	operon	
@@ -22,6 +23,8 @@ lmonocytogenes	opuB_opuC	present	operon	opuCABCD
 efaecalis	opuB_opuC	present	operon	ORFs 830-833 on NC_004668.1
 helongata	mrp	present	operon	
 helongata	ect	present	operon	ectABC, the ectoine discovery organism
+helongata	trk	present	operon	trkA and trkH neighbouring and cotranscribed (Kraegeloh et al. 2005, J Bacteriol 187:1036); the main K+ uptake system, TrkI, is encoded elsewhere and is not part of this call
+hvolcanii	mrp	info	homolog	Mrp-type cluster (all seven subunits on NC_013967.1 with v11); Mrp is widespread in archaea, but no characterised H. volcanii mrp operon was found, so it is not scored
 ecoli_k12	ots	present	operon	otsBA
 ecoli_k12	trk	absent	control	trkA and trkH both present, hundreds of genes apart
 ecoli_k12	mrp	absent	control	Firmicutes-type system

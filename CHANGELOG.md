@@ -2420,3 +2420,11 @@ Not run: the catalog decision on real calibration reads, so which units pass is 
 - `check_reference_systems.py` names no systems and its 16-character system column fits `opuB_opuC`; only its docstring changed (the TSV is written next to the last release's output, not the first).
 - This is a reporting change only: `families.yaml`, the HMMs, the cutoffs and the report levels are unchanged. The NaCl model's features don't use systems (default groups `base` and `families`), so it doesn't change either.
 - osmotool's 0.12.5 test on the nine reference genomes: `opuB_opuC` present in B. subtilis, L. monocytogenes, S. aureus and E. faecalis, absent in the other five (E. coli K-12: 2 of 3 subunits, no binding protein). Against the new table that is 32/32 met. The build's own `reference_systems_check.txt` comes from the next build.
+
+### Reference-system expectations for B. subtilis ktr, H. elongata trk and H. volcanii mrp (branch `reference-systems-ktr-trk`)
+
+- v11's `reference_systems_check.txt` (osmotool 0.12.5, 32/32 met) listed three calls with no expectation: `ktr` in B. subtilis 168 (ktrA, ktrB), `trk` in H. elongata (trkA, trkH) and `mrp` in H. volcanii (all seven subunits). `expected_systems.tsv` now has a row for each.
+- B. subtilis `ktr` `present`, `operon`: KtrAB is encoded as one operon (Holtmann et al. 2003, J Bacteriol 185:1289). KtrCD's genes sit apart, so the call can only be KtrAB.
+- H. elongata `trk` `present`, `operon`: trkA and trkH are neighbouring and cotranscribed (Kraegeloh et al. 2005, J Bacteriol 187:1036). The main K+ uptake system in adapted cells, TrkI, is encoded elsewhere and is not what the call finds.
+- H. volcanii `mrp` `info`: Mrp is widespread in archaea, but no characterised H. volcanii mrp operon was found, so the row explains the call and isn't scored.
+- 34 scored expectations (was 32) and two `info`. On v11 the two new scored rows are met (both calls present), so the check gives 34/34. Not rerun; read from v11's `systems.tsv`.
